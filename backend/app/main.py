@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager, closing
 from dataclasses import asdict
 from typing import Annotated
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -99,6 +99,15 @@ def get_portal(portal_id: str, conn: Conn):
     if row is None:
         raise HTTPException(404, "Portal not found")
     return portal_out(row)
+    # TODO  Your system stops calling the portal within a minute.
+
+@app.delete("/portals/{portal_id}", status_code=204, response_class=Response)
+def delete_portal(portal_id: str, conn: Conn) -> Response:
+    with conn:
+        deleted = conn.execute("DELETE FROM portal WHERE id = ?", (portal_id,)).rowcount
+        if not deleted:
+            raise HTTPException(404, "Portal not found")
+    return Response(status_code=204)
 
 
 TENDER_OPTIONAL = (

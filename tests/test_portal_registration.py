@@ -137,3 +137,39 @@ def test_add_portal_survives_location_failure(backend, monkeypatch, tmp_path, fa
         created = client.post("/portals", json={"url": "https://example.com"})
         assert created.status_code == 201
         assert "location" not in client.get(f"/portals/{created.json()['id']}").json()
+
+
+def test_delete_portal_removes_its_records_and_leaves_other_portals(backend, monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    main, _ = backend
+    monkeypatch.setattr(main.db, "DB_PATH", tmp_path / "jimix.db")
+    with TestClient(main.app) as client:
+        with closing(main.db.connect()) as conn, conn:
+            conn.executemany(
+                "INSERT INTO portal (id, url, created_at) VALUES (?, ?, ?)",
+                [
+                    ("removed", "https://remove.example.com/", main.db.now()),
+                    ("retained", "https://retain.example.com/", main.db.now()),
+                ],
+            )
+            conn.execute("INSERT INTO portal_location (portal_id, country) VALUES ('removed', 'France')")
+            conn.execute(
+                "INSERT INTO tender (portal_id, id, last_changed_at) VALUES ('removed', 'tender', ?)",
+                (main.db.now(),),
+            )
+            conn.execute(
+                "INSERT INTO run (id, portal_id, kind, started_at) VALUES ('read', 'removed', 'read', ?)",
+                (main.db.now(),),
+            )
+
+        response = client.delete("/portals/removed")
+        assert response.status_code == 204
+        assert response.content == b""
+        assert client.delete("/portals/removed").status_code == 404
+        assert [portal["id"] for portal in client.get("/portals").json()] == ["retained"]
+
+        with closing(main.db.connect()) as conn:
+            assert not conn.execute("SELECT 1 FROM portal_location").fetchone()
+            assert not conn.execute("SELECT 1 FROM tender").fetchone()
+            assert not conn.execute("SELECT 1 FROM run").fetchone()
