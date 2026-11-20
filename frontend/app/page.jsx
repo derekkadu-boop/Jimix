@@ -26,6 +26,15 @@ export default function Dashboard() {
             <label className="portal-search" htmlFor="portal-search">Search portals
               <input id="portal-search" type="search" placeholder="Search by name or URL" autoComplete="off" aria-controls="portal-picker" />
             </label>
+            <label className="portal-search" htmlFor="portal-status">Portal status
+              <select id="portal-status" defaultValue="" aria-controls="portal-picker">
+                <option value="">All statuses</option>
+                <option value="failed">failed</option>
+                <option value="healing">healing</option>
+                <option value="integrating">integrating</option>
+                <option value="serving">serving</option>
+              </select>
+            </label>
             <div id="portal-picker">
               <div className="list" id="portals" role="group" aria-label="Monitored portals" hidden></div>
               <div className="radar" id="radar-view" role="group" aria-label="Europe radar">

@@ -11,7 +11,13 @@
   try { savedTenders = new Set(JSON.parse(localStorage.getItem('watchtower.savedTenders') || '[]')) } catch {}
   let swipe = null
   const needsAttention = portal => ['failed','error','healing'].includes(portal.state)
-  const scopedPortals = () => attentionOnly ? portals.filter(needsAttention) : portals
+  const isFailed = portal => ['failed','error'].includes(portal.state)
+  const statusRank = {failed:0,error:0,healing:1,integrating:2,unknown:3,serving:4,ok:4}
+  let portalStatus = ''
+  const scopedPortals = () => portals.filter(portal =>
+    (!attentionOnly || needsAttention(portal)) &&
+    (!portalStatus || (portalStatus === 'failed' ? isFailed(portal) : portal.state === portalStatus))
+  )
   let portalSearch = ''
   const visiblePortals = () => scopedPortals().filter(portal=>
     [portal.name,portal.url].some(value=>value?.toLowerCase().includes(portalSearch))
@@ -152,9 +158,9 @@
     $('map-note').hidden=!radar
     $('portals').hidden=radar
     $('radar-view').hidden=!radar
-    const visible=visiblePortals()
+    const visible=visiblePortals().sort((a,b)=>(statusRank[a.state]??3)-(statusRank[b.state]??3))
     const listRows=visible.map(p=>'<button data-portal="'+escape(p.id)+'" aria-pressed="'+(String(p.id)===selected)+'"><span class="row"><strong>'+escape(p.name||new URL(p.url).hostname)+'</strong>'+badge(labels[p.state]==='Reachable'?'reachable':p.state,labels[p.state]??p.state)+'</span><small>'+escape(p.url)+'</small>'+(needsAttention(p)&&p.reason?'<small class="portal-summary">'+escape(p.reason)+'</small>':'')+'<small class="portal-summary">'+escape(p.count??'—')+' tenders · Last successful check '+escape(date(p.last))+'</small></button>').join('')
-    const empty=portalSearch?'No portals match your search.':attentionOnly?'No portals need attention.':'No portals yet. Add one to get started.'
+    const empty=portalSearch||portalStatus?'No portals match your filters.':attentionOnly?'No portals need attention.':'No portals yet. Add one to get started.'
     if(radar)renderEuropeRadar(visible,empty)
     else updateMarkup('portals',listRows||'<p>'+empty+'</p>')
     if(focus)Array.from($('portal-picker').querySelectorAll('button')).find(button=>button.dataset.portal===focus&&!button.closest('[hidden]'))?.focus({preventScroll:true})
@@ -329,6 +335,13 @@
     portalSearch=event.target.value.trim().toLowerCase()
     renderList()
   }
+  $('portal-status').onchange=event=>{
+    portalStatus=event.target.value
+    attentionOnly=false
+    clearUnavailableSelection()
+    renderList()
+    renderDetail()
+  }
   $('portal-picker').onclick=event=>{
     const button=event.target.closest('[data-portal]')
     if(!button)return
@@ -356,6 +369,8 @@
       portals=portals.filter(item=>String(item.id)!==String(portal.id))
       portals.push(normalize(portal))
       attentionOnly=false
+      portalStatus=''
+      $('portal-status').value=''
       portalSearch=''
       $('portal-search').value=''
       selected=String(portal.id)
