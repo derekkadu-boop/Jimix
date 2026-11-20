@@ -60,8 +60,14 @@ def get_portal(portal_id: str, conn: Conn):
     return dict(row)
 
 
-TENDER_OPTIONAL = ("referenceNumber", "description", "procedureType", "contractNature",
-                   "cpvCodes", "placeOfPerformance")
+TENDER_OPTIONAL = (
+    "referenceNumber",
+    "description",
+    "procedureType",
+    "contractNature",
+    "cpvCodes",
+    "placeOfPerformance",
+)
 
 
 def tender_out(row: sqlite3.Row) -> dict:

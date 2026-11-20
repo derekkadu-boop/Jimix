@@ -1,4 +1,10 @@
 __pycache__/
 *.pyc
+*.egg-info/
 .venv/
+.venv-cache/
+.venv-python/
+.venv-browsers/
+.pytest_cache/
+.env
 data/
