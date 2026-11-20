@@ -68,7 +68,7 @@ export default function Dashboard() {
               <span><strong><i className="legend-dot signal-healing" aria-hidden="true"></i>healing</strong><span>Broken. A repair is running.</span></span>
               <span><strong><i className="legend-dot signal-failed" aria-hidden="true"></i>failed</strong><span>Cannot deliver. A person is needed.</span></span>
             </small>
-            <small id="map-note">Locations inferred from country domains are approximate.</small>
+            <small id="map-note">Markers use domain registration locations when available. Country markers are approximate.</small>
           </aside>
           <section className="panel" aria-label="Portal details">
             <div className="portal-detail-top">

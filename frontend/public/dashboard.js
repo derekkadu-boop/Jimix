@@ -85,7 +85,7 @@
       return {latitude,longitude,approximate:false}
     }
     const suffix=new URL(portal.url).hostname.toLowerCase().replace(/\.$/,'').split('.').pop()
-    const code=String(portal.countryCode??suffix).toLowerCase()
+    const code=String(portal.location?.countryCode??portal.countryCode??suffix).toLowerCase()
     if(!/^[a-z]{2}$/.test(code))return null
     const point=countryPoints[code==='uk'?'gb':code]
     return point?{longitude:point[0],latitude:point[1],approximate:true}:null
@@ -95,6 +95,9 @@
   function onEuropeMap(position){
     return position&&position.longitude>=europe.west&&position.longitude<=europe.east
       &&position.latitude>=europe.south&&position.latitude<=europe.north
+  }
+  function registrationLocation(portal){
+    return [portal.location?.city,portal.location?.country].filter(Boolean).join(', ')
   }
   function radarDot(portal, position, offset=0){
     const state=portal.state
@@ -109,8 +112,10 @@
     const x=Math.min(97,Math.max(3,mapX+Math.cos(angle)*radius))
     const y=Math.min(94,Math.max(6,mapY+Math.sin(angle)*radius*2))
     const coordinates=mapped?' style="--x:'+x+'%;--y:'+y+'%"':''
-    const locationLabel=mapped?(position.approximate?' · Approximate location':''):position?' · Outside the map':' · Location unknown'
-    return '<button type="button" class="radar-dot signal-'+signal+pulse+'"'+coordinates+' data-portal="'+escape(portal.id)+'" aria-pressed="'+(String(portal.id)===selected)+'" aria-label="'+escape(label+locationLabel)+'" title="'+escape(label+locationLabel)+'"></button>'
+    const registration=registrationLocation(portal)
+    const positionLabel=mapped?(position.approximate?'Approximate country marker':''):position?'Outside the map':'Location unknown'
+    const markerLabel=escape([label,registration,positionLabel].filter(Boolean).join(' · '))
+    return '<button type="button" class="radar-dot signal-'+signal+pulse+'"'+coordinates+' data-portal="'+escape(portal.id)+'" aria-pressed="'+(String(portal.id)===selected)+'" aria-label="'+markerLabel+'" title="'+markerLabel+'"></button>'
   }
   function updateMarkup(id, markup){
     const element=$(id)
@@ -250,7 +255,8 @@
     $('tender-filters').hidden=!p||tab!=='tenders'
     if(!p){$('details').innerHTML='<p>Select a portal to see its details.</p>';$('entries').innerHTML='';return}
     const reachability=p.reachable==null?'':`<p>Website ${p.reachable?'reachable':'unreachable'}</p>`
-    $('details').innerHTML='<h2>'+escape(p.name||new URL(p.url).hostname)+'</h2><small id="portal-url">'+escape(p.url)+'</small>'+reachability+'<p>'+escape(p.reason||labels[p.state]||p.state)+'</p><small id="latest-check" hidden></small><small style="display:block">Last successful read · '+date(p.last)+'</small>'+(p.last&&p.state==='healing'?'<p class="repair-banner">Showing tenders from the last successful check · '+escape(date(p.last))+'</p>':p.last&&p.state==='failed'?'<p>Showing tenders from the last verified read.</p>':'')
+    const registration=registrationLocation(p)
+    $('details').innerHTML='<h2>'+escape(p.name||new URL(p.url).hostname)+'</h2><small id="portal-url">'+escape(p.url)+'</small>'+(registration?'<p>Domain registration: '+escape(registration)+'</p>':'')+reachability+'<p>'+escape(p.reason||labels[p.state]||p.state)+'</p><small id="latest-check" hidden></small><small style="display:block">Last successful read · '+date(p.last)+'</small>'+(p.last&&p.state==='healing'?'<p class="repair-banner">Showing tenders from the last successful check · '+escape(date(p.last))+'</p>':p.last&&p.state==='failed'?'<p>Showing tenders from the last verified read.</p>':'')
     $('tenders').setAttribute('aria-pressed',tab==='tenders')
     $('runs').setAttribute('aria-pressed',tab==='runs')
     $('check').disabled=checking.has(selected)||p.state==='integrating'||p.state==='healing'

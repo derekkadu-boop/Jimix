@@ -1,13 +1,17 @@
 import json
+import logging
 import sqlite3
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
+from dataclasses import asdict
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app import db
+from app.registration import RegistrationLocation, lookup_registration
 
 
 @asynccontextmanager
@@ -17,14 +21,17 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Jimix", lifespan=lifespan)
+logger = logging.getLogger(__name__)
 Conn = Annotated[sqlite3.Connection, Depends(db.get_db)]
 
 PORTAL_SELECT = """
 SELECT p.id, p.url, p.state, p.reason,
+       l.city, l.country, l.country_code AS countryCode, l.latitude, l.longitude,
        (SELECT COUNT(*) FROM tender t WHERE t.portal_id = p.id) AS tenderCount,
        (SELECT MAX(r.finished_at) FROM run r
          WHERE r.portal_id = p.id AND r.result = 'ok') AS lastSuccessAt
 FROM portal p
+LEFT JOIN portal_location l ON l.portal_id = p.id
 """
 
 
@@ -37,19 +44,53 @@ def require_portal(conn: sqlite3.Connection, portal_id: str) -> None:
         raise HTTPException(404, "Portal not found")
 
 
+def save_portal_location(portal_id: str, location: RegistrationLocation) -> None:
+    with closing(db.connect()) as conn, conn:
+        conn.execute(
+            """
+            INSERT INTO portal_location (portal_id, city, country, country_code, latitude, longitude)
+            SELECT id, :city, :country, :country_code, :latitude, :longitude
+            FROM portal WHERE id = :portal_id
+            """,
+            {"portal_id": portal_id, **asdict(location)},
+        )
+
+
+async def enrich_portal_location(portal_id: str, url: str) -> None:
+    location = await lookup_registration(url)
+    if location is not None:
+        try:
+            await run_in_threadpool(save_portal_location, portal_id, location)
+        except sqlite3.Error:
+            logger.warning("Could not save registration location for portal %s", portal_id, exc_info=True)
+
+
 @app.post("/portals", status_code=201)
-def create_portal(body: PortalIn, conn: Conn):
-    conn.execute(
-        "INSERT OR IGNORE INTO portal (id, url, created_at) VALUES (?, ?, ?)",
-        (uuid.uuid4().hex, body.url, db.now()),
-    )
-    row = conn.execute("SELECT id FROM portal WHERE url = ?", (body.url,)).fetchone()
-    return {"id": row["id"]}
+def create_portal(body: PortalIn, conn: Conn, background_tasks: BackgroundTasks):
+    portal_id = uuid.uuid4().hex
+    with conn:
+        inserted = conn.execute(
+            "INSERT INTO portal (id, url, created_at) VALUES (?, ?, ?) ON CONFLICT(url) DO NOTHING",
+            (portal_id, body.url, db.now()),
+        ).rowcount
+        if not inserted:
+            row = conn.execute("SELECT id FROM portal WHERE url = ?", (body.url,)).fetchone()
+            return {"id": row["id"]}
+    background_tasks.add_task(enrich_portal_location, portal_id, body.url)
+    return {"id": portal_id}
+
+
+def portal_out(row: sqlite3.Row) -> dict:
+    portal = dict(row)
+    location = {key: portal.pop(key) for key in ("city", "country", "countryCode", "latitude", "longitude")}
+    if location["city"] or location["country"]:
+        portal["location"] = location
+    return portal
 
 
 @app.get("/portals")
 def list_portals(conn: Conn):
-    return [dict(r) for r in conn.execute(PORTAL_SELECT + "ORDER BY p.created_at")]
+    return [portal_out(r) for r in conn.execute(PORTAL_SELECT + "ORDER BY p.created_at")]
 
 
 @app.get("/portals/{portal_id}")
@@ -57,7 +98,7 @@ def get_portal(portal_id: str, conn: Conn):
     row = conn.execute(PORTAL_SELECT + "WHERE p.id = ?", (portal_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "Portal not found")
-    return dict(row)
+    return portal_out(row)
 
 
 TENDER_OPTIONAL = (
