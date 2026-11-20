@@ -24,6 +24,8 @@ header { padding-top: 14px; }
 header > div, main { width: min(100% - 48px, 1200px); margin-inline: auto; }
 header > div { min-height: 64px; padding: 8px 14px 8px 20px; border: 1px solid #ffffff16; border-radius: 32px; background: #191939dd; box-shadow: 0 8px 24px #0a0a1a45; }
 header strong { display: flex; align-items: center; gap: 10px; font-size: 21px; letter-spacing: -.045em; }
+.header-brand { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.demo-label { color: var(--accent); border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; white-space: nowrap; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: #43345e; color: var(--accent); }
 header > div, .row, .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 main { padding-block: 32px 56px; }
@@ -77,11 +79,11 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
 .radar { min-height: 0; overflow-y: auto; margin-top: 16px; }
 .world-map {
   position: relative;
-  aspect-ratio: 2;
+  aspect-ratio: 720 / 570;
   overflow: hidden;
   border-radius: 12px;
   border: 1px solid #654d99;
-  background: #100e26 url("./world-map.svg") center / 100% 100% no-repeat;
+  background: #100e26 url("./world-map.svg?v=europe") center / contain no-repeat;
 }
 .world-map::before {
   content: "";
@@ -96,8 +98,9 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
 .world-map::after {
   content: "";
   position: absolute;
-  left: -10%;
-  top: -70%;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
   width: 120%;
   aspect-ratio: 1;
   pointer-events: none;
@@ -173,7 +176,7 @@ dialog::backdrop { background: #120d23a8; }
 </style>
 <header>
   <div>
-    <strong><span class="brand-mark" aria-hidden="true">◈</span>Watchtower</strong>
+    <div class="header-brand"><strong><span class="brand-mark" aria-hidden="true">◈</span>Watchtower</strong><small class="demo-label">Demo view</small></div>
     <button class="primary" id="add">+ Add portal</button>
   </div>
 </header>
@@ -196,10 +199,10 @@ dialog::backdrop { background: #120d23a8; }
       </label>
       <div id="portal-picker">
         <div class="list" id="portals" role="group" aria-label="Monitored portals" hidden></div>
-        <div class="radar" id="radar-view" role="group" aria-label="World radar">
+        <div class="radar" id="radar-view" role="group" aria-label="Europe radar">
           <div class="world-map"><div class="world-markers" id="world-markers"></div></div>
           <div class="unlocated-portals" id="unlocated-portals" hidden>
-            <small>Location unknown</small>
+            <small>Outside the map or location unknown</small>
             <div class="unlocated-buttons" id="unlocated-buttons"></div>
           </div>
           <p class="radar-empty" id="radar-empty" hidden></p>
@@ -264,10 +267,8 @@ let portalSearch = ''
 const visiblePortals = () => scopedPortals().filter(portal=>
   [portal.name,portal.url].some(value=>value?.toLowerCase().includes(portalSearch))
 )
-function selectVisiblePortal(){
-  if(scopedPortals().some(portal=>String(portal.id)===selected))return
-  const [first]=visiblePortals()
-  selected=first?String(first.id):null
+function clearUnavailableSelection(){
+  if(selected!==null&&!scopedPortals().some(portal=>String(portal.id)===selected))selected=null
 }
 let portals = [], selected = null, tab = 'tenders', detailRequest = 0, removal = null, loading = false, portalRevision = 0
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])
@@ -334,31 +335,40 @@ function portalPosition(portal){
   const point=countryPoints[code==='uk'?'gb':code]
   return point?{longitude:point[0],latitude:point[1],approximate:true}:null
 }
+// Match the geographic extent of the Europe coastline asset.
+const europe = {west:-27,east:47,south:33,north:73}
+function onEuropeMap(position){
+  return position&&position.longitude>=europe.west&&position.longitude<=europe.east
+    &&position.latitude>=europe.south&&position.latitude<=europe.north
+}
 function radarDot(portal, position, offset=0){
   const state=portal.state
   const signal=checking.has(String(portal.id))&&state==='serving'?'checking':({integrating:'checking',serving:'serving',healing:'healing',failed:'failed',error:'failed'})[state]??'unknown'
   const label=(portal.name||new URL(portal.url).hostname)+' · '+(signal==='checking'&&state==='serving'?'Checking':labels[state]??state)
   const angle=offset*2.399963
   const radius=offset?Math.min(4,Math.sqrt(offset)*1.7):0
-  const x=position?Math.min(97,Math.max(3,(position.longitude+180)/3.6+Math.cos(angle)*radius)):0
-  const y=position?Math.min(94,Math.max(6,(90-position.latitude)/1.8+Math.sin(angle)*radius*2)):0
-  const coordinates=position?' style="--x:'+x+'%;--y:'+y+'%"':''
-  const locationLabel=position?(position.approximate?' · Approximate location':''):' · Location unknown'
+  const mapped=onEuropeMap(position)
+  const mapX=mapped?(position.longitude-europe.west)*100/(europe.east-europe.west):0
+  const mapY=mapped?(europe.north-position.latitude)*100/(europe.north-europe.south):0
+  const x=Math.min(97,Math.max(3,mapX+Math.cos(angle)*radius))
+  const y=Math.min(94,Math.max(6,mapY+Math.sin(angle)*radius*2))
+  const coordinates=mapped?' style="--x:'+x+'%;--y:'+y+'%"':''
+  const locationLabel=mapped?(position.approximate?' · Approximate location':''):position?' · Outside the map':' · Location unknown'
   return '<button type="button" class="radar-dot signal-'+signal+'"'+coordinates+' data-portal="'+escape(portal.id)+'" aria-pressed="'+(String(portal.id)===selected)+'" aria-label="'+escape(label+locationLabel)+'" title="'+escape(label+locationLabel)+'"></button>'
 }
 function updateMarkup(id, markup){
   const element=$(id)
   if(element.innerHTML!==markup)element.innerHTML=markup
 }
-function renderWorldRadar(visible, empty){
+function renderEuropeRadar(visible, empty){
   const mapDots=[]
   const unlocated=[]
   const occupied=new Map()
   const visibleIds=new Set(visible.map(portal=>portal.id))
   for(const portal of portals){
     const position=portalPosition(portal)
-    if(!position){
-      if(visibleIds.has(portal.id))unlocated.push(radarDot(portal,null))
+    if(!onEuropeMap(position)){
+      if(visibleIds.has(portal.id))unlocated.push(radarDot(portal,position))
       continue
     }
     const key=position.longitude.toFixed(1)+','+position.latitude.toFixed(1)
@@ -395,7 +405,7 @@ function renderList(){
   const visible=visiblePortals()
   const listRows=visible.map(p=>'<button data-portal="'+escape(p.id)+'" aria-pressed="'+(String(p.id)===selected)+'"><span class="row"><strong>'+escape(p.name||new URL(p.url).hostname)+'</strong>'+badge(labels[p.state]==='Reachable'?'reachable':p.state,labels[p.state]??p.state)+'</span><small>'+escape(p.url)+'</small>'+(needsAttention(p)&&p.reason?'<small class="portal-summary">'+escape(p.reason)+'</small>':'')+'<small class="portal-summary">'+escape(p.count??'—')+' tenders · Last successful check '+escape(date(p.last))+'</small></button>').join('')
   const empty=portalSearch?'No portals match your search.':attentionOnly?'No portals need attention.':'No portals yet. Add one to get started.'
-  if(radar)renderWorldRadar(visible,empty)
+  if(radar)renderEuropeRadar(visible,empty)
   else updateMarkup('portals',listRows||'<p>'+empty+'</p>')
   if(focus)Array.from($('portal-picker').querySelectorAll('button')).find(button=>button.dataset.portal===focus&&!button.closest('[hidden]'))?.focus({preventScroll:true})
 }
@@ -507,7 +517,7 @@ async function load(){
     const results=await request('/portals')
     if(revision!==portalRevision)return
     portals=results.map(normalize)
-    selectVisiblePortal()
+    clearUnavailableSelection()
     $('message').textContent=''
     renderList()
     await renderDetail()
@@ -517,7 +527,7 @@ async function load(){
 $('metrics').onclick=event=>{
   if(!event.target.closest('#attention-filter'))return
   attentionOnly=!attentionOnly
-  selectVisiblePortal()
+  clearUnavailableSelection()
   $('action-message').textContent=''
   $('entries').textContent=''
   renderList()
@@ -552,7 +562,7 @@ $('portal-search').oninput=event=>{
 $('portal-picker').onclick=event=>{
   const button=event.target.closest('[data-portal]')
   if(!button)return
-  selected=button.dataset.portal
+  selected=selected===button.dataset.portal?null:button.dataset.portal
   $('action-message').textContent=''
   $('entries').textContent='Loading…'
   renderList()
@@ -634,7 +644,7 @@ $('remove-form').onsubmit=async event=>{
     portalRevision++
     portals=portals.filter(portal=>String(portal.id)!==id)
     if(selected===id){
-      selectVisiblePortal()
+      selected=null
       tab='tenders'
       $('entries').textContent=''
       $('action-message').textContent=''
