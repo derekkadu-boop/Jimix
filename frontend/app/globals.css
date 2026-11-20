@@ -107,10 +107,18 @@ main :is(h1, #portal-details-panel):focus { outline: none; }
 .section-icon { margin-top: 1px; color: var(--accent); stroke-width: 1.75; }
 .section-icon.warning { color: var(--warn); }
 .count-tag { display: inline-block; vertical-align: middle; margin-inline-start: 3px; font-size: 11px; color: var(--warn); padding: 2px 6px; border-radius: 4px; background: color-mix(in srgb, var(--warn) 11%, var(--panel)); }
-.attention-portals { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 7px; }
+.attention-portals { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
 .attention-portals:not(:empty) { margin-top: 12px; }
-.attention-portals button { text-align: left; font-size: 12px; overflow-wrap: anywhere; }
-.attention-portals li { min-width: 0; max-width: 100%; }
+.attention-portals button { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 4px 12px; padding: 8px 11px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }
+.attention-portals button strong { font-size: 13px; }
+.attention-portals button small { grid-column: 1 / -1; color: var(--muted); }
+.attention-portals li { min-width: 0; }
+.freshness, #repair-lifecycle { margin-block: 12px; padding: 10px 12px; border: 1px solid var(--line); border-inline-start: 3px solid var(--accent); border-radius: 8px; background: var(--panel); }
+.freshness[data-tone="warning"] { border-inline-start-color: var(--warn); }
+.freshness p, #repair-lifecycle p { margin: 4px 0 0; font-size: 12px; }
+.document-list { padding: 0; list-style: none; }
+.document-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 6px 0; }
+.timeline .requested-run { border-inline-start: 3px solid var(--accent); padding-inline-start: 10px; }
 .overview-grid { display: grid; grid-template-columns: minmax(0,1.08fr) minmax(0,1fr); gap: 12px; align-items: stretch; }
 .radar { margin-top: 12px; }
 .radar-viewport { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--water); }
@@ -189,7 +197,6 @@ summary { cursor: pointer; }
 .pill:is(.serving,.ok,.reachable) { --tone: var(--ok); }
 .pill:is(.failed,.error) { --tone: var(--bad); }
 .pill:is(.healing,.active) { --tone: var(--warn); }
-.repair-banner { padding: 7px 9px; color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); border-radius: 6px; }
 #repair-lifecycle, #portal-usage { padding-block: 9px; border-top: 1px solid var(--line); }
 .repair-steps { display: flex; flex-wrap: wrap; list-style: none; padding: 0; gap: 6px; }
 .repair-steps li { padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; }
