@@ -4,19 +4,101 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Watchtower | Portal monitoring</title>
 <style>
-:root{color-scheme:dark;font:16px system-ui,sans-serif;background:#0c1220;color:#edf3ff;--panel:#151e30;--line:#2b3a54;--muted:#aebcd3;--accent:#afbdff}
-*{box-sizing:border-box}body{margin:0}header{border-bottom:1px solid var(--line);background:#10192a}header div,main{max-width:1300px;margin:auto;padding:18px 24px}header div,.row,.heading,.actions{display:flex;justify-content:space-between;align-items:center;gap:12px}header strong{font-size:20px}small,p{color:var(--muted)}h1{font-size:36px;letter-spacing:-.04em;margin:12px 0 0}h2,h3{margin:0}p{margin:8px 0 14px}button,input{font:inherit;color:inherit;background:#111b2d;border:1px solid var(--line);border-radius:8px;padding:9px 12px}button{cursor:pointer}button:hover,button[aria-pressed=true]{border-color:var(--accent)}button:disabled{opacity:.5;cursor:wait}:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.primary{background:var(--accent);color:#121a34;font-weight:700}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.panel,.metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}.metric strong{display:block;font-size:28px;margin-top:4px}.layout{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}.list{display:grid;gap:8px;margin-top:14px}.list button{text-align:left;width:100%;overflow-wrap:anywhere}.actions{justify-content:flex-start;flex-wrap:wrap;margin:14px 0}.portal-summary{display:block;margin-top:5px}.danger{color:#ffacae}#action-message{color:#ffd495}#action-message:empty{display:none}.entry{border-top:1px solid var(--line);padding:12px 0}.pill{font-size:13px;border-radius:20px;padding:4px 8px;background:#263653;white-space:nowrap}.serving,.reachable,.ok{color:#83e9be;background:#183a34}.failed,.error{color:#ffacae;background:#452833}.healing{color:#ffd495;background:#443523}a{color:var(--accent)}dialog{width:min(440px,95vw);background:var(--panel);color:inherit;border:1px solid var(--line);border-radius:12px}dialog input{display:block;width:100%;margin:6px 0 12px}dialog::backdrop{background:#070c17c0}#message{color:#ffd495;min-height:1.35em}#portal-url{overflow-wrap:anywhere}[hidden]{display:none!important}@media(max-width:760px){.layout{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}
+:root {
+  color-scheme: dark;
+  font: 16px system-ui, -apple-system, sans-serif;
+  background: #0a0a1a;
+  color: #f5efff;
+  --muted: #c2b6d8;
+  --line: #3a3a63;
+  --accent: #c4b5fd;
+  --panel: #191939;
+  --page-gradient: radial-gradient(ellipse 100% 80% at 50% 30%, rgba(99, 102, 241, 0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 50% 70%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+    linear-gradient(180deg, #0F0F2D 0%, #0A0A1A 100%);
+  --heading-gradient: linear-gradient(90deg, #C4B5FD 0%, #A78BFA 50%, #818CF8 100%);
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--page-gradient); }
+header { background: var(--panel); border-bottom: 1px solid var(--line); }
+header > div, main { width: min(100% - 48px, 1200px); margin-inline: auto; }
+header > div { min-height: 72px; }
+header strong { display: flex; align-items: center; gap: 10px; font-size: 21px; letter-spacing: -.045em; }
+.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: #43345e; color: var(--accent); }
+header > div, .row, .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+main { padding-block: 32px 56px; }
+.overview {
+  padding: clamp(24px, 4vw, 48px);
+  background: #19193966;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  color: #fff;
+}
+h1 { margin: 0; font-size: clamp(36px, 6vw, 66px); font-weight: 400; letter-spacing: -.06em; line-height: 1.05; }
+h1 span { color: #c4b5fd; }
+@supports (background-clip: text) {
+  h1 span { background: var(--heading-gradient); background-clip: text; color: transparent; }
+}
+h2, h3 { margin: 0; letter-spacing: -.025em; }
+h2 { font-size: 21px; overflow-wrap: anywhere; }
+h3 { font-size: 17px; }
+small, p { color: var(--muted); }
+p { margin: 8px 0 14px; line-height: 1.5; }
+.overview > p { color: #dddaef; margin: 12px 0 24px; }
+button, input { font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; background: var(--panel); }
+button { cursor: pointer; font-weight: 600; }
+button:hover, button[aria-pressed=true] { border-color: #a99ad1; background: #44345f; }
+button:disabled { opacity: .55; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.primary { background: var(--accent); color: #251b3c; border-color: var(--accent); border-radius: 999px; padding-inline: 17px; }
+.primary:hover { background: #dbceff; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.metric { background: #ffffff12; border: 1px solid #ffffff26; border-radius: 14px; padding: 14px 16px; }
+.metric small { color: #e1ddf4; }
+.metric strong { display: block; margin-top: 3px; font-size: 29px; font-weight: 550; }
+.layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 20px; align-items: start; margin-top: 22px; }
+.panel { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: clamp(17px, 3vw, 26px); }
+.list { display: grid; gap: 8px; margin-top: 16px; }
+.list button { text-align: left; width: 100%; overflow-wrap: anywhere; padding: 12px; }
+.list button > small { display: block; font-weight: 400; }
+.portal-summary { margin-top: 5px; }
+.actions { justify-content: flex-start; flex-wrap: wrap; margin: 14px 0; }
+.results-tabs { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-top: 20px; }
+.results-tabs button { border-radius: 999px; }
+.danger, #form-error, #remove-error, #action-message, #message { color: #ffb4ca; }
+#action-message:empty, #message:empty { display: none; }
+.entry { border-top: 1px solid var(--line); padding: 14px 0; overflow-wrap: anywhere; }
+.entry:first-child { border-top: 0; }
+.pill { font-size: 12px; font-weight: 650; border-radius: 999px; padding: 4px 8px; background: #473763; color: #e1d4ff; white-space: nowrap; }
+.serving, .reachable, .ok { color: #a5e6c8; background: #224238; }
+.failed, .error { color: #ffb4ca; background: #562d48; }
+.healing { color: #ffd999; background: #514029; }
+a { color: var(--accent); }
+dialog { width: min(440px, 95vw); background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+dialog input { display: block; width: 100%; margin: 6px 0 12px; }
+dialog::backdrop { background: #120d23a8; }
+#portal-url { overflow-wrap: anywhere; }
+[hidden] { display: none !important; }
+@media (max-width: 740px) {
+  header > div, main { width: calc(100% - 32px); }
+  main { padding-top: 20px; }
+  .layout { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>
-<header><div><strong>◈ Watchtower</strong><button class="primary" id="add">+ Add portal</button></div></header>
+<header><div><strong><span class="brand-mark" aria-hidden="true">◈</span>Watchtower</strong><button class="primary" id="add">+ Add portal</button></div></header>
 <main>
-  <h1>Portal overview</h1><p>Monitor public tender portals and review their latest runs.</p>
-  <div class="metrics" id="metrics"></div>
+  <section class="overview" aria-labelledby="overview-title">
+    <h1 id="overview-title">Portal <span>overview</span></h1>
+    <p>Monitor public tender portals and review their latest runs.</p>
+    <div class="metrics" id="metrics"></div>
+  </section>
   <p id="message" role="status"></p>
   <div class="layout">
     <section class="panel"><div class="heading"><h2>Monitored portals</h2></div><div class="list" id="portals"></div></section>
     <section class="panel" aria-label="Portal details">
       <div id="details"><p>Select a portal to see its details.</p></div>
-      <div id="controls" hidden><div class="actions"><button id="check">Check now</button><button id="remove" class="danger">Remove portal</button></div><p id="action-message" role="status"></p><div class="actions" role="group" aria-label="Portal results"><button id="tenders" aria-pressed="true">Tenders</button><button id="runs" aria-pressed="false">Run history</button></div><div id="entries"></div></div>
+      <div id="controls" hidden><div class="actions"><button id="check">Check now</button><button id="remove" class="danger">Remove portal</button></div><p id="action-message" role="status"></p><div class="actions results-tabs" role="group" aria-label="Portal results"><button id="tenders" aria-pressed="true">Tenders</button><button id="runs" aria-pressed="false">Run history</button></div><div id="entries"></div></div>
     </section>
   </div>
 </main>
