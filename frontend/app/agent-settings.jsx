@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 
 const storageKey = "watchtower.agentSettings";
 const limits = [
@@ -142,7 +143,7 @@ export default function AgentSettings() {
   return (
     <>
       <button className="settings-toggle" type="button" aria-label="Settings" title="Settings" onClick={openSettings}>
-        <span aria-hidden="true">⚙</span>
+        <SlidersHorizontal size={17} strokeWidth={1.7} aria-hidden="true" />
       </button>
       <dialog ref={dialog} className="agent-settings" aria-labelledby="agent-settings-title">
         <form onSubmit={saveSettings}>

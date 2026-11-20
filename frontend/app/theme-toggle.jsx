@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SunMoon } from "lucide-react";
 
 const themeKey = "watchtower.theme";
 const themes = [
-  ["dark", "Dark purple"],
-  ["light", "Light purple"],
+  ["dark", "Dark"],
+  ["light", "Light"],
   ["green-light", "Light green"],
   ["green-dark", "Dark green"],
 ];
@@ -40,7 +41,7 @@ export default function ThemeToggle() {
       }
     }}>
       <summary aria-label="Choose appearance" title="Choose appearance">
-        <span aria-hidden="true">☀</span>
+        <SunMoon size={17} strokeWidth={1.7} aria-hidden="true" />
       </summary>
       <div className="theme-options" role="group" aria-label="Appearance themes">
         {themes.map(([value, label]) => (

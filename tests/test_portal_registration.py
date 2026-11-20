@@ -76,6 +76,35 @@ def test_add_portal_persists_rdap_city_and_country(backend, monkeypatch, tmp_pat
     ]
 
 
+def test_delete_portal_cascades_only_its_records(backend, monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    main, _ = backend
+    monkeypatch.setattr(main.db, "DB_PATH", tmp_path / "jimix.db")
+    with TestClient(main.app) as client:
+        with closing(main.db.connect()) as conn, conn:
+            for portal_id in ("delete-me", "keep-me"):
+                stamp = main.db.now()
+                conn.execute("INSERT INTO portal (id, url, created_at) VALUES (?, ?, ?)",
+                             (portal_id, f"https://{portal_id}.example", stamp))
+                conn.execute("INSERT INTO portal_location (portal_id, city) VALUES (?, 'Paris')", (portal_id,))
+                conn.execute("INSERT INTO tender (portal_id, id, last_changed_at) VALUES (?, 'T1', ?)",
+                             (portal_id, stamp))
+                conn.execute("INSERT INTO run (id, portal_id, kind, started_at) VALUES (?, ?, 'read', ?)",
+                             (portal_id, portal_id, stamp))
+        assert client.get("/openapi.json").json()["paths"]["/portals/{portal_id}"]["delete"]
+        result = client.delete("/portals/delete-me")
+        assert result.status_code == 204
+        assert result.content == b""
+        assert client.delete("/portals/delete-me").status_code == 404
+        for suffix in ("", "/tenders", "/runs"):
+            assert client.get(f"/portals/delete-me{suffix}").status_code == 404
+        assert [portal["id"] for portal in client.get("/portals").json()] == ["keep-me"]
+        with closing(main.db.connect()) as conn:
+            for table in ("portal_location", "tender", "run"):
+                assert [row[0] for row in conn.execute(f"SELECT portal_id FROM {table}")] == ["keep-me"]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("masked", [False, True])
 async def test_whois_fallback_uses_only_published_registrant_fields(backend, monkeypatch, masked):

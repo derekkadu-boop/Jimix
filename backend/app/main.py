@@ -110,6 +110,14 @@ def delete_portal(portal_id: str, conn: Conn) -> Response:
     return Response(status_code=204)
 
 
+@app.delete("/portals/{portal_id}", status_code=204)
+def delete_portal(portal_id: str, conn: Conn):
+    with conn:
+        deleted = conn.execute("DELETE FROM portal WHERE id = ?", (portal_id,)).rowcount
+        if not deleted:
+            raise HTTPException(404, "Portal not found")
+
+
 TENDER_OPTIONAL = (
     "referenceNumber",
     "description",
