@@ -1,6 +1,8 @@
 const backend = new URL(process.env.JIMIX_API_URL || "http://127.0.0.1:8000").origin;
 
 export default {
+  // The development badge measures and resizes itself; keep it out of the embedded preview.
+  devIndicators: false,
   async rewrites() {
     return [
       { source: "/portals/:path*", destination: `${backend}/portals/:path*` },
