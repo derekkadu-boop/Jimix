@@ -142,7 +142,7 @@ export default function AgentSettings() {
   return (
     <>
       <button className="settings-toggle" type="button" aria-label="Settings" title="Settings" onClick={openSettings}>
-        <span aria-hidden="true">⚙</span>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" aria-hidden="true"><path d="M5 3v18m7-18v18m7-18v18" /><circle cx="5" cy="8" r="2" fill="var(--panel)" /><circle cx="12" cy="15" r="2" fill="var(--panel)" /><circle cx="19" cy="10" r="2" fill="var(--panel)" /></svg>
       </button>
       <dialog ref={dialog} className="agent-settings" aria-labelledby="agent-settings-title">
         <form onSubmit={saveSettings}>
