@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, HttpUrl
 
 from app.database import connect, initialize_database
@@ -13,6 +13,14 @@ PortalState = Literal["integrating", "serving", "healing", "failed"]
 
 class PortalCreate(BaseModel):
     url: HttpUrl
+
+
+class PortalCreated(BaseModel):
+    id: int
+
+
+class RefreshAccepted(BaseModel):
+    runId: int
 
 
 class Portal(BaseModel):
@@ -58,16 +66,14 @@ def startup() -> None:
     initialize_database()
 
 
-@router.post("/portals", response_model=Portal, status_code=201)
-def create_portal(payload: PortalCreate) -> Portal:
+@router.post("/portals", response_model=PortalCreated, status_code=201)
+def create_portal(payload: PortalCreate) -> PortalCreated:
     url = str(payload.url)
     with connect() as db:
-        row = db.execute("SELECT * FROM portals WHERE url = ?", (url,)).fetchone()
-        if row:
-            return _portal(row)
-        cursor = db.execute("INSERT INTO portals(url, state, created_at) VALUES (?, 'integrating', ?)",
-                            (url, datetime.now(timezone.utc).isoformat()))
-        return _portal(db.execute("SELECT * FROM portals WHERE id = ?", (cursor.lastrowid,)).fetchone())
+        db.execute("INSERT OR IGNORE INTO portals(url, state, created_at) VALUES (?, 'integrating', ?)",
+                   (url, datetime.now(timezone.utc).isoformat()))
+        row = db.execute("SELECT id FROM portals WHERE url = ?", (url,)).fetchone()
+        return PortalCreated(id=row["id"])
 
 
 @router.get("/portals", response_model=list[Portal])
@@ -86,26 +92,28 @@ def get_portal(portal_id: int) -> Portal:
 def delete_portal(portal_id: int) -> Response:
     with connect() as db:
         _require_portal(db, portal_id)
+        refresh_jobs.cancel_portal(portal_id)
         db.execute("DELETE FROM portals WHERE id = ?", (portal_id,))
     return Response(status_code=204)
 
 
-@router.post("/portals/{portal_id}/refresh", response_model=Run, status_code=202)
-def refresh_portal(portal_id: int) -> Run:
+@router.post("/portals/{portal_id}/refresh", response_model=RefreshAccepted, status_code=202)
+def refresh_portal(portal_id: int) -> RefreshAccepted:
     initialize_database()
     with connect() as db:
+        # Serialize refresh requests so concurrent callers share one persisted run.
+        db.execute("BEGIN IMMEDIATE")
         _require_portal(db, portal_id)
         existing = db.execute("SELECT * FROM runs WHERE portal_id = ? AND status = 'running' ORDER BY id LIMIT 1",
                               (portal_id,)).fetchone()
         if existing:
-            return Run(runId=existing["id"], portalId=portal_id, status=existing["status"],
-                       createdAt=existing["created_at"], finishedAt=existing["finished_at"], detail=existing["detail"])
+            return RefreshAccepted(runId=existing["id"])
         now = datetime.now(timezone.utc).isoformat()
         cursor = db.execute("INSERT INTO runs(portal_id, status, created_at) VALUES (?, 'running', ?)", (portal_id, now))
         run_id = cursor.lastrowid
         db.execute("UPDATE portals SET state = 'healing', reason = NULL WHERE id = ?", (portal_id,))
     refresh_jobs.enqueue(portal_id, run_id)
-    return Run(runId=run_id, portalId=portal_id, status="running", createdAt=now)
+    return RefreshAccepted(runId=run_id)
 
 
 @router.get("/portals/{portal_id}/runs", response_model=list[Run])
@@ -118,8 +126,17 @@ def list_runs(portal_id: int) -> list[Run]:
 
 
 @router.get("/portals/{portal_id}/tenders", response_model=list[Tender])
-def list_tenders(portal_id: int) -> list[Tender]:
+def list_tenders(portal_id: int, changed_since: datetime | None = Query(default=None, alias="changedSince")) -> list[Tender]:
     with connect() as db:
         _require_portal(db, portal_id)
+        if changed_since is None:
+            rows = db.execute("SELECT * FROM tenders WHERE portal_id = ? ORDER BY id", (portal_id,))
+        else:
+            cutoff = changed_since
+            if cutoff.tzinfo is None:
+                cutoff = cutoff.replace(tzinfo=timezone.utc)
+            cutoff = cutoff.astimezone(timezone.utc)
+            rows = db.execute("SELECT * FROM tenders WHERE portal_id = ? AND changed_at >= ? ORDER BY id",
+                              (portal_id, cutoff.isoformat()))
         return [Tender(id=r["id"], portalId=r["portal_id"], title=r["title"], reference=r["reference"], url=r["url"])
-                for r in db.execute("SELECT * FROM tenders WHERE portal_id = ? ORDER BY id", (portal_id,))]
+                for r in rows]
