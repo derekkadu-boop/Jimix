@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Watchtower | Portal monitoring</title>
+<style>
+:root {
+  color-scheme: dark;
+  font: 16px system-ui, -apple-system, sans-serif;
+  background: #0a0a1a;
+  color: #f5efff;
+  --muted: #c2b6d8;
+  --line: #3a3a63;
+  --accent: #c4b5fd;
+  --panel: #191939;
+  --page-gradient: radial-gradient(ellipse 100% 80% at 50% 30%, rgba(99, 102, 241, 0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 50% 70%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+    linear-gradient(180deg, #0F0F2D 0%, #0A0A1A 100%);
+  --heading-gradient: linear-gradient(90deg, #C4B5FD 0%, #A78BFA 50%, #818CF8 100%);
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--page-gradient); }
+header { padding-top: 14px; }
+header > div, main { width: min(100% - 48px, 1200px); margin-inline: auto; }
+header > div { min-height: 64px; padding: 8px 14px 8px 20px; border: 1px solid #ffffff16; border-radius: 32px; background: #191939dd; box-shadow: 0 8px 24px #0a0a1a45; }
+header strong { display: flex; align-items: center; gap: 10px; font-size: 21px; letter-spacing: -.045em; }
+.header-brand { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.demo-label { color: var(--accent); border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; white-space: nowrap; }
+.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: #43345e; color: var(--accent); }
+header > div, .row, .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+main { padding-block: 32px 56px; }
+.overview {
+  padding: clamp(24px, 4vw, 48px);
+  background: #19193966;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  color: #fff;
+}
+h1 { margin: 0; font-size: clamp(36px, 6vw, 66px); font-weight: 400; letter-spacing: -.06em; line-height: 1.05; }
+h1 span { color: #c4b5fd; }
+@supports (background-clip: text) {
+  h1 span { background: var(--heading-gradient); background-clip: text; color: transparent; }
+}
+h2, h3 { margin: 0; letter-spacing: -.025em; }
+h2 { font-size: 21px; overflow-wrap: anywhere; }
+h3 { font-size: 17px; }
+small, p { color: var(--muted); }
+p { margin: 8px 0 14px; line-height: 1.5; }
+.overview > p { color: #dddaef; margin: 12px 0 24px; }
+button, input, select { font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; background: var(--panel); }
+button { cursor: pointer; font-weight: 600; }
+button:hover, button[aria-pressed=true] { border-color: #a99ad1; background: #44345f; }
+button:disabled { opacity: .55; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.primary { background: var(--accent); color: #251b3c; border-color: var(--accent); border-radius: 999px; padding-inline: 17px; }
+.primary:hover { background: #dbceff; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.metric { background: #ffffff12; border: 1px solid #ffffff26; border-radius: 14px; padding: 14px 16px; }
+button.metric { text-align: left; color: inherit; font-weight: inherit; }
+button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; border-color: var(--accent); }
+.repair-banner { padding: 12px 14px; border: 1px solid #806236; border-radius: 10px; color: #ffd999; background: #514029; }
+.timeline { margin: 0; padding-left: 20px; list-style: none; border-left: 2px solid var(--line); }
+.timeline li { position: relative; }
+.timeline li::before { content: ""; position: absolute; top: 21px; left: -26px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.metric small { color: #e1ddf4; }
+.metric strong { display: block; margin-top: 3px; font-size: 29px; font-weight: 550; }
+.layout { display: grid; grid-template-columns: minmax(235px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; margin-top: 22px; }
+.panel { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: clamp(17px, 3vw, 26px); }
+.sidebar { position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+#portal-picker { min-height: 0; overflow-y: auto; }
+.sidebar .list { min-height: 0; overflow-y: auto; padding: 3px; margin-inline: -3px; }
+.portal-detail-top { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.portal-detail-top > #details { flex: 1 1 220px; min-width: 0; }
+.portal-actions, .portal-views { display: flex; flex-wrap: wrap; gap: 8px; }
+.portal-views { margin: 12px 0; }
+.view-switch { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.view-switch button { padding: 6px 11px; border-radius: 999px; }
+.layout:has(#radar-view:not([hidden])) { grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); }
+.radar { min-height: 0; overflow-y: auto; margin-top: 16px; }
+.world-map {
+  position: relative;
+  aspect-ratio: 720 / 570;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid #654d99;
+  background: #100e26 url("./world-map.svg?v=europe") center / contain no-repeat;
+}
+.world-map::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), #9981d223 calc(12.5% - 1px) 12.5%),
+    repeating-linear-gradient(transparent 0 calc(25% - 1px), #9981d223 calc(25% - 1px) 25%),
+    repeating-radial-gradient(circle at center, transparent 0 23px, #9981d233 24px 25px);
+}
+.world-map::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: 120%;
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: conic-gradient(from 10deg, transparent 0deg 275deg, #7963dc45 355deg, #ac94ff95 360deg);
+  animation: radar-sweep 6s linear infinite;
+}
+.world-markers { position: absolute; inset: 0; z-index: 1; }
+.unlocated-portals { margin-top: 10px; }
+.unlocated-buttons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+@keyframes radar-sweep { to { transform: rotate(1turn); } }
+.radar button.radar-dot {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.world-markers button.radar-dot { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); }
+.radar button.radar-dot:hover, .radar button.radar-dot[aria-pressed=true] { border-color: var(--signal); background: #15112b; z-index: 1; }
+.radar-dot::before, .legend-dot { content: ""; width: 11px; height: 11px; border-radius: 50%; background: var(--signal); }
+.radar-dot::before { box-shadow: 0 0 10px var(--signal); }
+.signal-integrating { --signal: #82b6ff; }
+.signal-serving { --signal: #72e6ae; }
+.signal-healing { --signal: #ffeb3b; }
+.signal-failed { --signal: #ff91ac; }
+.signal-unknown { --signal: #bdb2d4; }
+.radar-dot.is-checking::before { animation: radar-pulse 1.35s ease-in-out infinite alternate; }
+@keyframes radar-pulse { to { box-shadow: 0 0 0 6px color-mix(in srgb, var(--signal) 22%, transparent), 0 0 16px var(--signal); } }
+@media (prefers-reduced-motion: reduce) {
+  .world-map::after, .radar-dot.is-checking::before { animation: none; }
+}
+.radar-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 8px 14px; margin-top: 12px; }
+#map-note { margin-top: 6px; }
+.radar-legend strong { display: flex; align-items: center; gap: 5px; }
+.radar-legend span span { display: block; padding-left: 16px; font-size: .85em; line-height: 1.35; }
+.radar-empty { margin: 8px 0 0; }
+.tender-card { touch-action: pan-y; }
+.tender-card button[aria-pressed=true] { color: #a5e6c8; }
+.tender-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px 16px; }
+.tender-fields dt { color: var(--muted); font-size: .85rem; }
+.tender-fields dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.tender-card h4 { margin: 12px 0 4px; }
+.portal-search { display: grid; gap: 6px; margin-top: 14px; color: var(--muted); }
+.portal-search input { width: 100%; color: #f5efff; }
+.result-tools { padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.result-tools .actions { margin: 0; }
+#filter-note { flex-basis: 100%; }
+#filter-note:empty { display: none; }
+.list { display: grid; gap: 8px; margin-top: 16px; }
+.list button { text-align: left; width: 100%; overflow-wrap: anywhere; padding: 12px; }
+.list button > small { display: block; font-weight: 400; }
+.portal-summary { margin-top: 5px; }
+.actions { justify-content: flex-start; flex-wrap: wrap; margin: 14px 0; }
+.danger, #form-error, #remove-error, #action-message, #message { color: #ffb4ca; }
+#action-message:empty, #message:empty { display: none; }
+.entry { border-top: 1px solid var(--line); padding: 14px 0; overflow-wrap: anywhere; }
+.entry:first-child { border-top: 0; }
+.pill { font-size: 12px; font-weight: 650; border-radius: 999px; padding: 4px 8px; background: #473763; color: #e1d4ff; white-space: nowrap; }
+.serving, .reachable, .ok { color: #a5e6c8; background: #224238; }
+.failed, .error { color: #ffb4ca; background: #562d48; }
+.healing { color: #ffeb3b; background: #4b4021; }
+a { color: var(--accent); }
+dialog { width: min(440px, 95vw); background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+dialog input { display: block; width: 100%; margin: 6px 0 12px; }
+dialog::backdrop { background: #120d23a8; }
+#portal-url { overflow-wrap: anywhere; }
+[hidden] { display: none !important; }
+@media (max-width: 740px) {
+  header > div, main { width: calc(100% - 32px); }
+  main { padding-top: 20px; }
+  .layout, .layout:has(#radar-view:not([hidden])) { grid-template-columns: 1fr; }
+  .sidebar { position: static; max-height: none; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+<header>
+  <div>
+    <div class="header-brand"><strong><span class="brand-mark" aria-hidden="true">◈</span>Watchtower</strong><small class="demo-label">Demo view</small></div>
+    <button class="primary" id="add">+ Add portal</button>
+  </div>
+</header>
+<main>
+  <section class="overview" aria-labelledby="overview-title">
+    <h1 id="overview-title">Portal <span>overview</span></h1>
+    <p>Monitor public tender portals and review their latest runs.</p>
+    <div class="metrics" id="metrics"></div>
+  </section>
+  <p id="message" role="status"></p>
+  <div class="layout">
+    <aside class="panel sidebar" aria-labelledby="portal-list-title">
+      <h2 id="portal-list-title">Monitored portals</h2>
+      <div class="view-switch" id="portal-view-switch" role="group" aria-label="Portal view">
+        <button id="view-radar" type="button" aria-pressed="true">Radar</button>
+        <button id="view-list" type="button" aria-pressed="false">List</button>
+      </div>
+      <label class="portal-search" for="portal-search">Search portals
+        <input id="portal-search" type="search" placeholder="Search by name or URL" autocomplete="off" aria-controls="portal-picker">
+      </label>
+      <div id="portal-picker">
+        <div class="list" id="portals" role="group" aria-label="Monitored portals" hidden></div>
+        <div class="radar" id="radar-view" role="group" aria-label="Europe radar">
+          <div class="world-map"><div class="world-markers" id="world-markers"></div></div>
+          <div class="unlocated-portals" id="unlocated-portals" hidden>
+            <small>Outside the map or location unknown</small>
+            <div class="unlocated-buttons" id="unlocated-buttons"></div>
+          </div>
+          <p class="radar-empty" id="radar-empty" hidden></p>
+        </div>
+      </div>
+      <small class="radar-legend" id="radar-legend">
+        <span><strong><i class="legend-dot signal-integrating" aria-hidden="true"></i>integrating</strong><span>Being attached. Nothing is delivered yet.</span></span>
+        <span><strong><i class="legend-dot signal-serving" aria-hidden="true"></i>serving</strong><span>Delivering correctly.</span></span>
+        <span><strong><i class="legend-dot signal-healing" aria-hidden="true"></i>healing</strong><span>Broken. A repair is running.</span></span>
+        <span><strong><i class="legend-dot signal-failed" aria-hidden="true"></i>failed</strong><span>Cannot deliver. A person is needed.</span></span>
+      </small>
+      <small id="map-note">Locations inferred from country domains are approximate.</small>
+    </aside>
+    <section class="panel" aria-label="Portal details">
+      <div class="portal-detail-top">
+        <div id="details"><p>Select a portal to see its details.</p></div>
+        <div class="portal-actions" id="controls" role="group" aria-label="Selected portal actions" hidden>
+          <button id="check">Check now</button><button id="remove" class="danger">Remove portal</button>
+        </div>
+      </div>
+      <p id="action-message" role="status"></p>
+      <div class="portal-views" id="portal-views" role="group" aria-label="Selected portal results" hidden>
+        <button id="tenders" aria-pressed="true">Tenders</button><button id="runs" aria-pressed="false">Run history</button>
+      </div>
+      <div class="result-tools" id="result-tools" hidden>
+        <div id="tender-filters" class="actions" hidden>
+          <label>Changed <select id="tender-since"><option value="">All dates</option><option value="24h">Last 24 hours</option></select></label>
+          <label>Status <select id="tender-status"><option value="">All statuses</option><option value="open">Open</option><option value="closed">Closed</option><option value="withdrawn">Withdrawn</option></select></label>
+          <small id="filter-note"></small>
+        </div>
+      </div>
+      <div id="entries"></div>
+    </section>
+  </div>
+</main>
+<dialog id="dialog">
+  <form id="form"><h2>Add portal</h2><p>Enter the public address of a tender portal.</p><label for="url">Portal URL</label><input id="url" required type="text" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="procurement.example"><p id="form-error" role="alert"></p><div class="actions"><button type="button" id="cancel">Cancel</button><button class="primary" id="submit">Add portal</button></div></form>
+</dialog>
+<dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
+  <form id="remove-form">
+    <h2 id="remove-title">Remove portal?</h2>
+    <p id="remove-description"></p>
+    <p id="remove-error" role="alert"></p>
+    <div class="actions"><button type="button" id="remove-cancel" autofocus>Cancel</button><button class="danger" id="remove-confirm">Remove portal</button></div>
+  </form>
+</dialog>
+<script>
+const $ = id => document.getElementById(id)
+const config = new URLSearchParams(location.search)
+const api = config.get('api') || location.origin
+const finalContract = config.get('contract') === 'patterno'
+const labels = {unknown:'Unchecked',ok:'Reachable',error:'failed',integrating:'integrating',serving:'serving',healing:'healing',failed:'failed'}
+const checking = new Set()
+let attentionOnly = false
+let portalView = 'radar'
+let savedTenders = new Set()
+try { savedTenders = new Set(JSON.parse(localStorage.getItem('watchtower.savedTenders') || '[]')) } catch {}
+let swipe = null
+const needsAttention = portal => ['failed','error','healing'].includes(portal.state)
+const scopedPortals = () => attentionOnly ? portals.filter(needsAttention) : portals
+let portalSearch = ''
+const visiblePortals = () => scopedPortals().filter(portal=>
+  [portal.name,portal.url].some(value=>value?.toLowerCase().includes(portalSearch))
+)
+function clearUnavailableSelection(){
+  if(selected!==null&&!scopedPortals().some(portal=>String(portal.id)===selected))selected=null
+}
+let portals = [], selected = null, tab = 'tenders', detailRequest = 0, removal = null, loading = false, portalRevision = 0
+const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])
+const date = value => value ? new Date(value).toLocaleString() : '—'
+const badge = (state,label) => '<span class="pill '+escape(state)+'">'+escape(label)+'</span>'
+async function request(path,options){
+  const response = await fetch(new URL(path,api),options)
+  if(!response.ok){
+    const body = await response.json().catch(()=>null)
+    throw new Error(typeof body?.detail==='string' ? body.detail : 'API returned HTTP '+response.status)
+  }
+  if(response.status===204)return
+  return response.json()
+}
+function normalize(portal){
+  const state=portal.state ?? portal.status
+  const reason=portal.reason ?? portal.detail ?? ''
+  const statusCode=Number(portal.statusCode ?? portal.status_code)
+  let accessFailure=''
+  if(/\b(?:captcha|required human verification|verify (?:that )?you are human)\b/i.test(reason) && ['failed','error','healing'].includes(state)){
+    accessFailure='The portal requires a CAPTCHA or human verification.'
+  }else if(statusCode===401 || /\b(?:(?:log[ -]?in|sign[ -]?in|authentication) required|requires? (?:a )?(?:log[ -]?in|sign[ -]?in|authentication)|(?:log|sign) in to (?:continue|access))\b/i.test(reason)){
+    accessFailure='The portal requires a login.'
+  }else if(statusCode===403){
+    accessFailure='The portal denied access (HTTP 403).'
+  }
+  return {id:portal.id,name:portal.name,location:portal.location,countryCode:portal.countryCode??portal.country_code,url:portal.url ?? portal.address,state:accessFailure?'failed':state,
+    reason:accessFailure||reason,count:portal.tenderCount ?? portal.tender_count,
+    last:portal.lastSuccessAt ?? portal.last_read_at,reachable:portal.reachable}
+}
+// Country label positions from Natural Earth, in longitude/latitude order.
+const countryPoints = {
+  ae:[54.55,23.47], af:[66.5,34.16], al:[20.11,40.65], am:[44.8,40.46], ao:[17.98,-12.18], aq:[35.89,-79.84], ar:[-64.17,-33.5], at:[14.13,47.52],
+  au:[134.05,-24.13], az:[47.21,40.4], ba:[18.07,44.09], bd:[89.68,24.21], be:[4.8,50.79], bf:[-1.36,12.67], bg:[25.16,42.51], bi:[29.92,-3.33],
+  bj:[2.35,10.32], bn:[114.55,4.45], bo:[-64.59,-16.67], br:[-49.56,-12.1], bs:[-77.15,26.4], bt:[90.04,27.54], bw:[24.18,-22.1], by:[28.42,53.82],
+  bz:[-88.71,17.2], ca:[-101.91,60.32], cd:[23.46,-1.86], cf:[20.91,6.99], cg:[15.9,0.14], ch:[7.46,46.72], ci:[-5.57,7.49], cl:[-72.32,-38.15],
+  cm:[12.47,4.59], cn:[106.34,32.5], co:[-73.17,3.37], cr:[-84.08,10.07], cu:[-77.98,21.33], cy:[33.08,34.91], cz:[15.38,49.88], de:[9.68,50.96],
+  dj:[42.5,11.98], dk:[9.02,55.97], do:[-70.65,19.1], dz:[2.81,27.4], ec:[-78.19,-1.26], ee:[25.87,58.72], eg:[29.45,26.19], eh:[-12.63,23.97],
+  er:[38.29,15.79], es:[-3.46,40.09], et:[39.09,8.03], fi:[27.28,63.25], fj:[177.98,-17.83], fk:[-58.74,-51.61], fr:[2.55,46.7], ga:[11.84,-0.44],
+  gb:[-2.12,54.4], ge:[43.74,41.87], gh:[-1.04,7.72], gl:[-39.34,74.32], gm:[-15.0,13.64], gn:[-10.02,10.62], gq:[8.99,2.33], gr:[21.73,39.49],
+  gt:[-90.5,14.98], gw:[-14.52,12.16], gy:[-58.94,5.12], hn:[-86.89,14.79], hr:[16.37,45.81], ht:[-72.22,19.26], hu:[19.45,47.09], id:[101.89,-0.95],
+  ie:[-7.8,53.08], il:[34.85,30.91], in:[79.36,22.69], iq:[43.26,33.09], ir:[54.93,32.17], is:[-18.67,64.78], it:[11.08,44.73], jm:[-77.32,18.14],
+  jo:[36.38,30.81], jp:[138.44,36.14], ke:[37.91,0.55], kg:[74.53,41.67], kh:[104.5,12.65], kp:[126.44,39.89], kr:[128.13,36.38], kw:[47.31,29.41],
+  kz:[68.69,49.05], la:[102.53,19.43], lb:[35.99,34.13], lk:[80.7,7.58], lr:[-9.46,6.45], ls:[28.25,-29.48], lt:[24.09,55.1], lu:[6.08,49.73],
+  lv:[25.46,57.07], ly:[18.01,26.64], ma:[-7.19,31.65], md:[28.49,47.43], me:[19.14,42.8], mg:[46.7,-18.63], mk:[21.56,41.56], ml:[-2.04,18.69],
+  mm:[95.8,21.57], mn:[104.15,46.0], mr:[-9.74,19.59], mw:[33.61,-13.39], mx:[-102.29,23.92], my:[113.84,2.53], mz:[37.84,-13.94], na:[17.11,-20.58],
+  nc:[165.08,-21.06], ne:[9.5,17.45], ng:[7.5,9.44], ni:[-85.07,12.67], nl:[5.61,52.42], no:[9.68,61.36], np:[83.64,28.3], nz:[172.79,-39.76],
+  om:[57.34,22.12], pa:[-80.35,8.72], pe:[-72.9,-12.98], pg:[143.91,-5.7], ph:[122.47,11.2], pk:[68.55,29.33], pl:[19.49,51.99], pr:[-66.48,18.23],
+  ps:[35.29,32.05], pt:[-8.27,39.61], py:[-60.15,-21.67], qa:[51.14,25.24], ro:[24.97,45.73], rs:[20.79,44.19], ru:[44.69,58.25], rw:[30.1,-1.9],
+  sa:[44.7,23.81], sb:[159.17,-8.03], sd:[29.26,16.33], se:[19.02,65.86], si:[14.92,46.06], sk:[19.05,48.73], sl:[-11.76,8.62], sn:[-14.78,15.14],
+  so:[45.19,3.57], sr:[-55.91,4.14], ss:[30.39,7.23], sv:[-88.89,13.69], sy:[38.28,35.01], sz:[31.47,-26.53], td:[18.65,15.14], tf:[69.12,-49.3],
+  tg:[1.06,8.81], th:[101.07,15.46], tj:[72.59,38.2], tl:[125.85,-8.8], tm:[58.68,39.86], tn:[9.01,33.69], tr:[34.51,39.35], tt:[-60.92,11.0],
+  tw:[120.87,23.65], tz:[34.96,-6.05], ua:[32.14,49.72], ug:[32.95,1.97], us:[-97.48,39.54], uy:[-55.97,-32.96], uz:[64.01,41.69], ve:[-64.6,7.18],
+  vn:[105.39,21.72], vu:[166.91,-15.37], xk:[20.86,42.59], ye:[45.87,15.33], za:[23.67,-29.71], zm:[26.4,-14.66], zw:[29.93,-18.91]
+}
+function portalPosition(portal){
+  const {latitude,longitude}=portal.location??{}
+  if(Number.isFinite(latitude)&&Math.abs(latitude)<=90&&Number.isFinite(longitude)&&Math.abs(longitude)<=180){
+    return {latitude,longitude,approximate:false}
+  }
+  const suffix=new URL(portal.url).hostname.toLowerCase().replace(/\.$/,'').split('.').pop()
+  const code=String(portal.countryCode??suffix).toLowerCase()
+  if(!/^[a-z]{2}$/.test(code))return null
+  const point=countryPoints[code==='uk'?'gb':code]
+  return point?{longitude:point[0],latitude:point[1],approximate:true}:null
+}
+// Match the geographic extent of the Europe coastline asset.
+const europe = {west:-27,east:47,south:33,north:73}
+function onEuropeMap(position){
+  return position&&position.longitude>=europe.west&&position.longitude<=europe.east
+    &&position.latitude>=europe.south&&position.latitude<=europe.north
+}
+function radarDot(portal, position, offset=0){
+  const state=portal.state
+  const signal=({integrating:'integrating',serving:'serving',healing:'healing',failed:'failed',error:'failed'})[state]??'unknown'
+  const pulse=state==='integrating'||(state==='serving'&&checking.has(String(portal.id)))?' is-checking':''
+  const label=(portal.name||new URL(portal.url).hostname)+' · '+(labels[state]??state)
+  const angle=offset*2.399963
+  const radius=offset?Math.min(4,Math.sqrt(offset)*1.7):0
+  const mapped=onEuropeMap(position)
+  const mapX=mapped?(position.longitude-europe.west)*100/(europe.east-europe.west):0
+  const mapY=mapped?(europe.north-position.latitude)*100/(europe.north-europe.south):0
+  const x=Math.min(97,Math.max(3,mapX+Math.cos(angle)*radius))
+  const y=Math.min(94,Math.max(6,mapY+Math.sin(angle)*radius*2))
+  const coordinates=mapped?' style="--x:'+x+'%;--y:'+y+'%"':''
+  const locationLabel=mapped?(position.approximate?' · Approximate location':''):position?' · Outside the map':' · Location unknown'
+  return '<button type="button" class="radar-dot signal-'+signal+pulse+'"'+coordinates+' data-portal="'+escape(portal.id)+'" aria-pressed="'+(String(portal.id)===selected)+'" aria-label="'+escape(label+locationLabel)+'" title="'+escape(label+locationLabel)+'"></button>'
+}
+function updateMarkup(id, markup){
+  const element=$(id)
+  if(element.innerHTML!==markup)element.innerHTML=markup
+}
+function renderEuropeRadar(visible, empty){
+  const mapDots=[]
+  const unlocated=[]
+  const occupied=new Map()
+  const visibleIds=new Set(visible.map(portal=>portal.id))
+  for(const portal of portals){
+    const position=portalPosition(portal)
+    if(!onEuropeMap(position)){
+      if(visibleIds.has(portal.id))unlocated.push(radarDot(portal,position))
+      continue
+    }
+    const key=position.longitude.toFixed(1)+','+position.latitude.toFixed(1)
+    const offset=occupied.get(key)??0
+    occupied.set(key,offset+1)
+    if(visibleIds.has(portal.id))mapDots.push(radarDot(portal,position,offset))
+  }
+  updateMarkup('world-markers',mapDots.join(''))
+  updateMarkup('unlocated-buttons',unlocated.join(''))
+  $('unlocated-portals').hidden=!unlocated.length
+  $('radar-empty').hidden=!!visible.length
+  $('radar-empty').textContent=visible.length?'':empty
+}
+function renderList(){
+  const totals = [['Monitored portals',portals.length],[labels.serving,portals.filter(p=>p.state==='serving').length],['Needs attention',portals.filter(needsAttention).length],['Tenders held',portals.every(p=>p.count!=null)?portals.reduce((sum,p)=>sum+p.count,0):'—']]
+  const metrics=$('metrics')
+  const focusedFilter=document.activeElement?.id==='attention-filter'
+  const summary=totals.map(([name,value])=>{
+    const content='<small>'+name+'</small><strong>'+value+'</strong>'
+    return name==='Needs attention'
+      ? '<button type="button" class="metric" id="attention-filter" aria-pressed="'+attentionOnly+'">'+content+'</button>'
+      : '<div class="metric">'+content+'</div>'
+  }).join('')
+  if(metrics.innerHTML!==summary)metrics.innerHTML=summary
+  if(focusedFilter)$('attention-filter').focus({preventScroll:true})
+  const focus=document.activeElement?.dataset.portal
+  const radar=portalView==='radar'
+  $('view-radar').setAttribute('aria-pressed',radar)
+  $('view-list').setAttribute('aria-pressed',!radar)
+  $('radar-legend').hidden=!radar
+  $('map-note').hidden=!radar
+  $('portals').hidden=radar
+  $('radar-view').hidden=!radar
+  const visible=visiblePortals()
+  const listRows=visible.map(p=>'<button data-portal="'+escape(p.id)+'" aria-pressed="'+(String(p.id)===selected)+'"><span class="row"><strong>'+escape(p.name||new URL(p.url).hostname)+'</strong>'+badge(labels[p.state]==='Reachable'?'reachable':p.state,labels[p.state]??p.state)+'</span><small>'+escape(p.url)+'</small>'+(needsAttention(p)&&p.reason?'<small class="portal-summary">'+escape(p.reason)+'</small>':'')+'<small class="portal-summary">'+escape(p.count??'—')+' tenders · Last successful check '+escape(date(p.last))+'</small></button>').join('')
+  const empty=portalSearch?'No portals match your search.':attentionOnly?'No portals need attention.':'No portals yet. Add one to get started.'
+  if(radar)renderEuropeRadar(visible,empty)
+  else updateMarkup('portals',listRows||'<p>'+empty+'</p>')
+  if(focus)Array.from($('portal-picker').querySelectorAll('button')).find(button=>button.dataset.portal===focus&&!button.closest('[hidden]'))?.focus({preventScroll:true})
+}
+function runLabel(status){
+  return ({ok:'Succeeded',error:'Failed',failed:'Failed'})[status]??status??'In progress'
+}
+function runTime(run){
+  return run.finishedAt ?? run.at ?? run.startedAt
+}
+function timelineEvent(title, timestamp, detail, duration){
+  return '<li class="entry"><h3>'+escape(title)+'</h3>'
+    +(timestamp?'<small>'+escape(date(timestamp))+(duration!=null?' · '+escape(duration):'')+'</small>':'')
+    +(detail?'<p>'+escape(detail)+'</p>':'')+'</li>'
+}
+function renderTimeline(runs, portal){
+  const events=[...runs].reverse().map(run=>{
+    const status=runLabel(run.result??run.status).toLowerCase()
+    const kind=run.kind==='repair'?'Repair':'Read'
+    const elapsed=run.durationMs??run.duration_ms??(run.startedAt&&run.finishedAt?Date.parse(run.finishedAt)-Date.parse(run.startedAt):null)
+    const duration=Number.isFinite(elapsed)&&elapsed>=0?elapsed+' ms':null
+    const started=run.kind==='repair'&&run.startedAt&&status!=='in progress'
+      ? timelineEvent('Repair started',run.startedAt):''
+    return started+timelineEvent(status==='in progress'?kind+' started':kind+' '+status,runTime(run),run.detail,duration)
+  })
+  if(portal.state==='healing'&&runs[0]?.kind!=='repair'){
+    events.push(timelineEvent('Repair pending',null,portal.reason))
+  }
+  return events.length?'<ol class="timeline">'+events.join('')+'</ol>':'<p>No runs recorded yet.</p>'
+}
+function filterTenders(tenders, cutoff, status){
+  return tenders.filter(tender=>(!status||tender.status===status)&&(!cutoff||finalContract||Date.parse(tender.lastChangedAt)>Date.parse(cutoff)))
+}
+function documentLink(doc){
+  try{
+    const source=doc.path ?? doc.url ?? doc.downloadPath
+    if(!source)return ''
+    const url=new URL(source,api)
+    if(!['http:','https:'].includes(url.protocol))return ''
+    return '<div><a href="'+escape(url.href)+'" download target="_blank" rel="noopener">Download '+escape(doc.fileName??'document')+'</a></div>'
+  }catch{return ''}
+}
+function renderTender(tender, portal){
+  const identifier=(finalContract?tender.url??tender.reference:tender.reference??tender.url)??tender.id??tender.title
+  const key=JSON.stringify([portal.url,identifier])
+  const saved=savedTenders.has(key)
+  const address=tender.address??tender.url
+  let addressMarkup='—'
+  if(address){
+    addressMarkup=escape(address)
+    try{
+      const url=new URL(address,api)
+      if(['http:','https:'].includes(url.protocol))addressMarkup='<a href="'+escape(url.href)+'" target="_blank" rel="noopener">'+escape(address)+'</a>'
+    }catch{}
+  }
+  const fields=[
+    ['Identifier',escape(tender.reference??tender.id??'—')],
+    ['Address',addressMarkup],
+    ['Buyer',escape(tender.buyerName??'—')],
+    ['Status',escape(tender.status??'—')],
+    ['Submissions open',escape(date(tender.submissionOpensAt))],
+    ['Submission deadline',escape(date(tender.submissionDeadline))],
+    ['Last changed',escape(date(tender.lastChangedAt))]
+  ]
+  const documents=(tender.documents??[]).map(documentLink).join('')
+  return '<article class="entry tender-card" data-tender="'+escape(key)+'"><div class="row"><h3>'+escape(tender.title??'Untitled tender')+'</h3>'
+    +'<button type="button" data-save aria-pressed="'+saved+'">'+(saved?'Saved':'Save')+'</button></div>'
+    +'<dl class="tender-fields">'+fields.map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+value+'</dd></div>').join('')+'</dl>'
+    +'<h4>Documents</h4>'+(documents||'<p>No documents listed.</p>')+'</article>'
+}
+function setTenderSaved(card, saved){
+  const key=card.dataset.tender
+  if(saved)savedTenders.add(key)
+  else savedTenders.delete(key)
+  try { localStorage.setItem('watchtower.savedTenders',JSON.stringify([...savedTenders])) } catch {}
+  const button=card.querySelector('[data-save]')
+  button.setAttribute('aria-pressed',saved)
+  button.textContent=saved?'Saved':'Save'
+}
+async function renderDetail(){
+  const token=++detailRequest
+  const p=portals.find(item=>String(item.id)===selected)
+  $('controls').hidden=!p
+  $('portal-views').hidden=!p
+  $('result-tools').hidden=!p||tab!=='tenders'
+  $('tender-filters').hidden=!p||tab!=='tenders'
+  if(!p){$('details').innerHTML='<p>Select a portal to see its details.</p>';$('entries').innerHTML='';return}
+  const reachability=p.reachable==null?'':`<p>Website ${p.reachable?'reachable':'unreachable'}</p>`
+  $('details').innerHTML='<h2>'+escape(p.name||new URL(p.url).hostname)+'</h2><small id="portal-url">'+escape(p.url)+'</small>'+reachability+'<p>'+escape(p.reason||labels[p.state]||p.state)+'</p><small id="latest-check" hidden></small><small style="display:block">Last successful read · '+date(p.last)+'</small>'+(p.last&&p.state==='healing'?'<p class="repair-banner">Showing tenders from the last successful check · '+escape(date(p.last))+'</p>':p.last&&p.state==='failed'?'<p>Showing tenders from the last verified read.</p>':'')
+  $('tenders').setAttribute('aria-pressed',tab==='tenders')
+  $('runs').setAttribute('aria-pressed',tab==='runs')
+  $('check').disabled=checking.has(selected)||p.state==='integrating'||p.state==='healing'
+  $('check').textContent=checking.has(selected)?'Checking…':'Check now'
+  const path='/portals/'+encodeURIComponent(p.id)
+  const history=request(path+'/runs').then(runs=>[...runs].sort((a,b)=>new Date(runTime(b))-new Date(runTime(a))))
+  const latest=history.then(([run])=>{
+    if(token!==detailRequest||!run||!runTime(run))return
+    const status=run.result??run.status
+    const kind=run.kind==='repair'?'repair':'check'
+    $('latest-check').textContent=(['error','failed'].includes(status)?`Last ${kind} failed`:`Last ${kind}`)+' · '+date(runTime(run))
+    $('latest-check').hidden=false
+  }).catch(()=>{})
+  try{
+    const recent=$('tender-since').value==='24h'
+    const cutoff=recent?new Date(Date.now()-86_400_000).toISOString():null
+    const query=finalContract&&cutoff?'?'+new URLSearchParams({changedSince:cutoff}):''
+    const entries=await (tab==='runs'?history:request(path+'/tenders'+query))
+    if(token!==detailRequest)return
+    let tenders=entries
+    if(tab==='tenders'){
+      const hasDates=finalContract||entries.some(tender=>tender.lastChangedAt)
+      const hasStatuses=finalContract||entries.some(tender=>tender.status)
+      $('tender-since').disabled=!hasDates
+      $('tender-status').disabled=!hasStatuses
+      $('filter-note').textContent=!hasDates&&!hasStatuses?'This API does not provide tender change dates or statuses.':!hasDates?'This API does not provide tender change dates.':!hasStatuses?'This API does not provide tender statuses.':''
+      tenders=filterTenders(entries,hasDates?cutoff:null,hasStatuses?$('tender-status').value:null)
+    }
+    const markup=tab==='runs'
+      ? renderTimeline(entries,p)
+      : tenders.map(t=>renderTender(t,p)).join('') || (entries.length||query?'<p>No tenders match these filters.</p>':'<p>No tenders available yet.</p>')
+    if($('entries').innerHTML!==markup)$('entries').innerHTML=markup
+  }catch(error){if(token===detailRequest)$('entries').textContent='Could not load '+tab+'. '+error.message}
+  await latest
+}
+async function load(){
+  if(loading)return
+  loading=true
+  const revision=portalRevision
+  try{
+    const results=await request('/portals')
+    if(revision!==portalRevision)return
+    portals=results.map(normalize)
+    clearUnavailableSelection()
+    $('message').textContent=''
+    renderList()
+    await renderDetail()
+  }catch(error){$('message').textContent='Could not reach the portal API. '+error.message}
+  finally{loading=false}
+}
+$('metrics').onclick=event=>{
+  if(!event.target.closest('#attention-filter'))return
+  attentionOnly=!attentionOnly
+  clearUnavailableSelection()
+  $('action-message').textContent=''
+  $('entries').textContent=''
+  renderList()
+  renderDetail()
+}
+for(const view of ['radar','list'])$('view-'+view).onclick=()=>{
+  portalView=view
+  renderList()
+}
+$('entries').onclick=event=>{
+  const button=event.target.closest('[data-save]')
+  if(button)setTenderSaved(button.closest('[data-tender]'),button.getAttribute('aria-pressed')!=='true')
+}
+$('entries').onpointerdown=event=>{
+  if(!event.isPrimary||event.button!==0||event.target.closest('a,button'))return
+  const card=event.target.closest('[data-tender]')
+  if(!card)return
+  swipe={id:event.pointerId,x:event.clientX,y:event.clientY,card}
+  $('entries').setPointerCapture(event.pointerId)
+}
+$('entries').onpointerup=event=>{
+  if(swipe?.id!==event.pointerId)return
+  const {x,y,card}=swipe
+  swipe=null
+  if(card.isConnected&&event.clientX-x>65&&event.clientX-x>Math.abs(event.clientY-y)*1.5)setTenderSaved(card,true)
+}
+$('entries').onpointercancel=event=>{if(swipe?.id===event.pointerId)swipe=null}
+$('portal-search').oninput=event=>{
+  portalSearch=event.target.value.trim().toLowerCase()
+  renderList()
+}
+$('portal-picker').onclick=event=>{
+  const button=event.target.closest('[data-portal]')
+  if(!button)return
+  selected=selected===button.dataset.portal?null:button.dataset.portal
+  $('action-message').textContent=''
+  $('entries').textContent='Loading…'
+  renderList()
+  renderDetail()
+}
+for(const name of ['tenders','runs'])$(name).onclick=()=>{tab=name;$('entries').textContent='Loading…';renderDetail()}
+for(const id of ['tender-since','tender-status'])$(id).onchange=renderDetail
+$('add').onclick=()=>{$('form').reset();$('form-error').textContent='';$('dialog').showModal()}
+$('cancel').onclick=()=>$('dialog').close()
+$('form').onsubmit=async event=>{
+  event.preventDefault()
+  $('form-error').textContent=''
+  $('submit').disabled=true
+  try{
+    const address=$('url').value.trim()
+    const url=new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(address) ? address : 'https://'+address)
+    if(!['https:','http:'].includes(url.protocol)||url.username||url.password)throw new Error('Enter a public HTTP or HTTPS URL.')
+    const created=await request('/portals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[finalContract?'url':'address']:url.href})})
+    const portal=created.address||created.url?created:await request('/portals/'+encodeURIComponent(created.id))
+    portalRevision++
+    portals=portals.filter(item=>String(item.id)!==String(portal.id))
+    portals.push(normalize(portal))
+    attentionOnly=false
+    portalSearch=''
+    $('portal-search').value=''
+    selected=String(portal.id)
+    tab='tenders'
+    $('dialog').close()
+    $('entries').textContent='Loading…'
+    renderList()
+    await renderDetail()
+  }catch(error){$('form-error').textContent=error.message}
+  finally{$('submit').disabled=false}
+}
+$('check').onclick=async()=>{
+  if(!selected||$('check').disabled)return
+  const id=selected
+  checking.add(id)
+  renderList()
+  $('action-message').textContent=''
+  $('check').disabled=true
+  $('check').textContent='Checking…'
+  try{
+    await request('/portals/'+encodeURIComponent(id)+'/refresh',{method:'POST'})
+    await load()
+  }catch(error){
+    if(selected===id)$('action-message').textContent='Check failed. '+error.message
+  }finally{
+    checking.delete(id)
+    renderList()
+    if(selected===id){
+      const portal=portals.find(item=>String(item.id)===id)
+      $('check').disabled=['integrating','healing'].includes(portal?.state)
+      $('check').textContent='Check now'
+    }
+  }
+}
+$('remove').onclick=()=>{
+  const portal=portals.find(item=>String(item.id)===selected)
+  if(!portal)return
+  removal=selected
+  $('remove-description').textContent='Stop monitoring '+portal.url+' and remove its tender and run history?'
+  $('remove-error').textContent=''
+  $('remove-dialog').showModal()
+}
+$('remove-cancel').onclick=()=>$('remove-dialog').close()
+$('remove-dialog').oncancel=event=>{
+  if($('remove-confirm').disabled)event.preventDefault()
+}
+$('remove-form').onsubmit=async event=>{
+  event.preventDefault()
+  if(removal===null||$('remove-confirm').disabled)return
+  const id=removal
+  $('remove-confirm').disabled=true
+  $('remove-cancel').disabled=true
+  $('remove-error').textContent=''
+  try{
+    await request('/portals/'+encodeURIComponent(id),{method:'DELETE'})
+    portalRevision++
+    portals=portals.filter(portal=>String(portal.id)!==id)
+    if(selected===id){
+      selected=null
+      tab='tenders'
+      $('entries').textContent=''
+      $('action-message').textContent=''
+    }
+    $('remove-dialog').close()
+    renderList()
+    await renderDetail()
+    if(selected===null)$('add').focus()
+    else $(portalView==='radar'?'radar-view':'portals').querySelector('[aria-pressed="true"]')?.focus()
+  }catch(error){
+    $('remove-error').textContent=error.message
+  }finally{
+    $('remove-confirm').disabled=false
+    $('remove-cancel').disabled=false
+  }
+}
+setInterval(load,10_000)
+load()
+</script>
+</html>
