@@ -21,6 +21,12 @@ Open [the dashboard](http://127.0.0.1:3000/). Next.js forwards portal requests
 to FastAPI on port 8000. Set `JIMIX_API_URL` before starting development
 or building for production to use another backend origin.
 
+Jimix saves new portals immediately and looks up public registration data in
+the background through RDAP or WHOIS. The radar refreshes automatically and
+uses city coordinates from [GeoNames](https://www.geonames.org/) (CC BY 4.0).
+It skips identifiable privacy proxies and falls back to a country marker when
+the registration or country-code domain provides a usable country.
+
 ## Patterno Watchtower Website Explorer
 
 Give Watchtower a public procurement portal URL to get a recommended extraction method and its verification evidence. Watchtower checks robots.txt and access restrictions, then uses OpenAI to choose inspection tools and Python to verify the proposed recipe. A normal run works in memory and prints the recommendation.

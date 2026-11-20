@@ -23,6 +23,8 @@ dependencies = [
 [project.optional-dependencies]
 backend = [
     "fastapi>=0.115.0",
+    "geonamescache>=3,<4",
+    "tldextract>=5.3,<6",
     "uvicorn[standard]>=0.32.0",
 ]
 dev = [
