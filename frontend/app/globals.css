@@ -208,9 +208,35 @@ footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8p
 .agent-cost-summary { display: flex; flex-wrap: wrap; gap: 5px; color: var(--muted); font-size: 11px; }
 .agent-cost-summary small { font-size: inherit; }
 dialog { width: min(440px,calc(100% - 24px)); max-height: 86dvh; overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 13px; padding: 20px; }
-dialog[open], .view-enter { animation: appear 155ms ease-out; }
+:root {
+  --view-duration: 230ms;
+  --dialog-duration: 210ms;
+  --motion-offset: 7px;
+  --dialog-scale: .98;
+  --motion-easing: ease-out;
+}
+:root[data-motion="quiet"] {
+  --view-duration: 140ms;
+  --dialog-duration: 140ms;
+  --motion-offset: 0px;
+  --dialog-scale: 1;
+}
+:root[data-motion="expressive"] {
+  --view-duration: 320ms;
+  --dialog-duration: 280ms;
+  --motion-offset: 14px;
+  --dialog-scale: .96;
+  --motion-easing: cubic-bezier(.22, 1, .36, 1);
+}
+.view-enter { animation: appear var(--view-duration) var(--motion-easing); }
+dialog[open] { animation: dialog-in var(--dialog-duration) var(--motion-easing); }
 dialog::backdrop { background: #090b18a0; }
-@keyframes appear { from { opacity: .68; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+dialog[open]::backdrop { animation: backdrop-in var(--dialog-duration) var(--motion-easing); }
+.delete-action { display: inline-flex; align-items: center; gap: 6px; transition: background-color 150ms ease, border-color 150ms ease; }
+.delete-action:hover:not(:disabled) { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--panel)); }
+@keyframes appear { from { opacity: .6; translate: 0 var(--motion-offset); } to { opacity: 1; translate: 0 0; } }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(var(--motion-offset)) scale(var(--dialog-scale)); } to { opacity: 1; transform: none; } }
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 dialog p { margin-block: 7px 10px; }
 dialog label { display: block; }
 dialog input, dialog select { display: block; width: 100%; margin: 4px 0 9px; }

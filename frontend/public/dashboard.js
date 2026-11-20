@@ -435,6 +435,8 @@
   const nav = $('dashboard-nav')
   const portalView = $('view-portals')
   const narrow = matchMedia('(max-width: 660px)')
+  const motion = new URLSearchParams(location.search).get('motion')
+  if (motion === 'quiet' || motion === 'expressive') document.documentElement.dataset.motion = motion
   let activeView
 
   function currentView() {
@@ -447,6 +449,7 @@
     if (resetDetail) portalView.removeAttribute('data-detail')
     activeView = view
     for (const name of Object.keys(views)) $(`view-${name}`).hidden = name !== view
+    if (changed) animate(`view-${view}`)
     for (const link of nav.querySelectorAll('[data-view]')) {
       if (link.dataset.view === view) link.setAttribute('aria-current','page')
       else link.removeAttribute('aria-current')
@@ -489,6 +492,7 @@
   $('portal-status').onchange = event => setScope(event.target.value)
   function showPortal(id, view) {
     const fromOutside = activeView !== 'portals'
+    const openingDetail = !portalView.hasAttribute('data-detail')
     const changed = selected !== id
     selected = id
     tab = view
@@ -500,6 +504,8 @@
     renderDetail()
     portalView.setAttribute('data-detail','')
     navigate('portals',{resetDetail:false})
+    text('portal-list-message','')
+    if (!fromOutside && (changed || openingDetail)) animate('portal-details-panel')
     if (fromOutside || narrow.matches) {
       window.scrollTo({top:0,behavior:'instant'})
       $('portal-details-panel').focus({preventScroll:true})
@@ -565,7 +571,7 @@
     const p = portals.find(item => String(item.id) === selected)
     if (!p || !capabilities.remove) return
     removal = p
-    text('remove-description',`Stop monitoring ${nameOf(p)} and remove its tender and run history?`)
+    text('remove-description',`Delete ${nameOf(p)} and its saved tenders and run history? This cannot be undone.`)
     text('remove-error','')
     $('remove-dialog').showModal()
   }
@@ -573,19 +579,32 @@
   $('remove-dialog').oncancel = event => { if ($('remove-confirm').disabled) event.preventDefault() }
   $('remove-form').onsubmit = async event => {
     event.preventDefault()
-    if (!removal || !capabilities.remove || $('remove-confirm').disabled) return
-    $('remove-confirm').disabled = $('remove-cancel').disabled = true
+    const portal = removal
+    const confirm = $('remove-confirm')
+    if (!portal || !capabilities.remove || confirm.disabled) return
+    const id = String(portal.id)
+    text('remove-error','')
+    confirm.disabled = $('remove-cancel').disabled = true
+    text('remove-confirm','Deleting…')
     try {
-      await request(path(removal),{method:'DELETE'})
+      await request(path(portal),{method:'DELETE'})
       mutation++
-      portals = portals.filter(p => p.id !== removal.id)
-      if (selected === String(removal.id)) selected = null
+      portals = portals.filter(p => String(p.id) !== id)
+      for (const store of Object.values(data)) store.delete(id)
+      if (selected === id) selected = null
+      removal = null
       $('remove-dialog').close()
       renderAll()
-      $('portal-list-title').focus({preventScroll:true})
+      text('portal-list-message',`${nameOf(portal)} deleted.`)
+      $('portal-list-title').focus()
+      animate('portal-picker')
       void load()
-    } catch (error) { text('remove-error',error.message) }
-    finally { $('remove-confirm').disabled = $('remove-cancel').disabled = false }
+    } catch (error) { text('remove-error',`Could not delete the portal. ${error.message}`) }
+    finally {
+      confirm.disabled = $('remove-cancel').disabled = false
+      text('remove-confirm','Delete portal')
+      if ($('remove-dialog').open) confirm.focus()
+    }
   }
 
   initChart()

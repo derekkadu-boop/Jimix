@@ -1,7 +1,7 @@
 import Script from "next/script";
 import ThemeToggle from "./theme-toggle";
 import AgentSettings, { AgentCostSummary } from "./agent-settings";
-import { ArrowLeft, Inbox, Plus } from "lucide-react";
+import { ArrowLeft, Inbox, Plus, Trash2 } from "lucide-react";
 import OperationsOverview, { Activity } from "./operations-overview";
 
 export default function Dashboard() {
@@ -30,6 +30,7 @@ export default function Dashboard() {
           <div className="layout">
           <aside className="panel sidebar" aria-labelledby="portal-list-title">
             <h2 id="portal-list-title" tabIndex={-1}>Monitored portals</h2>
+            <p id="portal-list-message" className="data-note" role="status"></p>
             <label className="portal-search" htmlFor="portal-search">Search portals
               <input id="portal-search" type="search" placeholder="Search by name or URL" autoComplete="off" aria-controls="portal-picker" />
             </label>
@@ -51,7 +52,7 @@ export default function Dashboard() {
             <div className="portal-detail-top">
               <div id="details"><div className="detail-empty"><Inbox size={22} aria-hidden="true" /><h2>Select a portal</h2><p>Choose a portal to review tenders and run history.</p></div></div>
               <div className="portal-actions" id="controls" role="group" aria-label="Selected portal actions" hidden>
-                <button id="check" hidden>Refresh now</button><button id="remove" className="danger" hidden>Remove portal</button>
+                <button id="check" hidden>Refresh now</button><button type="button" id="remove" className="danger delete-action" hidden><Trash2 size={15} aria-hidden="true" /> Delete portal</button>
               </div>
             </div>
             <p id="action-message" role="status"></p>
@@ -89,10 +90,10 @@ export default function Dashboard() {
       </dialog>
       <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
         <form id="remove-form">
-          <h2 id="remove-title">Remove portal?</h2>
+          <h2 id="remove-title">Delete portal?</h2>
           <p id="remove-description"></p>
           <p id="remove-error" role="alert"></p>
-          <div className="actions"><button type="button" id="remove-cancel" autoFocus>Cancel</button><button className="danger" id="remove-confirm">Remove portal</button></div>
+          <div className="actions"><button type="button" id="remove-cancel" autoFocus>Cancel</button><button type="submit" className="danger delete-action" id="remove-confirm">Delete portal</button></div>
         </form>
       </dialog>
       <Script src="/dashboard.js" strategy="afterInteractive" />
