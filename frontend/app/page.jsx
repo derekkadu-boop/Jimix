@@ -1,4 +1,5 @@
 import Script from "next/script";
+import AgentSettings, { AgentCostSummary } from "./agent-settings";
 
 export default function Dashboard() {
   return (
@@ -6,7 +7,11 @@ export default function Dashboard() {
       <header>
         <div>
           <div className="header-brand"><strong><span className="brand-mark" aria-hidden="true">◈</span>Watchtower</strong><small className="demo-label">Demo view</small></div>
-          <button className="primary" id="add">+ Add portal</button>
+          <AgentCostSummary />
+          <div className="header-actions">
+            <button className="primary" id="add">+ Add portal</button>
+            <AgentSettings />
+          </div>
         </div>
       </header>
       <main>

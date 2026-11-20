@@ -139,7 +139,7 @@
     $('radar-empty').textContent=visible.length?'':empty
   }
   function renderList(){
-    const totals = [['Monitored portals',portals.length],[labels.serving,portals.filter(p=>p.state==='serving').length],['Needs attention',portals.filter(needsAttention).length],['Tenders held',portals.every(p=>p.count!=null)?portals.reduce((sum,p)=>sum+p.count,0):'—']]
+    const totals = [['Monitored portals',portals.length],['Serving',portals.filter(p=>p.state==='serving').length],['Needs attention',portals.filter(needsAttention).length],['Tenders held',portals.every(p=>p.count!=null)?portals.reduce((sum,p)=>sum+p.count,0):'—']]
     const metrics=$('metrics')
     const focusedFilter=document.activeElement?.id==='attention-filter'
     const summary=totals.map(([name,value])=>{
