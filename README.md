@@ -27,6 +27,54 @@ uses city coordinates from [GeoNames](https://www.geonames.org/) (CC BY 4.0).
 It skips identifiable privacy proxies and falls back to a country marker when
 the registration or country-code domain provides a usable country.
 
+## Frontend in Docker
+
+Run these PowerShell commands from the repository root with Docker Desktop
+running in Linux container mode. The image contains the Next.js frontend.
+For a locally hosted API, install the backend dependencies as shown above and
+start FastAPI in a separate terminal on an address the container can reach.
+
+```powershell
+python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
+```
+
+Both images install dependencies from `package-lock.json` inside Docker.
+The frontend reaches the host API at `http://host.docker.internal:8000`.
+See [Docker Desktop networking](https://docs.docker.com/desktop/features/networking/).
+
+### Development with hot reload
+
+```powershell
+docker build --target development -t jimix-frontend:dev ./frontend
+$frontend = (Resolve-Path .\frontend).Path
+docker run --rm --init -p 127.0.0.1:3000:3000 `
+  --mount "type=bind,source=$frontend\app,target=/app/app,readonly" `
+  --mount "type=bind,source=$frontend\public,target=/app/public,readonly" `
+  --mount "type=bind,source=$frontend\world-map.svg,target=/app/world-map.svg,readonly" `
+  -e JIMIX_API_URL=http://host.docker.internal:8000 `
+  jimix-frontend:dev
+```
+
+Edits to the mounted files are visible in the container. Rebuild the development
+image after changing dependencies or `next.config.mjs`.
+
+### Production build
+
+```powershell
+docker build --target production -t jimix-frontend:prod `
+  --build-arg JIMIX_API_URL=http://host.docker.internal:8000 `
+  ./frontend
+docker run --rm --init -p 127.0.0.1:3000:3000 jimix-frontend:prod
+```
+
+Set `JIMIX_API_URL` to a reachable API origin in the development `docker run`
+command or the production `docker build` command. Next.js writes the production
+rewrites at build time, so changing the backend origin requires a new image.
+
+Open [the dashboard](http://127.0.0.1:3000/). If port 3000 is in use, change
+the port mapping to `127.0.0.1:3001:3000` and open
+[port 3001](http://127.0.0.1:3001/).
+
 ## Patterno Watchtower Website Explorer
 
 Give Watchtower a public procurement portal URL to get a recommended extraction method and its verification evidence. Watchtower checks robots.txt and access restrictions, then uses OpenAI to choose inspection tools and Python to verify the proposed recipe. A normal run works in memory and prints the recommendation.
