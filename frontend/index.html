@@ -74,7 +74,6 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
 .portal-actions, .portal-views { display: flex; flex-wrap: wrap; gap: 8px; }
 .portal-views { margin: 12px 0; }
 .view-switch { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-#demo-link { display: inline-block; margin-bottom: 4px; }
 .view-switch button { padding: 6px 11px; border-radius: 999px; }
 .layout:has(#radar-view:not([hidden])) { grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); }
 .radar { min-height: 0; overflow-y: auto; margin-top: 16px; }
@@ -196,7 +195,6 @@ dialog::backdrop { background: #120d23a8; }
   <div class="layout">
     <aside class="panel sidebar" aria-labelledby="portal-list-title">
       <h2 id="portal-list-title">Monitored portals</h2>
-      <a id="demo-link" href="?demo=1">Show test portals</a>
       <div class="view-switch" id="portal-view-switch" role="group" aria-label="Portal view">
         <button id="view-radar" type="button" aria-pressed="true">Radar</button>
         <button id="view-list" type="button" aria-pressed="false">List</button>
@@ -260,14 +258,13 @@ dialog::backdrop { background: #120d23a8; }
 const $ = id => document.getElementById(id)
 const config = new URLSearchParams(location.search)
 const api = config.get('api') || location.origin
-const demo = config.get('demo') === '1'
 const finalContract = config.get('contract') === 'patterno'
 const labels = {unknown:'Unchecked',ok:'Reachable',error:'failed',integrating:'integrating',serving:'serving',healing:'healing',failed:'failed'}
 const checking = new Set()
 let attentionOnly = false
 let portalView = 'radar'
 let savedTenders = new Set()
-try { if(!demo)savedTenders = new Set(JSON.parse(localStorage.getItem('watchtower.savedTenders') || '[]')) } catch {}
+try { savedTenders = new Set(JSON.parse(localStorage.getItem('watchtower.savedTenders') || '[]')) } catch {}
 let swipe = null
 const needsAttention = portal => ['failed','error','healing'].includes(portal.state)
 const scopedPortals = () => attentionOnly ? portals.filter(needsAttention) : portals
@@ -282,48 +279,7 @@ let portals = [], selected = null, tab = 'tenders', detailRequest = 0, removal =
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])
 const date = value => value ? new Date(value).toLocaleString() : '—'
 const badge = (state,label) => '<span class="pill '+escape(state)+'">'+escape(label)+'</span>'
-function testPortals(){
-  const now=Date.now()
-  const daysFromNow=days=>new Date(now+days*86_400_000).toISOString()
-  const examples=[
-    ['brussels','Brussels Civic Works',50.85,4.35,'Library lighting upgrades','Public bike shelter maintenance'],
-    ['lyon','Lyon Community Services',45.76,4.84,'Community centre furniture','Park irrigation survey'],
-    ['hamburg','Hamburg Harbour Services',53.55,9.99,'Harbour signage replacement','Electric vehicle chargers']
-  ]
-  return examples.map(([id,name,latitude,longitude,...titles])=>{
-    const address=new URL('test-notices.html#'+id,location.href).href
-    const tenders=titles.map((title,index)=>{
-      const reference='TEST-'+id.toUpperCase()+'-'+(index+1)
-      return {
-        id:reference, reference, title:title+' (TEST)', buyerName:name+' (TEST)',
-        address:address+'-'+(index+1), status:index===0?'open':'closed',
-        submissionOpensAt:daysFromNow(-14), submissionDeadline:daysFromNow(index===0?14:-1),
-        lastChangedAt:daysFromNow(-0.25),
-        documents:[{fileName:'Sample tender notice',url:address+'-'+(index+1)}]
-      }
-    })
-    return {
-      id:'test-'+id, name:name+' (TEST)', address, location:{latitude,longitude},
-      status:'serving', detail:'Fictional portal for testing', last_read_at:daysFromNow(0),
-      tender_count:tenders.length, tenders
-    }
-  })
-}
-const examples=demo?testPortals():[]
 async function request(path,options){
-  if(demo){
-    if(options?.method&&options.method!=='GET')throw new Error('This action is unavailable in the test preview.')
-    const url=new URL(path,location.href)
-    if(url.pathname==='/portals')return examples
-    const [, , id, resource]=url.pathname.split('/')
-    const portal=examples.find(example=>example.id===id)
-    if(portal&&resource==='runs')return [{kind:'read',status:'ok',detail:'Loaded sample tenders',at:portal.last_read_at}]
-    if(portal&&resource==='tenders'){
-      const cutoff=url.searchParams.get('changedSince')
-      return portal.tenders.filter(tender=>!cutoff||Date.parse(tender.lastChangedAt)>Date.parse(cutoff))
-    }
-    throw new Error('This action is unavailable in the test preview.')
-  }
   const response = await fetch(new URL(path,api),options)
   if(!response.ok){
     const body = await response.json().catch(()=>null)
@@ -529,7 +485,7 @@ function setTenderSaved(card, saved){
   const key=card.dataset.tender
   if(saved)savedTenders.add(key)
   else savedTenders.delete(key)
-  try { if(!demo)localStorage.setItem('watchtower.savedTenders',JSON.stringify([...savedTenders])) } catch {}
+  try { localStorage.setItem('watchtower.savedTenders',JSON.stringify([...savedTenders])) } catch {}
   const button=card.querySelector('[data-save]')
   button.setAttribute('aria-pressed',saved)
   button.textContent=saved?'Saved':'Save'
@@ -537,7 +493,7 @@ function setTenderSaved(card, saved){
 async function renderDetail(){
   const token=++detailRequest
   const p=portals.find(item=>String(item.id)===selected)
-  $('controls').hidden=!p||demo
+  $('controls').hidden=!p
   $('portal-views').hidden=!p
   $('result-tools').hidden=!p||tab!=='tenders'
   $('tender-filters').hidden=!p||tab!=='tenders'
@@ -731,17 +687,7 @@ $('remove-form').onsubmit=async event=>{
     $('remove-cancel').disabled=false
   }
 }
-const demoLink=new URL(location.href)
-if(demo){
-  demoLink.searchParams.delete('demo')
-  $('demo-link').textContent='Exit test preview'
-  $('add').hidden=true
-  selected=examples[0].id
-}else{
-  demoLink.searchParams.set('demo','1')
-  setInterval(load,10_000)
-}
-$('demo-link').href=demoLink.href
+setInterval(load,10_000)
 load()
 </script>
 </html>
