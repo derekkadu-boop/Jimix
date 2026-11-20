@@ -25,7 +25,7 @@ export default function Dashboard() {
         <p id="message" role="status"></p>
         <section className="panel morning-recap" aria-labelledby="recap-title">
           <h2 id="recap-title">What happened?</h2>
-          <small>Portal runs in the last 24 hours</small>
+          <small>Live activity · Last 24 hours · Updates every 10 seconds</small>
           <p id="recap-status" role="status">Loading recent runs…</p>
           <ol id="recap-events" className="recap-events"></ol>
         </section>
@@ -74,7 +74,7 @@ export default function Dashboard() {
             <div className="portal-detail-top">
               <div id="details"><p>Select a portal to see its details.</p></div>
               <div className="portal-actions" id="controls" role="group" aria-label="Selected portal actions" hidden>
-                <button id="check">Check now</button><button id="remove" className="danger">Remove portal</button>
+                <button id="check">Refresh now</button><button id="remove" className="danger">Remove portal</button>
               </div>
             </div>
             <p id="action-message" role="status"></p>
@@ -85,9 +85,13 @@ export default function Dashboard() {
               <div id="tender-filters" className="actions" hidden>
                 <label>Changed <select id="tender-since" defaultValue=""><option value="">All dates</option><option value="24h">Last 24 hours</option></select></label>
                 <label>Status <select id="tender-status" defaultValue=""><option value="">All statuses</option><option value="open">Open</option><option value="closed">Closed</option><option value="withdrawn">Withdrawn</option></select></label>
+                <label>Search tenders <input id="tender-search" type="search" placeholder="Title, buyer or reference" /></label>
                 <small id="filter-note"></small>
               </div>
             </div>
+            <div id="repair-lifecycle" hidden></div>
+            <div id="portal-usage" hidden></div>
+            <p id="entries-error" role="status" hidden></p>
             <div id="entries"></div>
           </section>
         </div>
