@@ -1,7 +1,8 @@
 import Script from "next/script";
 import ThemeToggle from "./theme-toggle";
 import AgentSettings, { AgentCostSummary } from "./agent-settings";
-import OperationsOverview, { Icon } from "./operations-overview";
+import { Inbox, Plus } from "lucide-react";
+import OperationsOverview from "./operations-overview";
 
 export default function Dashboard() {
   return (
@@ -13,7 +14,7 @@ export default function Dashboard() {
           <div className="header-actions">
             <ThemeToggle />
             <AgentSettings />
-            <button className="primary" id="add" type="button"><Icon name="plus" size={16} /> Add portal</button>
+            <button className="primary" id="add" type="button"><Plus size={16} aria-hidden="true" /> Add portal</button>
           </div>
         </div>
       </header>
@@ -41,7 +42,7 @@ export default function Dashboard() {
           </aside>
           <section className="panel" id="portal-details-panel" aria-label="Portal details" tabIndex={-1}>
             <div className="portal-detail-top">
-              <div id="details"><div className="detail-empty"><Icon name="inbox" size={23} /><h2>Select a portal</h2><p>Choose a portal to review tenders and run history.</p></div></div>
+              <div id="details"><div className="detail-empty"><Inbox size={22} aria-hidden="true" /><h2>Select a portal</h2><p>Choose a portal to review tenders and run history.</p></div></div>
               <div className="portal-actions" id="controls" role="group" aria-label="Selected portal actions" hidden>
                 <button id="check" hidden>Refresh now</button><button id="remove" className="danger" hidden>Remove portal</button>
               </div>

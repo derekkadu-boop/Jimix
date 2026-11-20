@@ -157,7 +157,7 @@
   function renderPortals() {
     $('sync-status').dataset.state = listError ? 'offline' : listAt ? 'live' : 'connecting'
     text('sync-label',listError ? listAt ? 'Showing cached portal health' : 'API unavailable' : listAt ? 'API connected' : 'Connecting to API')
-    text('message',listError ? listAt ? `Unable to refresh portal health. Last synced ${date(listAt)}.` : 'Could not connect to the portal API. Watchtower will retry automatically.' : '')
+    text('message',listError ? listAt ? `Last synced ${date(listAt)}. Retrying automatically.` : 'Portal data will refresh when the connection returns.' : '')
     const attention = portals.filter(needsAttention).sort((a,b) => Number(stateOf(b) === 'failed') - Number(stateOf(a) === 'failed'))
     for (const button of $('metrics').querySelectorAll('[data-status]')) {
       const status = button.dataset.status
