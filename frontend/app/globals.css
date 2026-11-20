@@ -144,8 +144,6 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
 .radar-legend strong { display: flex; align-items: center; gap: 5px; }
 .radar-legend span span { display: block; padding-left: 16px; font-size: .85em; line-height: 1.35; }
 .radar-empty { margin: 8px 0 0; }
-.tender-card { touch-action: pan-y; }
-.tender-card button[aria-pressed=true] { color: #a5e6c8; }
 .tender-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px 16px; }
 .tender-fields dt { color: var(--muted); font-size: .85rem; }
 .tender-fields dd { margin: 2px 0 0; overflow-wrap: anywhere; }
@@ -246,8 +244,7 @@ dialog::backdrop { background: #120d23a8; }
 :is([data-theme="light"], [data-theme="green-light"]) button[aria-pressed=true] { background: #e9def8; border-color: var(--accent); }
 :is([data-theme="light"], [data-theme="green-light"]) .primary { color: #fff; }
 :is([data-theme="light"], [data-theme="green-light"]) .primary:hover { background: #503182; }
-:is([data-theme="light"], [data-theme="green-light"]) .portal-search input,
-:is([data-theme="light"], [data-theme="green-light"]) .tender-card button[aria-pressed=true] { color: inherit; }
+:is([data-theme="light"], [data-theme="green-light"]) .portal-search input { color: inherit; }
 :is([data-theme="light"], [data-theme="green-light"]) .settings-model select { background-color: #f1ebfa; }
 :is([data-theme="light"], [data-theme="green-light"]) .danger,
 :is([data-theme="light"], [data-theme="green-light"]) #form-error,
@@ -324,3 +321,13 @@ dialog::backdrop { background: #120d23a8; }
   --radar-sweep-tail: #59b97850;
   --radar-sweep-edge: #a1eeb298;
 }
+
+#repair-lifecycle, #portal-usage { padding-block: 12px; border-top: 1px solid var(--line); }
+.repair-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; list-style: none; padding: 0; }
+.repair-steps li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; }
+.tender-card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-block: 10px; overflow-wrap: anywhere; }
+.tender-overview { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-block: 12px; font-size: .9rem; }
+.tender-overview small { display: block; margin-bottom: 3px; }
+.tender-card details { border-top: 1px solid var(--line); padding-top: 9px; }
+.tender-card summary { cursor: pointer; color: var(--accent); font-size: .85rem; }
+.tender-documents { margin-bottom: 10px; font-size: .85rem; }

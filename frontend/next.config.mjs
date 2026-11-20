@@ -4,6 +4,8 @@ export default {
   async rewrites() {
     return [
       { source: "/portals/:path*", destination: `${backend}/portals/:path*` },
+      { source: "/openapi.json", destination: `${backend}/openapi.json` },
+      { source: "/files/:path*", destination: `${backend}/files/:path*` },
       { source: "/health", destination: `${backend}/health` },
     ];
   },
