@@ -74,6 +74,7 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
 .portal-actions, .portal-views { display: flex; flex-wrap: wrap; gap: 8px; }
 .portal-views { margin: 12px 0; }
 .view-switch { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+#demo-link { display: inline-block; margin-bottom: 4px; }
 .view-switch button { padding: 6px 11px; border-radius: 999px; }
 .layout:has(#radar-view:not([hidden])) { grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); }
 .radar { min-height: 0; overflow-y: auto; margin-top: 16px; }
@@ -125,22 +126,27 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
 .radar button.radar-dot:hover, .radar button.radar-dot[aria-pressed=true] { border-color: var(--signal); background: #15112b; z-index: 1; }
 .radar-dot::before, .legend-dot { content: ""; width: 11px; height: 11px; border-radius: 50%; background: var(--signal); }
 .radar-dot::before { box-shadow: 0 0 10px var(--signal); }
-.signal-checking { --signal: #82b6ff; }
+.signal-integrating { --signal: #82b6ff; }
 .signal-serving { --signal: #72e6ae; }
 .signal-healing { --signal: #ffeb3b; }
 .signal-failed { --signal: #ff91ac; }
 .signal-unknown { --signal: #bdb2d4; }
-.signal-checking.radar-dot::before { animation: radar-pulse 1.35s ease-in-out infinite alternate; }
-@keyframes radar-pulse { to { box-shadow: 0 0 0 6px #82b6ff38, 0 0 16px var(--signal); } }
+.radar-dot.is-checking::before { animation: radar-pulse 1.35s ease-in-out infinite alternate; }
+@keyframes radar-pulse { to { box-shadow: 0 0 0 6px color-mix(in srgb, var(--signal) 22%, transparent), 0 0 16px var(--signal); } }
 @media (prefers-reduced-motion: reduce) {
-  .world-map::after, .signal-checking.radar-dot::before { animation: none; }
+  .world-map::after, .radar-dot.is-checking::before { animation: none; }
 }
-.radar-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }
+.radar-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 8px 14px; margin-top: 12px; }
 #map-note { margin-top: 6px; }
-.radar-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.radar-legend strong { display: flex; align-items: center; gap: 5px; }
+.radar-legend span span { display: block; padding-left: 16px; font-size: .85em; line-height: 1.35; }
 .radar-empty { margin: 8px 0 0; }
 .tender-card { touch-action: pan-y; }
 .tender-card button[aria-pressed=true] { color: #a5e6c8; }
+.tender-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px 16px; }
+.tender-fields dt { color: var(--muted); font-size: .85rem; }
+.tender-fields dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.tender-card h4 { margin: 12px 0 4px; }
 .portal-search { display: grid; gap: 6px; margin-top: 14px; color: var(--muted); }
 .portal-search input { width: 100%; color: #f5efff; }
 .result-tools { padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
@@ -190,6 +196,7 @@ dialog::backdrop { background: #120d23a8; }
   <div class="layout">
     <aside class="panel sidebar" aria-labelledby="portal-list-title">
       <h2 id="portal-list-title">Monitored portals</h2>
+      <a id="demo-link" href="?demo=1">Show test portals</a>
       <div class="view-switch" id="portal-view-switch" role="group" aria-label="Portal view">
         <button id="view-radar" type="button" aria-pressed="true">Radar</button>
         <button id="view-list" type="button" aria-pressed="false">List</button>
@@ -209,10 +216,10 @@ dialog::backdrop { background: #120d23a8; }
         </div>
       </div>
       <small class="radar-legend" id="radar-legend">
-        <span><i class="legend-dot signal-checking" aria-hidden="true"></i>Checking</span>
-        <span><i class="legend-dot signal-serving" aria-hidden="true"></i>Serving</span>
-        <span><i class="legend-dot signal-healing" aria-hidden="true"></i>Healing</span>
-        <span><i class="legend-dot signal-failed" aria-hidden="true"></i>Failed</span>
+        <span><strong><i class="legend-dot signal-integrating" aria-hidden="true"></i>integrating</strong><span>Being attached. Nothing is delivered yet.</span></span>
+        <span><strong><i class="legend-dot signal-serving" aria-hidden="true"></i>serving</strong><span>Delivering correctly.</span></span>
+        <span><strong><i class="legend-dot signal-healing" aria-hidden="true"></i>healing</strong><span>Broken. A repair is running.</span></span>
+        <span><strong><i class="legend-dot signal-failed" aria-hidden="true"></i>failed</strong><span>Cannot deliver. A person is needed.</span></span>
       </small>
       <small id="map-note">Locations inferred from country domains are approximate.</small>
     </aside>
@@ -253,13 +260,14 @@ dialog::backdrop { background: #120d23a8; }
 const $ = id => document.getElementById(id)
 const config = new URLSearchParams(location.search)
 const api = config.get('api') || location.origin
+const demo = config.get('demo') === '1'
 const finalContract = config.get('contract') === 'patterno'
-const labels = {unknown:'Unchecked',ok:'Reachable',error:'Failed',integrating:'Integrating',serving:'Serving',healing:'Healing',failed:'Failed'}
+const labels = {unknown:'Unchecked',ok:'Reachable',error:'failed',integrating:'integrating',serving:'serving',healing:'healing',failed:'failed'}
 const checking = new Set()
 let attentionOnly = false
 let portalView = 'radar'
 let savedTenders = new Set()
-try { savedTenders = new Set(JSON.parse(localStorage.getItem('watchtower.savedTenders') || '[]')) } catch {}
+try { if(!demo)savedTenders = new Set(JSON.parse(localStorage.getItem('watchtower.savedTenders') || '[]')) } catch {}
 let swipe = null
 const needsAttention = portal => ['failed','error','healing'].includes(portal.state)
 const scopedPortals = () => attentionOnly ? portals.filter(needsAttention) : portals
@@ -274,7 +282,48 @@ let portals = [], selected = null, tab = 'tenders', detailRequest = 0, removal =
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])
 const date = value => value ? new Date(value).toLocaleString() : '—'
 const badge = (state,label) => '<span class="pill '+escape(state)+'">'+escape(label)+'</span>'
+function testPortals(){
+  const now=Date.now()
+  const daysFromNow=days=>new Date(now+days*86_400_000).toISOString()
+  const examples=[
+    ['brussels','Brussels Civic Works',50.85,4.35,'Library lighting upgrades','Public bike shelter maintenance'],
+    ['lyon','Lyon Community Services',45.76,4.84,'Community centre furniture','Park irrigation survey'],
+    ['hamburg','Hamburg Harbour Services',53.55,9.99,'Harbour signage replacement','Electric vehicle chargers']
+  ]
+  return examples.map(([id,name,latitude,longitude,...titles])=>{
+    const address=new URL('test-notices.html#'+id,location.href).href
+    const tenders=titles.map((title,index)=>{
+      const reference='TEST-'+id.toUpperCase()+'-'+(index+1)
+      return {
+        id:reference, reference, title:title+' (TEST)', buyerName:name+' (TEST)',
+        address:address+'-'+(index+1), status:index===0?'open':'closed',
+        submissionOpensAt:daysFromNow(-14), submissionDeadline:daysFromNow(index===0?14:-1),
+        lastChangedAt:daysFromNow(-0.25),
+        documents:[{fileName:'Sample tender notice',url:address+'-'+(index+1)}]
+      }
+    })
+    return {
+      id:'test-'+id, name:name+' (TEST)', address, location:{latitude,longitude},
+      status:'serving', detail:'Fictional portal for testing', last_read_at:daysFromNow(0),
+      tender_count:tenders.length, tenders
+    }
+  })
+}
+const examples=demo?testPortals():[]
 async function request(path,options){
+  if(demo){
+    if(options?.method&&options.method!=='GET')throw new Error('This action is unavailable in the test preview.')
+    const url=new URL(path,location.href)
+    if(url.pathname==='/portals')return examples
+    const [, , id, resource]=url.pathname.split('/')
+    const portal=examples.find(example=>example.id===id)
+    if(portal&&resource==='runs')return [{kind:'read',status:'ok',detail:'Loaded sample tenders',at:portal.last_read_at}]
+    if(portal&&resource==='tenders'){
+      const cutoff=url.searchParams.get('changedSince')
+      return portal.tenders.filter(tender=>!cutoff||Date.parse(tender.lastChangedAt)>Date.parse(cutoff))
+    }
+    throw new Error('This action is unavailable in the test preview.')
+  }
   const response = await fetch(new URL(path,api),options)
   if(!response.ok){
     const body = await response.json().catch(()=>null)
@@ -343,8 +392,9 @@ function onEuropeMap(position){
 }
 function radarDot(portal, position, offset=0){
   const state=portal.state
-  const signal=checking.has(String(portal.id))&&state==='serving'?'checking':({integrating:'checking',serving:'serving',healing:'healing',failed:'failed',error:'failed'})[state]??'unknown'
-  const label=(portal.name||new URL(portal.url).hostname)+' · '+(signal==='checking'&&state==='serving'?'Checking':labels[state]??state)
+  const signal=({integrating:'integrating',serving:'serving',healing:'healing',failed:'failed',error:'failed'})[state]??'unknown'
+  const pulse=state==='integrating'||(state==='serving'&&checking.has(String(portal.id)))?' is-checking':''
+  const label=(portal.name||new URL(portal.url).hostname)+' · '+(labels[state]??state)
   const angle=offset*2.399963
   const radius=offset?Math.min(4,Math.sqrt(offset)*1.7):0
   const mapped=onEuropeMap(position)
@@ -354,7 +404,7 @@ function radarDot(portal, position, offset=0){
   const y=Math.min(94,Math.max(6,mapY+Math.sin(angle)*radius*2))
   const coordinates=mapped?' style="--x:'+x+'%;--y:'+y+'%"':''
   const locationLabel=mapped?(position.approximate?' · Approximate location':''):position?' · Outside the map':' · Location unknown'
-  return '<button type="button" class="radar-dot signal-'+signal+'"'+coordinates+' data-portal="'+escape(portal.id)+'" aria-pressed="'+(String(portal.id)===selected)+'" aria-label="'+escape(label+locationLabel)+'" title="'+escape(label+locationLabel)+'"></button>'
+  return '<button type="button" class="radar-dot signal-'+signal+pulse+'"'+coordinates+' data-portal="'+escape(portal.id)+'" aria-pressed="'+(String(portal.id)===selected)+'" aria-label="'+escape(label+locationLabel)+'" title="'+escape(label+locationLabel)+'"></button>'
 }
 function updateMarkup(id, markup){
   const element=$(id)
@@ -383,7 +433,7 @@ function renderEuropeRadar(visible, empty){
   $('radar-empty').textContent=visible.length?'':empty
 }
 function renderList(){
-  const totals = [['Monitored portals',portals.length],['Serving',portals.filter(p=>p.state==='serving').length],['Needs attention',portals.filter(needsAttention).length],['Tenders held',portals.every(p=>p.count!=null)?portals.reduce((sum,p)=>sum+p.count,0):'—']]
+  const totals = [['Monitored portals',portals.length],[labels.serving,portals.filter(p=>p.state==='serving').length],['Needs attention',portals.filter(needsAttention).length],['Tenders held',portals.every(p=>p.count!=null)?portals.reduce((sum,p)=>sum+p.count,0):'—']]
   const metrics=$('metrics')
   const focusedFilter=document.activeElement?.id==='attention-filter'
   const summary=totals.map(([name,value])=>{
@@ -448,18 +498,38 @@ function documentLink(doc){
   }catch{return ''}
 }
 function renderTender(tender, portal){
-  const key=JSON.stringify([portal.url,tender.url??tender.reference??tender.id??tender.title])
+  const identifier=(finalContract?tender.url??tender.reference:tender.reference??tender.url)??tender.id??tender.title
+  const key=JSON.stringify([portal.url,identifier])
   const saved=savedTenders.has(key)
+  const address=tender.address??tender.url
+  let addressMarkup='—'
+  if(address){
+    addressMarkup=escape(address)
+    try{
+      const url=new URL(address,api)
+      if(['http:','https:'].includes(url.protocol))addressMarkup='<a href="'+escape(url.href)+'" target="_blank" rel="noopener">'+escape(address)+'</a>'
+    }catch{}
+  }
+  const fields=[
+    ['Identifier',escape(tender.reference??tender.id??'—')],
+    ['Address',addressMarkup],
+    ['Buyer',escape(tender.buyerName??'—')],
+    ['Status',escape(tender.status??'—')],
+    ['Submissions open',escape(date(tender.submissionOpensAt))],
+    ['Submission deadline',escape(date(tender.submissionDeadline))],
+    ['Last changed',escape(date(tender.lastChangedAt))]
+  ]
+  const documents=(tender.documents??[]).map(documentLink).join('')
   return '<article class="entry tender-card" data-tender="'+escape(key)+'"><div class="row"><h3>'+escape(tender.title??'Untitled tender')+'</h3>'
     +'<button type="button" data-save aria-pressed="'+saved+'">'+(saved?'Saved':'Save')+'</button></div>'
-    +'<p>'+escape(tender.buyerName??tender.reference??'Buyer unavailable')+' · Due '+date(tender.submissionDeadline)+'</p>'
-    +(tender.documents??[]).map(documentLink).join('')+'</article>'
+    +'<dl class="tender-fields">'+fields.map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+value+'</dd></div>').join('')+'</dl>'
+    +'<h4>Documents</h4>'+(documents||'<p>No documents listed.</p>')+'</article>'
 }
 function setTenderSaved(card, saved){
   const key=card.dataset.tender
   if(saved)savedTenders.add(key)
   else savedTenders.delete(key)
-  try { localStorage.setItem('watchtower.savedTenders',JSON.stringify([...savedTenders])) } catch {}
+  try { if(!demo)localStorage.setItem('watchtower.savedTenders',JSON.stringify([...savedTenders])) } catch {}
   const button=card.querySelector('[data-save]')
   button.setAttribute('aria-pressed',saved)
   button.textContent=saved?'Saved':'Save'
@@ -467,7 +537,7 @@ function setTenderSaved(card, saved){
 async function renderDetail(){
   const token=++detailRequest
   const p=portals.find(item=>String(item.id)===selected)
-  $('controls').hidden=!p
+  $('controls').hidden=!p||demo
   $('portal-views').hidden=!p
   $('result-tools').hidden=!p||tab!=='tenders'
   $('tender-filters').hidden=!p||tab!=='tenders'
@@ -661,7 +731,17 @@ $('remove-form').onsubmit=async event=>{
     $('remove-cancel').disabled=false
   }
 }
-setInterval(load,10_000)
+const demoLink=new URL(location.href)
+if(demo){
+  demoLink.searchParams.delete('demo')
+  $('demo-link').textContent='Exit test preview'
+  $('add').hidden=true
+  selected=examples[0].id
+}else{
+  demoLink.searchParams.set('demo','1')
+  setInterval(load,10_000)
+}
+$('demo-link').href=demoLink.href
 load()
 </script>
 </html>

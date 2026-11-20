@@ -6,9 +6,9 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, HttpUrl
 
-from app.routers.portal_listing import Document, ListedTender, read_listing
+from app.routers.portal_listing import TenderFields, read_listing
 
 router = APIRouter(tags=["portals"])
 
@@ -37,14 +37,9 @@ class Portal(BaseModel):
     tender_count: int = 0
 
 
-class Tender(BaseModel):
+class Tender(TenderFields):
     id: int
     portal_id: int
-    title: str
-    reference: str | None = None
-    url: str | None = None
-    submissionDeadline: datetime | None = None
-    documents: list[Document] = Field(default_factory=list)
 
 
 class Run(BaseModel):
@@ -69,7 +64,7 @@ class _ReadResult(BaseModel):
     ok: bool
     status_code: int | None
     detail: str
-    tenders: list[ListedTender] | None = None
+    tenders: list[TenderFields] | None = None
 
 
 _portals: dict[int, Portal] = {}

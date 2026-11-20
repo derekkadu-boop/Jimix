@@ -1,8 +1,9 @@
 import json
 from datetime import datetime, timezone
+from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, HttpUrl, TypeAdapter
+from pydantic import BaseModel, Field, HttpUrl, TypeAdapter
 
 _HTTP_URL = TypeAdapter(HttpUrl)
 _DATETIME = TypeAdapter(datetime)
@@ -13,14 +14,30 @@ class Document(BaseModel):
     url: HttpUrl
 
 
-class ListedTender(BaseModel):
+class TenderFields(BaseModel):
     title: str
-    reference: str
+    reference: str | None = None
+    address: HttpUrl | None = None
+    url: HttpUrl | None = None
+    buyerName: str | None = None
+    submissionOpensAt: datetime | None = None
     submissionDeadline: datetime | None = None
-    documents: list[Document]
+    lastChangedAt: datetime | None = None
+    status: Literal["open"] = "open"
+    documents: list[Document] = Field(default_factory=list)
 
 
-def read_listing(body: bytes) -> list[ListedTender]:
+def _period_date(period: dict, field: str) -> datetime | None:
+    value = period.get(field)
+    if value is None:
+        return None
+    timestamp = _DATETIME.validate_python(value)
+    if timestamp.tzinfo is None:
+        raise ValueError(f"A tender {field} is missing its time zone")
+    return timestamp
+
+
+def read_listing(body: bytes) -> list[TenderFields]:
     """Read a single OCDS release or record package."""
     try:
         package = json.loads(body)
@@ -52,36 +69,51 @@ def read_listing(body: bytes) -> list[ListedTender]:
         if published.tzinfo is None or not isinstance(ocid, str) or not ocid:
             raise ValueError("The OCDS package contains an invalid release")
         if "tender" in release and (ocid not in latest or published >= latest[ocid][0]):
-            latest[ocid] = published, release["tender"]
+            latest[ocid] = published, release
 
     tenders = []
     now = datetime.now(timezone.utc)
-    for _, tender in latest.values():
+    for published, release in latest.values():
+        tender = release["tender"]
         status = tender["status"]
         if status not in {"planning", "planned", "active", "cancelled", "unsuccessful", "complete", "withdrawn"}:
             raise ValueError("The OCDS package contains an unrecognized tender status")
         if status != "active":
             continue
-        deadline = (tender.get("tenderPeriod") or {}).get("endDate")
-        if deadline is not None:
-            deadline = _DATETIME.validate_python(deadline)
-            if deadline.tzinfo is None:
-                raise ValueError("A tender deadline is missing its time zone")
-            if deadline <= now:
-                continue
+        period = tender.get("tenderPeriod") or {}
+        deadline = _period_date(period, "endDate")
+        if deadline is not None and deadline <= now:
+            continue
 
         documents = []
+        address = None
         for document in tender.get("documents") or []:
             url = document.get("url")
             if url and urlsplit(url).scheme in {"http", "https"}:
-                documents.append(
-                    Document(fileName=document.get("title") or document["id"], url=_HTTP_URL.validate_python(url))
+                link = _HTTP_URL.validate_python(url)
+                documents.append(Document(fileName=document.get("title") or document["id"], url=link))
+                if address is None and document.get("documentType") == "tenderNotice":
+                    address = link
+        buyer = release.get("buyer") or {}
+        buyer_name = buyer.get("name")
+        if not buyer_name:
+            buyer_name = next((
+                party.get("name") for party in release.get("parties") or []
+                if party.get("name") and (
+                    (buyer.get("id") is not None and party.get("id") == buyer["id"])
+                    or (buyer.get("id") is None and "buyer" in (party.get("roles") or []))
                 )
+            ), None)
         tenders.append(
-            ListedTender(
+            TenderFields(
                 title=tender["title"],
                 reference=tender["id"],
+                address=address,
+                url=address,
+                buyerName=buyer_name,
+                submissionOpensAt=_period_date(period, "startDate"),
                 submissionDeadline=deadline,
+                lastChangedAt=published,
                 documents=documents,
             )
         )
