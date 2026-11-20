@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import items
+from app.routers import items, portals
 
 app = FastAPI(title="Jimix API")
 
@@ -17,6 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(items.router, prefix="/api")
+app.include_router(portals.router)
 
 
 @app.get("/health")
