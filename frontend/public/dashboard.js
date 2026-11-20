@@ -5,13 +5,7 @@
   const finalContract = config.get('contract') !== 'legacy'
   const labels = {unknown:'Unchecked',ok:'Reachable',error:'failed',integrating:'integrating',serving:'serving',healing:'healing',failed:'failed'}
   const checking = new Set()
-  let refreshSupported = !finalContract
-  request('/openapi.json').then(spec=>{
-    refreshSupported=Boolean(spec.paths?.['/portals/{portal_id}/refresh']?.post)||refreshSupported
-    if(selected)renderDetail()
-  }).catch(()=>{})
   let attentionOnly = false
-  let portalView = 'radar'
   const needsAttention = portal => ['failed','error','healing'].includes(portal.state)
   const isFailed = portal => ['failed','error'].includes(portal.state)
   const statusRank = {failed:0,error:0,healing:1,integrating:2,unknown:3,serving:4,ok:4}
@@ -35,7 +29,9 @@
     const response = await fetch(new URL(path,api),options)
     if(!response.ok){
       const body = await response.json().catch(()=>null)
-      throw new Error(typeof body?.detail==='string' ? body.detail : 'API returned HTTP '+response.status)
+      const error = new Error(typeof body?.detail==='string' ? body.detail : 'API returned HTTP '+response.status)
+      error.status = response.status
+      throw error
     }
     if(response.status===204)return
     return response.json()
@@ -157,20 +153,15 @@
     }).join('')
     if(metrics.innerHTML!==summary)metrics.innerHTML=summary
     if(focusedFilter)$('attention-filter').focus({preventScroll:true})
-    const focus=document.activeElement?.dataset.portal
-    const radar=portalView==='radar'
-    $('view-radar').setAttribute('aria-pressed',radar)
-    $('view-list').setAttribute('aria-pressed',!radar)
-    $('radar-legend').hidden=!radar
-    $('map-note').hidden=!radar
-    $('portals').hidden=radar
-    $('radar-view').hidden=!radar
+    const focusedButton=document.activeElement
+    const focus=focusedButton?.dataset.portal
+    const focusRegion=focusedButton?.closest('#radar-view, #portal-picker')
     const visible=visiblePortals().sort((a,b)=>(statusRank[a.state]??3)-(statusRank[b.state]??3))
     const listRows=visible.map(p=>'<button data-portal="'+escape(p.id)+'" aria-pressed="'+(String(p.id)===selected)+'"><span class="row"><strong>'+escape(p.name||new URL(p.url).hostname)+'</strong>'+badge(labels[p.state]==='Reachable'?'reachable':p.state,labels[p.state]??p.state)+'</span><small>'+escape(p.url)+'</small>'+(needsAttention(p)&&p.reason?'<small class="portal-summary">'+escape(p.reason)+'</small>':'')+'<small class="portal-summary">'+escape(p.count??'—')+' tenders · Last successful check '+escape(date(p.last))+'</small></button>').join('')
     const empty=portalSearch||portalStatus?'No portals match your filters.':attentionOnly?'No portals need attention.':'No portals yet. Add one to get started.'
-    if(radar)renderEuropeRadar(visible,empty)
-    else updateMarkup('portals',listRows||'<p>'+empty+'</p>')
-    if(focus)Array.from($('portal-picker').querySelectorAll('button')).find(button=>button.dataset.portal===focus&&!button.closest('[hidden]'))?.focus({preventScroll:true})
+    renderEuropeRadar(visible,empty)
+    updateMarkup('portals',listRows||'<p>'+empty+'</p>')
+    if(focus&&focusRegion)Array.from(focusRegion.querySelectorAll('[data-portal]')).find(button=>button.dataset.portal===focus)?.focus({preventScroll:true})
   }
   function runLabel(status){
     return ({ok:'Succeeded',error:'Failed',failed:'Failed'})[status]??status??'In progress'
@@ -290,11 +281,10 @@
     if(!p){$('details').innerHTML='<p>Select a portal to see its details.</p>';$('entries').innerHTML='';return}
     const reachability=p.reachable==null?'':`<p>Website ${p.reachable?'reachable':'unreachable'}</p>`
     const registration=registrationLocation(p)
-    $('details').innerHTML='<h2>'+escape(p.name||new URL(p.url).hostname)+'</h2><small id="portal-url">'+escape(p.url)+'</small>'+(registration?'<p>Domain registration: '+escape(registration)+'</p>':'')+reachability+'<p>'+escape(p.reason||labels[p.state]||p.state)+'</p><p>Portal status · '+escape(labels[p.state]??p.state)+' · '+escape(p.count??'—')+' tenders</p><small id="latest-check" hidden></small><small style="display:block">Last successful read · '+date(p.last)+'</small>'+(p.last&&p.state==='healing'?'<p class="repair-banner">Showing tenders from the last successful check · '+escape(date(p.last))+'</p>':p.last&&p.state==='failed'?'<p>Showing tenders from the last verified read.</p>':'')
+    $('details').innerHTML='<h2>'+escape(p.name||new URL(p.url).hostname)+'</h2><small id="portal-url">'+escape(p.url)+'</small>'+(registration?'<p>Domain registration: '+escape(registration)+'</p>':'')+reachability+'<p>'+escape(p.reason||labels[p.state]||p.state)+'</p><div class="portal-metadata"><small>Portal status · '+escape(labels[p.state]??p.state)+' · '+escape(p.count??'—')+' tenders</small><small id="latest-check" hidden></small><small>Last successful read · '+date(p.last)+'</small></div>'+(p.last&&p.state==='healing'?'<p class="repair-banner">Showing tenders from the last successful check · '+escape(date(p.last))+'</p>':p.last&&p.state==='failed'?'<p>Showing tenders from the last verified read.</p>':'')
     $('tenders').setAttribute('aria-pressed',tab==='tenders')
     $('runs').setAttribute('aria-pressed',tab==='runs')
-    $('check').title=refreshSupported?'':'The connected API has no refresh endpoint'
-    $('check').disabled=!refreshSupported||checking.has(selected)||p.state==='integrating'||p.state==='healing'
+    $('check').disabled=checking.has(selected)
     $('check').textContent=checking.has(selected)?'Checking…':'Refresh now'
     const path='/portals/'+encodeURIComponent(p.id)
     const history=request(path+'/runs').then(runs=>[...runs].sort((a,b)=>new Date(runTime(b))-new Date(runTime(a))))
@@ -409,6 +399,67 @@
     $('details').scrollIntoView({block:'center'})
   }
 
+  let snapshotCheckedAt = -Infinity
+  let snapshotRevision = -1
+  let portalsWithOpenTenders = new Set()
+  async function loadTenderSnapshot(){
+    const affected=portals.filter(needsAttention).length
+    $('snapshot-affected').hidden=!affected
+    $('snapshot-affected').textContent=affected+' affected '+(affected===1?'portal':'portals')+' · Tender data may be stale.'
+    if(snapshotRevision===portalRevision&&Date.now()-snapshotCheckedAt<30_000)return
+
+    const revision=portalRevision
+    const counts={open:0,soon:0,closed:0,withdrawn:0}
+    const openPortals=new Set()
+    const current=portals.slice()
+    const now=Date.now()
+    let nearest=Infinity
+    let unavailable=0
+    for(let offset=0;offset<current.length;offset+=6){
+      const batch=current.slice(offset,offset+6)
+      const results=await Promise.allSettled(batch.map(portal=>request('/portals/'+encodeURIComponent(portal.id)+'/tenders')))
+      if(revision!==portalRevision)return
+      results.forEach((result,index)=>{
+        if(result.status==='rejected'||!Array.isArray(result.value)){unavailable++;return}
+        for(const tender of result.value){
+          if(tender.status==='closed'||tender.status==='withdrawn'){counts[tender.status]++;continue}
+          if(tender.status!=='open')continue
+          counts.open++
+          openPortals.add(String(batch[index].id))
+          const deadline=Date.parse(tender.submissionDeadline)
+          if(deadline>=now){
+            nearest=Math.min(nearest,deadline)
+            if(deadline<=now+7*86_400_000)counts.soon++
+          }
+        }
+      })
+    }
+    for(const [key,count] of Object.entries(counts)){
+      $('snapshot-'+key).textContent=current.length&&unavailable===current.length?'—':count.toLocaleString()
+    }
+    $('snapshot-deadline').hidden=!Number.isFinite(nearest)
+    $('snapshot-deadline').textContent=Number.isFinite(nearest)?'Next deadline · '+date(nearest):''
+    $('snapshot-status').textContent=unavailable?'Tender data unavailable for '+unavailable+' of '+current.length+' portals.':''
+    portalsWithOpenTenders=openPortals
+    $('browse-open').hidden=!openPortals.size
+    snapshotRevision=revision
+    snapshotCheckedAt=Date.now()
+  }
+  $('browse-open').onclick=()=>{
+    const portal=portals.find(item=>portalsWithOpenTenders.has(String(item.id)))
+    if(!portal)return
+    selected=String(portal.id)
+    tab='tenders'
+    attentionOnly=false
+    portalStatus=portalSearch=''
+    $('portal-status').value=$('portal-search').value=''
+    $('tender-search').value=$('tender-since').value=''
+    $('tender-status').value='open'
+    renderList()
+    renderDetail()
+    $('portal-details-panel').scrollIntoView({block:'start'})
+  }
+
   async function load(){
     if(loading)return
     loading=true
@@ -420,8 +471,9 @@
       clearUnavailableSelection()
       $('message').textContent=''
       renderList()
-      await Promise.all([renderDetail(),loadRecap()])
+      await Promise.all([renderDetail(),loadRecap(),loadTenderSnapshot()])
     }catch(error){
+      if(snapshotRevision<0)$('snapshot-status').textContent='Tender snapshot unavailable.'
       if(recapRevision<0)$('recap-status').textContent='Portal activity is unavailable.'
       $('message').textContent='Could not reach the portal API. '+error.message}
     finally{loading=false}
@@ -435,11 +487,6 @@
     renderList()
     renderDetail()
   }
-  for(const view of ['radar','list'])$('view-'+view).onclick=()=>{
-    portalView=view
-    renderList()
-  }
-
   $('portal-search').oninput=event=>{
     portalSearch=event.target.value.trim().toLowerCase()
     renderList()
@@ -451,7 +498,7 @@
     renderList()
     renderDetail()
   }
-  $('portal-picker').onclick=event=>{
+  function selectPortal(event){
     const button=event.target.closest('[data-portal]')
     if(!button)return
     selected=selected===button.dataset.portal?null:button.dataset.portal
@@ -459,7 +506,17 @@
     $('entries').textContent='Loading…'
     renderList()
     renderDetail()
+    if(selected&&event.currentTarget.id==='radar-view'){
+      $('portal-details-panel').scrollIntoView({block:'start'})
+    }
   }
+  $('portal-picker').onclick=selectPortal
+  $('radar-size').onclick=event=>{
+    const expanded=$('world-map').classList.toggle('is-expanded')
+    event.currentTarget.textContent=expanded?'Zoom out':'Zoom in'
+    event.currentTarget.setAttribute('aria-pressed',expanded)
+  }
+  $('radar-view').onclick=selectPortal
   for(const name of ['tenders','runs'])$(name).onclick=()=>{tab=name;$('entries').textContent='Loading…';renderDetail()}
   for(const id of ['tender-since','tender-status'])$(id).onchange=renderDetail
   $('add').onclick=()=>{$('form').reset();$('form-error').textContent='';$('dialog').showModal()}
@@ -502,17 +559,18 @@
     $('check').textContent='Checking…'
     try{
       const refresh=await request('/portals/'+encodeURIComponent(id)+'/refresh',{method:'POST'})
-      if(selected===id&&refresh?.runId)$('action-message').textContent='Refresh requested · Run '+refresh.runId
+      if(selected===id)$('action-message').textContent=refresh?.runId?'Refresh requested · Run '+refresh.runId:'Refresh requested.'
       recapCheckedAt=-Infinity
       await load()
     }catch(error){
-      if(selected===id)$('action-message').textContent='Check failed. '+error.message
+      if(selected===id)$('action-message').textContent=[404,405].includes(error.status)
+        ? 'Refresh is unavailable for this portal on the connected API.'
+        : 'Could not request a refresh. '+error.message
     }finally{
       checking.delete(id)
       renderList()
       if(selected===id){
-        const portal=portals.find(item=>String(item.id)===id)
-        $('check').disabled=!refreshSupported||['integrating','healing'].includes(portal?.state)
+        $('check').disabled=false
         $('check').textContent='Refresh now'
       }
     }
@@ -550,7 +608,7 @@
       renderList()
       await renderDetail()
       if(selected===null)$('add').focus()
-      else $(portalView==='radar'?'radar-view':'portals').querySelector('[aria-pressed="true"]')?.focus()
+      else $('portals').querySelector('[aria-pressed="true"]')?.focus()
     }catch(error){
       $('remove-error').textContent=error.message
     }finally{
