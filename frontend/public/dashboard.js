@@ -286,6 +286,62 @@
     }catch(error){if(token===detailRequest)$('entries').textContent='Could not load '+tab+'. '+error.message}
     await latest
   }
+  let recapLoading = false
+  let recapRevision = -1
+  let recapCheckedAt = -Infinity
+  async function loadRecap(){
+    if(recapLoading || (recapRevision===portalRevision && Date.now()-recapCheckedAt<60_000))return
+    recapLoading=true
+    const revision=portalRevision
+    const currentPortals=portals.slice()
+    const cutoff=Date.now()-86_400_000
+    const events=[]
+    let unavailable=0
+    try{
+      for(let offset=0;offset<currentPortals.length;offset+=6){
+        const batch=currentPortals.slice(offset,offset+6)
+        const results=await Promise.allSettled(batch.map(portal=>request('/portals/'+encodeURIComponent(portal.id)+'/runs')))
+        if(revision!==portalRevision)return
+        results.forEach((result,index)=>{
+          if(result.status==='rejected'){unavailable++;return}
+          const portal=batch[index]
+          for(const run of result.value){
+            const time=Date.parse(runTime(run))
+            if(time>=cutoff)events.push({portal,run,time})
+          }
+        })
+      }
+      events.sort((a,b)=>b.time-a.time)
+      const markup=events.slice(0,8).map(({portal,run,time})=>{
+        const kind=run.kind==='repair'?'Repair':'Read'
+        const outcome=runLabel(run.result??run.status)
+        const state=outcome==='Succeeded'?'ok':outcome==='Failed'?'failed':'healing'
+        const name=portal.name||new URL(portal.url).hostname
+        return '<li><button type="button" data-portal="'+escape(portal.id)+'"><span>'+escape(name)+
+          '</span><small>'+escape(date(time))+'</small>'+badge(state,kind+' '+(outcome==='In progress'?'running':outcome.toLowerCase()))+'</button></li>'
+      }).join('')
+      updateMarkup('recap-events',markup)
+      const summary=events.length>8?'Showing the 8 most recent of '+events.length+' runs.':events.length?'':'No recent runs found.'
+      $('recap-status').textContent=[summary,unavailable?'Run history unavailable for '+unavailable+' portal(s).':''].filter(Boolean).join(' ')
+      recapRevision=revision
+      recapCheckedAt=Date.now()
+    }finally{recapLoading=false}
+  }
+  $('recap-events').onclick=event=>{
+    const button=event.target.closest('[data-portal]')
+    if(!button)return
+    selected=button.dataset.portal
+    tab='runs'
+    portalSearch=''
+    $('portal-search').value=''
+    attentionOnly=false
+    portalStatus=''
+    $('portal-status').value=''
+    renderList()
+    renderDetail()
+    $('details').scrollIntoView({block:'center'})
+  }
+
   async function load(){
     if(loading)return
     loading=true
@@ -297,8 +353,10 @@
       clearUnavailableSelection()
       $('message').textContent=''
       renderList()
-      await renderDetail()
-    }catch(error){$('message').textContent='Could not reach the portal API. '+error.message}
+      await Promise.all([renderDetail(),loadRecap()])
+    }catch(error){
+      if(recapRevision<0)$('recap-status').textContent='Portal activity is unavailable.'
+      $('message').textContent='Could not reach the portal API. '+error.message}
     finally{loading=false}
   }
   $('metrics').onclick=event=>{

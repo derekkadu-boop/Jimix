@@ -79,8 +79,15 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
   aspect-ratio: 720 / 570;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid #654d99;
-  background: #100e26 url("../world-map.svg") center / contain no-repeat;
+  border: 1px solid var(--radar-frame, #654d99);
+  background: var(--radar-water, #100e26);
+}
+.world-geography {
+  position: absolute;
+  inset: 0;
+  background: url("../world-map.svg") center / contain no-repeat;
+  filter: var(--radar-land-filter, none);
+  pointer-events: none;
 }
 .world-map::before {
   content: "";
@@ -88,9 +95,9 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
   inset: 0;
   pointer-events: none;
   background:
-    repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), #9981d223 calc(12.5% - 1px) 12.5%),
-    repeating-linear-gradient(transparent 0 calc(25% - 1px), #9981d223 calc(25% - 1px) 25%),
-    repeating-radial-gradient(circle at center, transparent 0 23px, #9981d233 24px 25px);
+    repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--radar-grid, #9981d223) calc(12.5% - 1px) 12.5%),
+    repeating-linear-gradient(transparent 0 calc(25% - 1px), var(--radar-grid, #9981d223) calc(25% - 1px) 25%),
+    repeating-radial-gradient(circle at center, transparent 0 23px, var(--radar-rings, #9981d233) 24px 25px);
 }
 .world-map::after {
   content: "";
@@ -101,7 +108,7 @@ button.metric:hover, button.metric[aria-pressed=true] { background: #ffffff24; b
   width: 120%;
   aspect-ratio: 1;
   pointer-events: none;
-  background: conic-gradient(from 10deg, transparent 0deg 275deg, #7963dc45 355deg, #ac94ff95 360deg);
+  background: conic-gradient(from 10deg, transparent 0deg 275deg, var(--radar-sweep-tail, #7963dc45) 355deg, var(--radar-sweep-edge, #ac94ff95) 360deg);
   animation: radar-sweep 6s linear infinite;
 }
 .world-markers { position: absolute; inset: 0; z-index: 1; }
@@ -210,3 +217,110 @@ dialog::backdrop { background: #120d23a8; }
 .agent-cost-summary output { color: inherit; font-variant-numeric: tabular-nums; }
 
 .settings-toggle { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; font-size: 30px; line-height: 1; }
+
+.morning-recap { margin-top: 20px; }
+#recap-status:empty, .recap-events:empty { display: none; }
+.recap-events { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+.recap-events button { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; width: 100%; text-align: left; }
+.recap-events button > span:first-child { flex: 1 1 140px; overflow-wrap: anywhere; }
+.recap-events small { font-weight: 400; }
+
+:root:is([data-theme="light"], [data-theme="green-light"]) {
+  color-scheme: light;
+  color: #272044;
+  background: #f4f2fc;
+  --muted: #5e5676;
+  --line: #d8cfea;
+  --accent: #6543a3;
+  --panel: #fdfbff;
+  --page-gradient: linear-gradient(155deg, #e9e2fa, #f7f5fd 60%, #f1ebfa);
+  --heading-gradient: linear-gradient(90deg, #714caf, #4e55a3);
+}
+:is([data-theme="light"], [data-theme="green-light"]) header > div { background: #fdfbfff5; border-color: var(--line); box-shadow: 0 8px 24px #35265520; }
+:is([data-theme="light"], [data-theme="green-light"]) .overview { background: #fdfbffbd; color: inherit; }
+:is([data-theme="light"], [data-theme="green-light"]) .overview > p,
+:is([data-theme="light"], [data-theme="green-light"]) .metric small { color: var(--muted); }
+:is([data-theme="light"], [data-theme="green-light"]) .metric,
+:is([data-theme="light"], [data-theme="green-light"]) .brand-mark { background: #efe8fa; border-color: var(--line); }
+:is([data-theme="light"], [data-theme="green-light"]) button:hover,
+:is([data-theme="light"], [data-theme="green-light"]) button[aria-pressed=true] { background: #e9def8; border-color: var(--accent); }
+:is([data-theme="light"], [data-theme="green-light"]) .primary { color: #fff; }
+:is([data-theme="light"], [data-theme="green-light"]) .primary:hover { background: #503182; }
+:is([data-theme="light"], [data-theme="green-light"]) .portal-search input,
+:is([data-theme="light"], [data-theme="green-light"]) .tender-card button[aria-pressed=true] { color: inherit; }
+:is([data-theme="light"], [data-theme="green-light"]) .settings-model select { background-color: #f1ebfa; }
+:is([data-theme="light"], [data-theme="green-light"]) .danger,
+:is([data-theme="light"], [data-theme="green-light"]) #form-error,
+:is([data-theme="light"], [data-theme="green-light"]) #remove-error,
+:is([data-theme="light"], [data-theme="green-light"]) #action-message,
+:is([data-theme="light"], [data-theme="green-light"]) #message { color: #93264b; }
+
+.theme-picker { position: relative; }
+.theme-picker summary {
+  display: grid; place-items: center; width: 44px; height: 44px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  cursor: pointer; list-style: none; font-size: 24px;
+}
+.theme-picker summary::-webkit-details-marker { display: none; }
+.theme-options {
+  position: absolute; top: calc(100% + 8px); right: 0; min-width: 145px;
+  display: grid; gap: 4px; padding: 6px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px #0003;
+}
+.theme-options button {
+  text-align: left; white-space: nowrap; font-size: .875rem; font-weight: 550;
+  letter-spacing: -.015em; line-height: 1.4; padding: 8px 12px; border-color: transparent;
+}
+.theme-options button[aria-pressed=true] { font-weight: 700; }
+
+:root[data-theme="green-light"] {
+  color: #153728; background: #eff7ed;
+  --muted: #45634e; --line: #bdd2bf; --accent: #236444; --panel: #fcfff9;
+  --page-gradient: linear-gradient(155deg, #d9eddb, #f5faf1 65%);
+  --heading-gradient: linear-gradient(90deg, #236444, #557436);
+}
+:root[data-theme="green-dark"] {
+  color: #e9f5e8; background: #101f17;
+  --muted: #bad2bf; --line: #365542; --accent: #a4dfaf; --panel: #1a3023;
+  --page-gradient: linear-gradient(155deg, #203e2d, #101f17 70%);
+  --heading-gradient: linear-gradient(90deg, #a4dfaf, #76bd92);
+}
+[data-theme="green-light"] header > div { background: #fcfff9f5; }
+[data-theme="green-dark"] header > div { background: #1a3023f5; border-color: var(--line); }
+[data-theme="green-dark"] .overview { background: #1a302399; color: inherit; }
+[data-theme="green-dark"] :is(.overview > p, .metric small, .portal-search input) { color: var(--muted); }
+[data-theme="green-dark"] .primary { color: #153728; }
+[data-theme="green-light"] :is(.brand-mark, .metric, .settings-model select) { background-color: #e6f2e4; }
+[data-theme="green-dark"] :is(.brand-mark, .metric, .settings-model select) { background-color: #254431; }
+[data-theme="green-light"] button:is(:hover, [aria-pressed=true]) { background-color: #d8ead8; }
+[data-theme="green-dark"] button:is(:hover, [aria-pressed=true]) { background-color: #315640; }
+[data-theme="green-light"] .primary:hover { background-color: #194c33; }
+[data-theme="green-dark"] .primary:hover { background-color: #c3edc8; }
+
+[data-theme="light"] .radar {
+  --radar-water: #f4effc;
+  --radar-frame: #b5a2d4;
+  --radar-land-filter: brightness(4.4) saturate(.62);
+  --radar-grid: #6e4ca325;
+  --radar-rings: #6e4ca33b;
+  --radar-sweep-tail: #7752b946;
+  --radar-sweep-edge: #7752b980;
+}
+[data-theme="green-light"] .radar {
+  --radar-water: #edf7ee;
+  --radar-frame: #90b39a;
+  --radar-land-filter: grayscale(1) brightness(4.4) sepia(.36) hue-rotate(75deg) saturate(1.2);
+  --radar-grid: #41784c26;
+  --radar-rings: #41784c40;
+  --radar-sweep-tail: #378c5540;
+  --radar-sweep-edge: #378c5578;
+}
+[data-theme="green-dark"] .radar {
+  --radar-water: #101e16;
+  --radar-frame: #4c795d;
+  --radar-land-filter: grayscale(1) brightness(1.28) sepia(.55) hue-rotate(78deg) saturate(1.8);
+  --radar-grid: #8aca9828;
+  --radar-rings: #8aca9840;
+  --radar-sweep-tail: #59b97850;
+  --radar-sweep-edge: #a1eeb298;
+}

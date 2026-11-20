@@ -1,4 +1,5 @@
 import Script from "next/script";
+import ThemeToggle from "./theme-toggle";
 import AgentSettings, { AgentCostSummary } from "./agent-settings";
 
 export default function Dashboard() {
@@ -10,6 +11,7 @@ export default function Dashboard() {
           <AgentCostSummary />
           <div className="header-actions">
             <button className="primary" id="add">+ Add portal</button>
+            <ThemeToggle />
             <AgentSettings />
           </div>
         </div>
@@ -21,6 +23,12 @@ export default function Dashboard() {
           <div className="metrics" id="metrics"></div>
         </section>
         <p id="message" role="status"></p>
+        <section className="panel morning-recap" aria-labelledby="recap-title">
+          <h2 id="recap-title">What happened?</h2>
+          <small>Portal runs in the last 24 hours</small>
+          <p id="recap-status" role="status">Loading recent runs…</p>
+          <ol id="recap-events" className="recap-events"></ol>
+        </section>
         <div className="layout">
           <aside className="panel sidebar" aria-labelledby="portal-list-title">
             <h2 id="portal-list-title">Monitored portals</h2>
@@ -43,7 +51,10 @@ export default function Dashboard() {
             <div id="portal-picker">
               <div className="list" id="portals" role="group" aria-label="Monitored portals" hidden></div>
               <div className="radar" id="radar-view" role="group" aria-label="Europe radar">
-                <div className="world-map"><div className="world-markers" id="world-markers"></div></div>
+                <div className="world-map">
+                  <div className="world-geography" aria-hidden="true"></div>
+                  <div className="world-markers" id="world-markers"></div>
+                </div>
                 <div className="unlocated-portals" id="unlocated-portals" hidden>
                   <small>Outside the map or location unknown</small>
                   <div className="unlocated-buttons" id="unlocated-buttons"></div>
