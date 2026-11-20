@@ -1,8 +1,8 @@
 import Script from "next/script";
 import ThemeToggle from "./theme-toggle";
 import AgentSettings, { AgentCostSummary } from "./agent-settings";
-import { Inbox, Plus } from "lucide-react";
-import OperationsOverview from "./operations-overview";
+import { ArrowLeft, Inbox, Plus } from "lucide-react";
+import OperationsOverview, { Activity } from "./operations-overview";
 
 export default function Dashboard() {
   return (
@@ -10,7 +10,11 @@ export default function Dashboard() {
       <header>
         <div>
           <div className="header-brand"><strong><svg className="patterno-mark" width="28" height="28" aria-hidden="true" focusable="false" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M430.722 380.158C276.637 380.158 142.935 292.957 76.1625 165.282C31.9187 226.23 4.37923 300.09 0.496614 380.158C0.158014 386.749 0 393.341 0 400C0 406.659 0.158014 413.251 0.496614 419.842C4.37923 499.91 31.9187 573.77 76.1851 634.718C142.957 507.065 276.659 419.842 430.745 419.842H799.436C799.819 413.296 800 406.659 800 400C800 393.341 799.842 386.704 799.436 380.158H430.722Z" fill="currentColor"></path><path d="M602.957 472.619C599.887 472.619 596.84 472.731 593.792 472.799C417.02 476.772 268.555 595.305 219.91 757.178C274.041 784.56 335.214 799.955 399.977 799.955C579.278 799.955 731.016 681.941 781.738 519.3H781.851C782.235 518.081 782.573 516.84 782.935 515.621C782.957 515.531 782.98 515.463 783.025 515.372C787.201 501.422 790.61 487.133 793.273 472.596H602.935L602.957 472.619Z" fill="currentColor"></path><path d="M565.508 325.553C577.833 326.704 590.316 327.336 602.957 327.336H793.296C790.632 312.799 787.224 298.51 783.025 284.56C782.957 284.357 782.889 284.176 782.844 283.973C782.777 283.747 782.732 283.544 782.664 283.318H782.641C732.754 119.3 580.271 0 400 0C335.237 0 274.063 15.395 219.932 42.7765C265.959 195.937 401.354 310.316 565.531 325.553H565.508Z" fill="currentColor"></path></svg><span className="brand-wordmark">Watchtower</span></strong></div>
-          <nav aria-label="Dashboard sections"><a href="#overview-title">Overview</a><a href="#portal-list-title">Portals</a><a href="#activity-title">Activity</a></nav>
+          <nav id="dashboard-nav" aria-label="Dashboard sections">
+            <a href="/" data-view="overview" aria-current="page">Overview</a>
+            <a href="?view=portals" data-view="portals">Portals</a>
+            <a href="?view=activity" data-view="activity">Activity</a>
+          </nav>
           <div className="header-actions">
             <ThemeToggle />
             <AgentSettings />
@@ -19,8 +23,11 @@ export default function Dashboard() {
         </div>
       </header>
       <main>
-        <OperationsOverview />
-        <div className="layout">
+        <div id="view-overview"><OperationsOverview /></div>
+        <section id="view-portals" aria-labelledby="portals-title" hidden>
+          <div className="view-heading"><p className="eyebrow">Portal inventory</p><h1 id="portals-title" tabIndex={-1}>Portals</h1><p>Find a monitored portal and review its tenders or run history.</p></div>
+          <button type="button" id="portal-back"><ArrowLeft size={16} aria-hidden="true" /> Back to portals</button>
+          <div className="layout">
           <aside className="panel sidebar" aria-labelledby="portal-list-title">
             <h2 id="portal-list-title" tabIndex={-1}>Monitored portals</h2>
             <label className="portal-search" htmlFor="portal-search">Search portals
@@ -64,7 +71,12 @@ export default function Dashboard() {
             <p id="entries-error" role="status" hidden></p>
             <div id="entries"></div>
           </section>
-        </div>
+          </div>
+        </section>
+        <section id="view-activity" aria-labelledby="activity-view-title" hidden>
+          <div className="view-heading"><p className="eyebrow">Run monitoring</p><h1 id="activity-view-title" tabIndex={-1}>Activity</h1><p>Track read and repair runs, outcomes, and recent events.</p></div>
+          <Activity />
+        </section>
         <footer><small>Patterno Watchtower</small><AgentCostSummary /></footer>
       </main>
       <dialog id="record-dialog" aria-labelledby="record-title">

@@ -171,7 +171,7 @@
     markup('attention-portals',attention.slice(0,3).map(p => `<li data-key="${key(p.id)}">${portalButton(p,`${escape(nameOf(p))} ${portalBadge(p)}`)}</li>`).join(''))
     const search = $('portal-search').value.trim().toLowerCase()
     const visible = portals.filter(p => (!scope || (scope === 'attention' ? needsAttention(p) : stateOf(p) === scope)) && [nameOf(p),p.url].some(v => v?.toLowerCase().includes(search)))
-    markup('portals',visible.map(p => portalButton(p,`<span class="row"><strong>${escape(nameOf(p))}</strong>${portalBadge(p)}</span><small>${escape(p.url)}</small><small>${escape(p.tenderCount ?? '—')} tenders</small>`)).join('') || `<p>${!listAt ? listError ? 'Portal list unavailable.' : 'Loading portals…' : search || scope ? 'No portals match these filters.' : 'No portals yet. Add one to start monitoring.'}</p>`)
+    markup('portals',visible.map(p => portalButton(p,`<span class="row"><strong>${escape(nameOf(p))}</strong>${portalBadge(p)}</span><span class="portal-row-meta"><small>${escape(p.url)}</small><small>${escape(p.tenderCount ?? '—')} tenders</small></span>`)).join('') || `<p>${!listAt ? listError ? 'Portal list unavailable.' : 'Loading portals…' : search || scope ? 'No portals match these filters.' : 'No portals yet. Add one to start monitoring.'}</p>`)
     renderRadar()
   }
 
@@ -293,6 +293,7 @@
     $('remove').hidden = !supportsRemoval
     for (const id of ['portal-views','result-tools','tender-filters']) $(id).hidden = !p || (id !== 'portal-views' && tab !== 'tenders')
     if (!p) {
+      $('view-portals').removeAttribute('data-detail')
       for (const id of ['repair-lifecycle','portal-usage','entries-error']) $(id).hidden = true
       markup('details',emptyDetail)
       markup('entries','')
@@ -430,37 +431,89 @@
     if (button) openDrilldown('deadline',button.dataset.deadline,button.querySelector('span').textContent)
   }
 
-  function setScope(status, move = false) {
+  const views = { overview:'overview-title', portals:'portals-title', activity:'activity-view-title' }
+  const nav = $('dashboard-nav')
+  const portalView = $('view-portals')
+  const narrow = matchMedia('(max-width: 660px)')
+  let activeView
+
+  function currentView() {
+    const view = new URLSearchParams(location.search).get('view')
+    return Object.hasOwn(views,view) ? view : 'overview'
+  }
+  function displayView(view, { focus = false, resetDetail = true } = {}) {
+    const changed = activeView !== view
+    const showingDetail = portalView.hasAttribute('data-detail')
+    if (resetDetail) portalView.removeAttribute('data-detail')
+    activeView = view
+    for (const name of Object.keys(views)) $(`view-${name}`).hidden = name !== view
+    for (const link of nav.querySelectorAll('[data-view]')) {
+      if (link.dataset.view === view) link.setAttribute('aria-current','page')
+      else link.removeAttribute('aria-current')
+    }
+    if (focus && (changed || (view === 'portals' && resetDetail && showingDetail))) {
+      window.scrollTo({top:0,behavior:'instant'})
+      $(views[view]).focus({preventScroll:true})
+    }
+  }
+  function navigate(view, options) {
+    if (currentView() !== view) {
+      const url = new URL(location.href)
+      if (view === 'overview') url.searchParams.delete('view')
+      else url.searchParams.set('view',view)
+      url.hash = ''
+      history.pushState(null,'',url)
+    }
+    displayView(view,options)
+  }
+  nav.onclick = event => {
+    const link = event.target.closest('[data-view]')
+    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    navigate(link.dataset.view,{focus:true})
+  }
+  history.scrollRestoration = 'manual'
+  window.addEventListener('popstate',() => displayView(currentView(),{focus:true}))
+  displayView(currentView())
+
+  function setScope(status, openView = false) {
     scope = status
     $('portal-status').value = status
-    if (move) $('portal-search').value = ''
+    if (openView) $('portal-search').value = ''
     renderPortals()
-    if (move) {
-      $('portal-list-title').focus({preventScroll:true})
-      $('portal-list-title').scrollIntoView({block:'start'})
-    }
+    if (openView) navigate('portals',{focus:true})
   }
   $('metrics').onclick = event => { const button = event.target.closest('[data-status]'); if (button) setScope(button.dataset.status,true) }
   $('attention-filter').onclick = () => setScope(scope === 'attention' ? '' : 'attention',true)
   $('portal-search').oninput = renderPortals
   $('portal-status').onchange = event => setScope(event.target.value)
-  function showPortal(id, view, move) {
+  function showPortal(id, view) {
+    const fromOutside = activeView !== 'portals'
     const changed = selected !== id
     selected = id
     tab = view
-    if (changed) for (const name of ['tender-search','tender-status','tender-since']) $(name).value = ''
-    text('action-message','')
+    if (changed) {
+      for (const name of ['tender-search','tender-status','tender-since']) $(name).value = ''
+      text('action-message','')
+    }
     renderPortals()
     renderDetail()
-    animate('portal-details-panel')
-    if (move) {
+    portalView.setAttribute('data-detail','')
+    navigate('portals',{resetDetail:false})
+    if (fromOutside || narrow.matches) {
+      window.scrollTo({top:0,behavior:'instant'})
       $('portal-details-panel').focus({preventScroll:true})
-      $('portal-details-panel').scrollIntoView({block:'start'})
     }
+  }
+  $('portal-back').onclick = () => {
+    portalView.removeAttribute('data-detail')
+    window.scrollTo({top:0,behavior:'instant'})
+    const focusTarget = $('portals').querySelector('[aria-pressed=true]') || $('portal-list-title')
+    focusTarget.focus({preventScroll:true})
   }
   for (const id of ['portal-picker','radar-view','recap-events','attention-portals']) $(id).onclick = event => {
     const button = event.target.closest('[data-portal]')
-    if (button) showPortal(button.dataset.portal,id === 'recap-events' ? 'runs' : 'tenders',id !== 'portal-picker' || matchMedia('(max-width: 660px)').matches)
+    if (button) showPortal(button.dataset.portal,id === 'recap-events' ? 'runs' : 'tenders')
   }
   $('radar-size').onclick = event => {
     const expanded = $('world-map').classList.toggle('is-expanded')
@@ -488,7 +541,8 @@
       $('dialog').close()
       setScope('',false)
       $('portal-search').value = ''
-      showPortal(String(created.id),'tenders',true)
+      showPortal(String(created.id),'tenders')
+      $('portal-details-panel').focus({preventScroll:true})
       void load()
     } catch (error) { text('form-error',error.message) }
     finally { $('submit').disabled = false }
@@ -528,7 +582,7 @@
       if (selected === String(removal.id)) selected = null
       $('remove-dialog').close()
       renderAll()
-      $('add').focus()
+      $('portal-list-title').focus({preventScroll:true})
       void load()
     } catch (error) { text('remove-error',error.message) }
     finally { $('remove-confirm').disabled = $('remove-cancel').disabled = false }

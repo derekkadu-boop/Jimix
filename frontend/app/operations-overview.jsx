@@ -40,7 +40,7 @@ function EuropeRadar() {
   );
 }
 
-function Activity() {
+export function Activity() {
   return (
     <section className="panel activity-panel" aria-labelledby="activity-title">
       <div className="panel-heading">
@@ -73,7 +73,7 @@ export default function OperationsOverview() {
             <p className="eyebrow">Procurement monitoring</p>
             <span id="sync-status" className="sync-status" role="status"><i aria-hidden="true" /> <span id="sync-label">Connecting to API</span></span>
           </div>
-          <h1 id="overview-title">Operations overview</h1>
+          <h1 id="overview-title" tabIndex={-1}>Operations overview</h1>
           <p>Track portal health, automated repairs, and upcoming tender deadlines.</p>
           <p id="message" role="status" />
         </div>
@@ -93,15 +93,17 @@ export default function OperationsOverview() {
           <ul id="attention-portals" className="attention-portals" />
         </section>
       </section>
-      <div className="overview-grid"><EuropeRadar /><Activity /></div>
-      <section className="panel tender-snapshot" aria-labelledby="snapshot-title">
-        <div className="panel-heading"><CalendarDays className="section-icon" size={17} aria-hidden="true" /><div><h2 id="snapshot-title">Tender deadlines</h2><p>Upcoming submissions across monitored portals · UTC</p></div></div>
-        <div className="snapshot-counts" id="snapshot-counts">
-          {[["open", "Open tenders"], ["soon", "Closing in 7 days"], ["deadline", "Next known deadline"]].map(([kind, title]) => <button type="button" key={kind} data-deadline={kind} disabled><span>{title}</span><strong id={`snapshot-${kind}`}>—</strong><ArrowRight size={15} aria-hidden="true" /></button>)}
-        </div>
-        <p id="snapshot-affected" className="data-note" hidden />
-        <p id="snapshot-status" className="data-note" role="status">Loading tender data…</p>
-      </section>
+      <div className="overview-grid">
+        <EuropeRadar />
+        <section className="panel tender-snapshot" aria-labelledby="snapshot-title">
+          <div className="panel-heading"><CalendarDays className="section-icon" size={17} aria-hidden="true" /><div><h2 id="snapshot-title">Tender deadlines</h2><p>Upcoming submissions across monitored portals · UTC</p></div></div>
+          <div className="snapshot-counts" id="snapshot-counts">
+            {[["open", "Open tenders"], ["soon", "Closing in 7 days"], ["deadline", "Next known deadline"]].map(([kind, title]) => <button type="button" key={kind} data-deadline={kind} disabled><span>{title}</span><strong id={`snapshot-${kind}`}>—</strong><ArrowRight size={15} aria-hidden="true" /></button>)}
+          </div>
+          <p id="snapshot-affected" className="data-note" hidden />
+          <p id="snapshot-status" className="data-note" role="status">Loading tender data…</p>
+        </section>
+      </div>
     </>
   );
 }
