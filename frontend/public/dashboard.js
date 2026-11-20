@@ -47,6 +47,19 @@
   const chartRecords = new Map()
   let activeRecords = [], deadlineRecords = {}, drilldown = null
   const emptyDetail = $('details').innerHTML
+  const successfulAt = p => [p.lastSuccessAt, ...(data.runs.get(String(p.id))?.items ?? [])
+    .filter(run => run.kind === 'read' && run.result === 'ok').map(run => run.finishedAt)]
+    .map(time).filter(Number.isFinite).reduce((latest, stamp) => Math.max(latest, stamp), -Infinity)
+  const blocked = reason => /\b(log[ -]?in|sign[ -]?in|captcha)\b/i.test(reason ?? '')
+  const matchesScope = p => {
+    if (!scope) return true
+    if (scope === 'attention') return needsAttention(p)
+    if (scope === 'stale') return needsAttention(p) && Number.isFinite(successfulAt(p))
+    if (scope === 'blocked') return stateOf(p) === 'failed' && blocked(p.reason)
+    if (scope === 'unverified') return !Number.isFinite(successfulAt(p))
+    return stateOf(p) === scope
+  }
+  let requestedRun = null
 
   async function request(url, options) {
     const response = await fetch(url, { cache:'no-store', ...options, signal:AbortSignal.timeout(8_000) })
@@ -168,9 +181,14 @@
     text('attention-count',listAt ? count(attention.length) : '—')
     text('attention-summary',listAt ? attention.length ? `${attention.filter(p => stateOf(p) === 'failed').length} failed · ${attention.filter(p => stateOf(p) === 'healing').length} healing` : 'No portals are failing or healing.' : listError ? 'Portal health is unavailable.' : 'Checking portal health…')
     $('attention-filter').setAttribute('aria-pressed',String(scope === 'attention'))
-    markup('attention-portals',attention.slice(0,3).map(p => `<li data-key="${key(p.id)}">${portalButton(p,`${escape(nameOf(p))} ${portalBadge(p)}`)}</li>`).join(''))
+    $('attention-filter').disabled = !attention.length
+    markup('attention-portals',attention.slice(0,3).map(p => {
+      const stamp = successfulAt(p)
+      const last = Number.isFinite(stamp) ? `Last verified delivery · ${date(stamp)}` : 'No successful read reported'
+      return `<li data-key="${key(p.id)}">${portalButton(p,`<strong>${escape(nameOf(p))}</strong>${portalBadge(p)}<small>${escape(p.reason || 'No status reason reported.')}</small><small>${escape(last)} · Open run history →</small>`)}</li>`
+    }).join(''))
     const search = $('portal-search').value.trim().toLowerCase()
-    const visible = portals.filter(p => (!scope || (scope === 'attention' ? needsAttention(p) : stateOf(p) === scope)) && [nameOf(p),p.url].some(v => v?.toLowerCase().includes(search)))
+    const visible = portals.filter(p => matchesScope(p) && [nameOf(p),p.url].some(v => v?.toLowerCase().includes(search)))
     markup('portals',visible.map(p => portalButton(p,`<span class="row"><strong>${escape(nameOf(p))}</strong>${portalBadge(p)}</span><span class="portal-row-meta"><small>${escape(p.url)}</small><small>${escape(p.tenderCount ?? '—')} tenders</small></span>`)).join('') || `<p>${!listAt ? listError ? 'Portal list unavailable.' : 'Loading portals…' : search || scope ? 'No portals match these filters.' : 'No portals yet. Add one to start monitoring.'}</p>`)
     renderRadar()
   }
@@ -274,15 +292,20 @@
     ]
     const address = tender.address ?? tender.url
     const base = safeUrl(portal.url)?.href
-    const documents = (tender.documents ?? []).filter(Boolean).map(doc => {
-      const source = safeUrl(doc.downloadPath ?? doc.path ?? doc.url)
-      return source ? `<li><a href="${escape(source.href)}" download target="_blank" rel="noopener noreferrer">Download ${escape(doc.fileName ?? doc.filename ?? 'document')}</a></li>` : ''
-    }).filter(Boolean)
-    return `<article class="tender-card" data-key="${key(portal.id,identity)}"><h3>${escape(tender.title || 'Untitled tender')}</h3><div class="tender-overview"><span><small>Buyer</small>${escape(tender.buyerName ?? '—')}</span><span><small>Deadline</small>${escape(deadlineDate(tender.submissionDeadline))}</span><span><small>Status</small>${badge(tender.status ?? '',tender.status ?? '—')}</span></div>${address ? link(address,'Original notice ↗',base) : ''}<details><summary>Tender details</summary><dl class="tender-fields">${fields.map(([label,value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>${tender.description ? `<p>${escape(tender.description)}</p>` : ''}${documents.length ? `<ul>${documents.join('')}</ul>` : '<small>No document records supplied.</small>'}</details></article>`
+    const records = Array.isArray(tender.documents) ? tender.documents.filter(Boolean) : []
+    const documents = records.map(doc => {
+      const source = safeUrl(doc.path ?? doc.downloadPath)
+      const name = escape(doc.fileName ?? doc.filename ?? 'Untitled document')
+      const size = Number.isFinite(doc.sizeBytes) && doc.sizeBytes >= 0 ? ` · ${count(doc.sizeBytes)} bytes` : ''
+      const download = source?.origin === location.origin && source.pathname.startsWith('/files/')
+        ? `<a href="${escape(source.pathname + source.search)}" download aria-label="Download ${name}">Download</a>` : '<small>Download unavailable</small>'
+      return `<li><span>${name}${size}</span>${download}</li>`
+    })
+    return `<article class="tender-card" data-key="${key(portal.id,identity)}"><h3>${escape(tender.title || 'Untitled tender')}</h3><div class="tender-overview"><span><small>Buyer</small>${escape(tender.buyerName ?? '—')}</span><span><small>Deadline</small>${escape(deadlineDate(tender.submissionDeadline))}</span><span><small>Status</small>${badge(tender.status ?? '',tender.status ?? '—')}</span></div>${address ? link(address,'Original notice ↗',base) : ''}<details><summary>Tender details</summary><dl class="tender-fields">${fields.map(([label,value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>${tender.description ? `<p>${escape(tender.description)}</p>` : ''}</details><details><summary>Documents · ${documents.length}</summary>${documents.length ? `<ul class="document-list">${documents.join('')}</ul>` : `<small>${blocked(portal.reason) && stateOf(portal) === 'failed' ? 'Portal access is blocked. No saved documents reported.' : 'No documents reported for this tender.'}</small>`}</details></article>`
   }
-  function renderRun(run, portalName = '') {
+  function renderRun(run, portalName = '', isRequested = false) {
     const duration = time(run.finishedAt) - time(run.startedAt)
-    return `<li class="entry" data-key="${key(run.id,portalName)}"><h3>${portalName ? `${escape(portalName)} · ` : ''}${runBadge(run)}</h3><small>Started ${escape(date(run.startedAt))}${run.finishedAt ? ` · Finished ${escape(date(run.finishedAt))}` : ''}${Number.isFinite(duration) && duration >= 0 ? ` · ${count(duration)} ms` : ''}</small>${run.detail ? `<p>${escape(run.detail)}</p>` : ''}</li>`
+    return `<li class="entry${isRequested ? ' requested-run' : ''}" data-key="${key(run.id,portalName)}"><h3>${portalName ? `${escape(portalName)} · ` : ''}${runBadge(run)}${isRequested ? ' · Requested run' : ''}</h3><small>Started ${escape(date(run.startedAt))}${run.finishedAt ? ` · Finished ${escape(date(run.finishedAt))}` : ''}${Number.isFinite(duration) && duration >= 0 ? ` · ${count(duration)} ms` : ''}</small>${run.detail ? `<p>${escape(run.detail)}</p>` : ''}</li>`
   }
   function renderDetail() {
     const p = portals.find(item => String(item.id) === selected)
@@ -294,18 +317,28 @@
     for (const id of ['portal-views','result-tools','tender-filters']) $(id).hidden = !p || (id !== 'portal-views' && tab !== 'tenders')
     if (!p) {
       $('view-portals').removeAttribute('data-detail')
-      for (const id of ['repair-lifecycle','portal-usage','entries-error']) $(id).hidden = true
+      for (const id of ['repair-lifecycle','portal-usage','entries-error','portal-freshness','view-requested-run']) $(id).hidden = true
       markup('details',emptyDetail)
       markup('entries','')
       return
     }
     const history = data.runs.get(selected)
     const runs = [...history?.items ?? []].sort((a,b) => time(b.startedAt)-time(a.startedAt))
-    const lastRead = runs.filter(run => run.kind === 'read' && run.result === 'ok').sort((a,b) => runStamp(b)-runStamp(a))[0]?.finishedAt
+    const lastRead = successfulAt(p)
     const feed = data.tenders.get(selected)
-    const snapshotStamp = p.lastSuccessAt || lastRead
+    const state = stateOf(p)
+    const hasSuccess = Number.isFinite(lastRead)
+    const freshness = $('portal-freshness')
+    freshness.hidden = false
+    freshness.dataset.tone = listError || feed?.error || needsAttention(p) || !hasSuccess ? 'warning' : 'normal'
+    const title = listError || feed?.error ? 'Live data unavailable' : state === 'healing' ? 'Portal reports healing' : state === 'failed' ? 'Delivery interrupted' : state === 'integrating' ? 'Initial read pending' : hasSuccess ? 'Last verified delivery' : 'Delivery not yet verified'
+    const saved = feed?.items ? `${count(feed.items.length)} ${listError || feed.error ? 'cached' : 'saved'} ${feed.items.length === 1 ? 'tender' : 'tenders'}.` : ''
+    const evidence = hasSuccess ? `Last successful delivery: ${date(lastRead)}.` : 'No successful read reported.'
+    markup('portal-freshness',`<strong>${title}</strong><p>${escape([saved,evidence].filter(Boolean).join(' '))}</p>`)
+    const selectedRun = requestedRun?.portal === selected ? requestedRun.id : null
+    $('view-requested-run').hidden = !selectedRun || tab === 'runs'
     const latest = runs[0]
-    markup('details',`<h2>${escape(nameOf(p))} ${portalBadge(p)}</h2><small id="portal-url">${link(p.url)}</small>${registration(p) ? `<p>Approximate registration location: ${escape(registration(p))}</p>` : ''}<p>${escape(p.reason || 'No status reason reported.')}</p><div class="portal-metadata"><small>Latest attempt · ${latest ? `${escape(runKind(latest))} ${escape(outcome(latest).toLowerCase())} · ${escape(date(latest.startedAt ?? latest.finishedAt))}` : history?.items ? 'None recorded' : history?.error ? 'Unavailable' : 'Loading…'}${history?.error && latest ? ` (cached ${escape(date(history.at))})` : ''}</small><small>Last successful read · ${lastRead ? escape(date(lastRead)) : history?.items ? 'None recorded' : '—'}</small></div>${needsAttention(p) && feed?.items?.length ? `<p class="repair-banner">Showing the last available tenders · ${snapshotStamp ? `last successful extraction ${escape(date(snapshotStamp))}` : `fetched ${escape(date(feed.at))}; extraction time unavailable`}</p>` : ''}`)
+    markup('details',`<h2>${escape(nameOf(p))} ${portalBadge(p)}</h2><small id="portal-url">${link(p.url)}</small>${registration(p) ? `<p>Approximate registration location: ${escape(registration(p))}</p>` : ''}<p>${escape(p.reason || 'No status reason reported.')}</p><div class="portal-metadata"><small>Latest attempt · ${latest ? `${escape(runKind(latest))} ${escape(outcome(latest).toLowerCase())} · ${escape(date(latest.startedAt ?? latest.finishedAt))}` : history?.items ? 'None recorded' : history?.error ? 'Unavailable' : 'Loading…'}${history?.error && latest ? ` (cached ${escape(date(history.at))})` : ''}</small></div>`)
     $('tenders').setAttribute('aria-pressed',String(tab === 'tenders'))
     $('runs').setAttribute('aria-pressed',String(tab === 'runs'))
     $('check').disabled = checking.has(selected)
@@ -318,7 +351,9 @@
     let usageAvailable = false
     if (tab === 'runs' && history?.items) {
       const latestRepair = runs.find(run => run.kind === 'repair')
-      markup('repair-lifecycle',`<h3>Repair activity</h3><p>${latestRepair ? `${runBadge(latestRepair)} · ${escape(date(runStamp(latestRepair)))}` : p.state === 'healing' ? 'Healing reported; no repair run logged yet.' : 'No repair recorded.'}</p>`)
+      const recoveryRead = latestRepair?.result === 'ok' && latestRepair.finishedAt && runs.find(run => run.kind === 'read' && run.result === 'ok' && time(run.startedAt) >= time(latestRepair.finishedAt))
+      const repairStatus = latestRepair ? outcome(latestRepair) === 'Failed' ? 'The last repair did not succeed.' : recoveryRead ? `A read succeeded after the repair at ${date(recoveryRead.finishedAt)}.` : latestRepair.result === 'ok' ? 'Repair succeeded; no subsequent successful read is recorded yet.' : 'See the timeline for the latest repair outcome.' : state === 'healing' ? 'Healing reported; no repair run logged yet.' : 'No repair recorded.'
+      markup('repair-lifecycle',`<h3>Repair activity</h3><p>${escape(repairStatus)}</p>`)
       const totals = [['llmCalls','Model calls'],['inputTokens','Input tokens'],['outputTokens','Output tokens'],['estimatedCostUsd','Estimated cost (USD)']].flatMap(([field,label]) => {
         const values = runs.map(run => run.usage?.[field]).filter(Number.isFinite)
         return values.length ? [`${label} · ${count(values.reduce((sum,value) => sum+value,0))}`] : []
@@ -329,7 +364,8 @@
     $('portal-usage').hidden = !usageAvailable
     if (!entry?.items) { markup('entries',entry?.error ? '' : '<p>Loading records…</p>'); return }
     if (tab === 'runs') {
-      markup('entries',runs.length ? `<ol class="timeline">${runs.map(run => renderRun(run)).join('')}</ol>` : '<p>No runs recorded yet.</p>')
+      const pendingRun = selectedRun && !runs.some(run => String(run.id) === selectedRun)
+      markup('entries',`${pendingRun ? `<p class="data-note">Requested run ${escape(selectedRun)} has not appeared in the timeline yet.</p>` : ''}${runs.length ? `<ol class="timeline">${runs.map(run => renderRun(run,'',String(run.id) === selectedRun)).join('')}</ol>` : '<p>No runs recorded yet.</p>'}`)
       return
     }
     const search = $('tender-search').value.trim().toLowerCase()
@@ -519,7 +555,7 @@
   }
   for (const id of ['portal-picker','radar-view','recap-events','attention-portals']) $(id).onclick = event => {
     const button = event.target.closest('[data-portal]')
-    if (button) showPortal(button.dataset.portal,id === 'recap-events' ? 'runs' : 'tenders')
+    if (button) showPortal(button.dataset.portal,['recap-events','attention-portals'].includes(id) ? 'runs' : 'tenders')
   }
   $('radar-size').onclick = event => {
     const expanded = $('world-map').classList.toggle('is-expanded')
@@ -541,7 +577,7 @@
       const url = input && safeUrl(/^[a-z][a-z\d+.-]*:\/\//i.test(input) ? input : `https://${input}`)
       if (!url) throw new Error('Enter a public HTTP or HTTPS URL.')
       const created = await request('/portals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href})})
-      const createdPortal = await request(path(created)).catch(() => ({ id:created.id, url:url.href }))
+      const createdPortal = await request(path(created)).catch(() => ({ id:created.id, url:url.href, state:'integrating' }))
       mutation++
       if (!portals.some(p => String(p.id) === String(created.id))) portals.push(createdPortal)
       $('dialog').close()
@@ -553,6 +589,11 @@
     } catch (error) { text('form-error',error.message) }
     finally { $('submit').disabled = false }
   }
+  $('view-requested-run').onclick = () => {
+    tab = 'runs'
+    renderDetail()
+    $('runs').focus()
+  }
   $('check').onclick = async () => {
     const p = portals.find(item => String(item.id) === selected)
     if (!p || !capabilities.refresh || checking.has(selected)) return
@@ -560,8 +601,9 @@
     checking.add(id)
     renderDetail()
     try {
-      await request(`${path(p)}/refresh`,{method:'POST'})
-      if (selected === id) text('action-message','Refresh requested.')
+      const result = await request(`${path(p)}/refresh`,{method:'POST'})
+      if (result?.runId != null) requestedRun = { portal:id, id:String(result.runId) }
+      if (selected === id) text('action-message','Refresh requested. Watch Run history for the result.')
       for (const store of Object.values(data)) if (store.has(id)) store.get(id).attempt = 0
       void load()
     } catch (error) { if (selected === id) text('action-message',`Could not request a refresh. ${error.message}`) }

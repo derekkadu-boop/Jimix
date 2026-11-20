@@ -38,6 +38,9 @@ export default function Dashboard() {
               <select id="portal-status" defaultValue="" aria-controls="portal-picker">
                 <option value="">All statuses</option>
                 <option value="attention">Needs attention</option>
+                <option value="stale">Last verified delivery at risk</option>
+                <option value="blocked">Login or CAPTCHA reported</option>
+                <option value="unverified">No successful read reported</option>
                 <option value="failed">Failed</option>
                 <option value="healing">Healing</option>
                 <option value="integrating">Integrating</option>
@@ -55,7 +58,9 @@ export default function Dashboard() {
                 <button id="check" hidden>Refresh now</button><button type="button" id="remove" className="danger delete-action" hidden><Trash2 size={15} aria-hidden="true" /> Delete portal</button>
               </div>
             </div>
+            <div id="portal-freshness" className="freshness" role="status" hidden></div>
             <p id="action-message" role="status"></p>
+            <button type="button" id="view-requested-run" hidden>View requested run</button>
             <div className="portal-views" id="portal-views" role="group" aria-label="Selected portal results" hidden>
               <button id="tenders" aria-pressed="true">Tenders</button><button id="runs" aria-pressed="false">Run history</button>
             </div>
