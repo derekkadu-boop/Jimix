@@ -25,6 +25,22 @@ the PDF's judging describes. Until it does, keep going: after each item, pick th
 the reason this swarm exists. Before starting anything, ask whether it brings a real portal closer to
 "refresh, then files arrive". If not, it waits.
 
+**Build the system, not the answers.** We are not here to find each portal's document list by hand. The
+system must find it by itself, given only a portal's address, because the PDF judges it on portals none of
+us has seen. So:
+- **No portal-specific code or prompt hints.**
+  - No domain names in the code or prompts.
+  - No hand-found endpoints like "TenderNed documents are at `/documenten`".
+  - No selectors written for one site.
+- **Knowledge about a software package is fine** (for example NetServer or Cosinex, which many portals
+  share), but only as a reusable mechanism the system applies when it detects that package by itself.
+- **What we learn by hand turns into capability.** A better tool, discovery step, recipe feature,
+  validation or prompt rule that works on any portal.
+- **A fix counts only if an unassisted attach works:** a fresh database, `POST /portals` with just the
+  address, no recipe edits, and files arrive.
+- **Check generality on an unseen portal:** one nobody used while building the fix. Note it in the item's
+  Findings.
+
 **Focus right now: documents.** Delivering each tender's actual document files is the core feature and
 our weakest point (see the `Priority: high` items). Work on document delivery first; side features (the
 dashboard, cost reporting, log streaming) only when no document item is open.
