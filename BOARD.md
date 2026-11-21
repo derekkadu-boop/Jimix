@@ -57,10 +57,10 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:**
 
 ### B-06 Docker: backend image, compose entry, single root Dockerfile
-- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 02:20
+- **Status:** done (700f08b), verification split out as B-13
 - **Problem:** the PDF wants one root `Dockerfile` serving API and dashboard on port 8080. Only the
   frontend has a Dockerfile.
-- **Findings:**
+- **Findings:** `backend/Dockerfile` + compose `backend` service (frontend waits for its /health); root `Dockerfile` builds the dashboard (standalone Next.js) and backend with Chromium into one image; `docker/start.sh` runs uvicorn on 127.0.0.1:8000 and the dashboard on 0.0.0.0:8080, which proxies /portals, /files, /openapi.json, /health. No nginx or Docker-in-Docker (DinD would need --privileged). Builds untested: Docker Hub DNS failed on the build machine.
 
 ### B-07 Dashboard against the new API
 - **Status:** done (0ee02c3)
@@ -139,6 +139,14 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   downloaded files with an empty list. This affects shared and host-specific linked pages.
 - **Idea:** Distinguish failed page loads from a successful page with no file links. Keep last-known
   files on failure and retry on a later refresh. Test with a mock transport.
+- **Findings:**
+
+### B-13 Verify the root and backend images build and run
+- **Status:** open
+- **Problem:** `docker build .` (root) and `docker compose up --build --wait` were never run successfully;
+  the build machine couldn't reach Docker Hub. Check: build on linux/amd64 reasonably fast, `docker run -p
+  8080:8080 -e OPENAI_API_KEY=... <image>` serves `/` (dashboard), `/portals`, `/health` on 8080, Chromium
+  renders inside the container, data persists in `/data`.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
