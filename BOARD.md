@@ -500,6 +500,22 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   model. Return them in `GET /portals` and `/runs` (extra fields are fine), and show them in the dashboard.
 - **Findings:**
 
+### B-39 Operator-supplied API access per portal
+- **Priority:** low
+- **Status:** open
+- **Problem:** Some portals block crawlers in robots.txt (e.g. `User-agent: *` / `Disallow: /`) but offer a
+  dedicated API, sometimes behind a free key. Today the system can only use what it discovers anonymously.
+- **Idea:**
+  1. An optional per-portal config, given by the operator (e.g. `POST /portals` with extra fields, or a
+     settings endpoint): API base URL or endpoints, and credentials (API key or header). Stored securely,
+     never logged or returned in API responses.
+  2. The agent uses that config to map the API once into a recipe. Regular reads then reuse it without
+     model calls.
+  3. Agent hint (generic): when robots.txt broadly disallows the website, look for an official API or
+     open-data host (its own robots.txt applies) before giving up, and say in the failure reason if one
+     exists but needs a key.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
