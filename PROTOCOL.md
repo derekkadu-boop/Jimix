@@ -129,7 +129,7 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - run focused unit tests while iterating, plus a small real-portal check when the item touches portal behavior
      (`docs/testing.md`).
 4. **Review, before committing.** Get the uncommitted change reviewed before you commit it. Scale the
-   **Temporary rule through 2026-11-21 09:18 CET:** use zero reviewers when you can verify the change confidently, or one when independent review is needed. This overrides the reviewer counts below during this window. Record the decision in Findings and keep the usual test checks.
+   **Temporary rule through 2026-11-21 09:18 CET:** use zero reviewers when you can verify the change confidently, or one when independent review is needed. This overrides the reviewer counts below during this window. Routine UI and dashboard changes should skip independent review after a focused check. Use one reviewer if the change affects critical behavior. Record the decision in Findings and keep the usual test checks.
    review to the change:
    - **0 reviewers:** only for trivial changes you're confident in (a typo, a doc line, a one-line fix
      with a test). Say "no review: <reason>" in the item's Findings.
