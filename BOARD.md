@@ -919,6 +919,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Fresh model-free render on the demo revision at the exact German portal URL: the page rendered 77617 characters of DOM and 6 JSON responses, all GET; the Fetcher recorded zero eligible POST bodies. A known POST endpoint in a script cannot satisfy replay validation without the browser actually issuing it. This observation is limited to that render, not the earlier run.
   Derek-Codex-B: a local Chromium portal on the demo revision acefd4c generated a genuine public JSON search, observed by its Fetcher. The captured body passed both test_recipe and submit_recipe, including a real fixture document download and an accepted recipe. Changing a nonpaging search value was refused by both calls. The original live mismatch is still unconfirmed.
 
+### B-71 Investigate tender ID validation for POST search results
+- **Priority:** medium
+- **Status:** open
+- **Problem:** An operator reported that attach discovered the public POST search endpoint `/bkmc/searches`. The agent could not validate the candidate recipe, and `submit_recipe` reported the same issue with the source of the tender ID. The run ended without an accepted recipe.
+- **Idea:** Compare the ID field in a captured search result with the candidate mapping in `listing.fields.id`. Trace that mapping through `test_recipe` and `submit_recipe`. A mapping to a stable portal ID should pass both steps. If the mapping is invalid, the error should identify which field or path needs correction.
+- **Findings:** Operator report only. The portal URL, candidate mapping and exact validator error have not been confirmed. Related to B-70 (captured POST replay). This report specifically identifies ID validation at submission.
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
