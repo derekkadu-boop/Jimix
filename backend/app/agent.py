@@ -365,7 +365,8 @@ async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetc
 
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
-    tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
+    pagination_warnings = []
+    tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3, warnings=pagination_warnings)
     sample = tenders
     if recipe.detail and (recipe.documents or recipe.documents_by_host):
         sample = [t for t in tenders if not t.get("_documentDetailPending")] or tenders
@@ -379,6 +380,7 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
             document_warnings += await _document_lists(recipe, tenders, fetcher)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
+    warnings.extend(pagination_warnings)
     warnings.extend(document_warnings)
     if recipe.documents_url and not recipe.documents and not problem:
         warnings.append("documents_url gives one file per tender: if it is only the notice, render one tender's"

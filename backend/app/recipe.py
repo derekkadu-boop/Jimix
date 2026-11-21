@@ -208,8 +208,47 @@ def _with_param(url: str, name: str, step: int) -> str:
     return parts._replace(query=urlencode(query)).geturl()
 
 
+NEXT_PAGE_LABELS = {"next", "next page", "weiter", "nächste seite", "suivant", "page suivante",
+                    "volgende", "volgende pagina", "siguiente", "nästa", "następna", "seuraava"}
+
+
+def _has_next_page(page, base: str) -> bool:
+    current = urlsplit(base)
+    original = sorted(parse_qsl(current.query, keep_blank_values=True))
+    for link in page.select("a[href], link[rel][href]"):
+        if link.find_parent("template") or link.has_attr("hidden") or link.find_parent(attrs={"hidden": True}):
+            continue
+        try:
+            target = urlsplit(urljoin(base, link["href"]))
+        except ValueError:
+            continue
+        if (target.scheme, target.netloc) != (current.scheme, current.netloc):
+            continue
+        if (target.path, target.query) == (current.path, current.query):
+            continue
+        if "next" in {part.lower() for part in link.get("rel", [])}:
+            return True
+        label = link.get("aria-label") or link.get_text(" ", strip=True)
+        if " ".join(label.casefold().split()) in NEXT_PAGE_LABELS:
+            return True
+        if target.path != current.path:
+            continue
+        query = parse_qsl(target.query, keep_blank_values=True)
+        for name, value in query:
+            if name.lower() not in {"page", "p", "offset", "start"} or not value.isascii() or not value.isdigit():
+                continue
+            previous = next((v for k, v in original if k == name), "0")
+            if (previous.isascii() and previous.isdigit() and len(previous) <= 9 and len(value) <= 9
+                    and int(value) > int(previous)
+                    and sorted((k, v) for k, v in query if k != name)
+                    == [(k, v) for k, v in original if k != name]):
+                return True
+    return False
+
+
 async def apply(
-    recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None
+    recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None,
+    warnings: list[str] | None = None,
 ) -> tuple[list[dict], bool]:
     listing, raws = recipe.listing, []
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
@@ -233,6 +272,11 @@ async def apply(
             if not rows:
                 finished = True
                 break
+            if (warnings is not None and listing.kind != "json" and not listing.page_param
+                    and not listing.next_page and _has_next_page(page, base)):
+                warning = "Listing has a likely next-page link but no next_page or page_param is configured."
+                if warning not in warnings:
+                    warnings.append(warning)
             for row in rows:
                 raw = _extract(row, listing.fields, listing.kind) | {"_base": base}
                 if raw.get("url"):
