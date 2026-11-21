@@ -51,6 +51,12 @@ def save_portal_location(portal_id: str, location: RegistrationLocation) -> None
             INSERT INTO portal_location (portal_id, city, country, country_code, latitude, longitude)
             SELECT id, :city, :country, :country_code, :latitude, :longitude
             FROM portal WHERE id = :portal_id
+            ON CONFLICT(portal_id) DO UPDATE SET
+                city = excluded.city,
+                country = excluded.country,
+                country_code = excluded.country_code,
+                latitude = excluded.latitude,
+                longitude = excluded.longitude
             """,
             {"portal_id": portal_id, **asdict(location)},
         )
@@ -100,6 +106,16 @@ def get_portal(portal_id: str, conn: Conn):
         raise HTTPException(404, "Portal not found")
     return portal_out(row)
     # TODO  Your system stops calling the portal within a minute.
+
+
+@app.post("/portals/{portal_id}/refresh", status_code=202)
+def refresh_portal(portal_id: str, conn: Conn, background_tasks: BackgroundTasks) -> dict[str, str]:
+    row = conn.execute("SELECT url FROM portal WHERE id = ?", (portal_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Portal not found")
+    background_tasks.add_task(enrich_portal_location, portal_id, row["url"])
+    return {"id": portal_id}
+
 
 @app.delete("/portals/{portal_id}", status_code=204, response_class=Response)
 def delete_portal(portal_id: str, conn: Conn) -> Response:

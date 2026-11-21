@@ -65,6 +65,8 @@ the background through RDAP or WHOIS. The radar refreshes automatically and
 uses city coordinates from [GeoNames](https://www.geonames.org/) (CC BY 4.0).
 It skips identifiable privacy proxies and falls back to a country marker when
 the registration or country-code domain provides a usable country.
+Select a portal and click **Refresh now** to recheck its registration and reload
+its saved tenders and run history.
 
 ## Manual frontend Docker setup
 
