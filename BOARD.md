@@ -9,7 +9,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:47 | protocol keeper, B-18
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
-- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:42 | B-23 (reviewed, committed locally; UK retest running)
+- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:55 | B-23 (2 parts on main 9db64f7; 429 backoff in review)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:54 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -174,6 +174,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0883 | Fresh combined B-20/B-33 trial: readable list, 16 calls, still declined document mapping on public NetServer modal.
   - 2026-11-21 | Find a Tender (UK) | lead-w2 | failed | 0 | 0 | USD 0.0199 | Site answered very slowly (curl: 36 s to first byte, 79 s for the results page, 40 s even for a 404 robots.txt); our fixed 30 s read timeout plus one retry turned every listing fetch into ReadTimeout, plus 2 DNS failures. Agent gave up after 11 calls. Taken up in B-23.
   - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 1449 | 153 | USD 0.0596 attach, USD 0 Refresh | Fresh combined B-20/B-33 URL-only attach on the Dev URL; three recipe tests, two submits, zero deferred give-ups. Refresh retained tenders/files with zero calls; file API bytes matched SHA-256.
+  - 2026-11-21 | Find a Tender (UK) | lead-w2 | failed | 0 | 0 | USD 0.0728 | Retest with B-23 timeouts: slow pages (43-94 s) now load; one HTTP 429 after ~48 requests, then the agent gave up without testing a recipe (B-33).
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -327,10 +328,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-23 Transient network errors abort whole runs
 - **Priority:** medium
 - **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 05:33
-- **Last seen:** 2026-11-21 05:42
+- **Last seen:** 2026-11-21 05:55
 - **Problem:** On a flaky network single DNS timeouts or connection resets (httpx, Playwright route.fetch, OpenAI) fail the attach; there is only one retry for GETs and five for OpenAI.
 - **Idea:** Retry with backoff (2-3 tries) for listing and detail GETs and browser subresources; count retries against the rate limit; log them.
-- **Findings:**
+- **Findings:** On main (9db64f7): 6c652c1 `Fetcher.get` makes 3 attempts with 2 s/5 s backoff on transport errors, DNS failures (raw `socket.gaierror` from our public-address hook) and 502/503/504; read timeout 120 s (`WATCHTOWER_HTTP_TIMEOUT`). 2f0da22 a stored-recipe read that fails on such an error (or 429) keeps the portal state with "temporary error ... retry later" and starts no repair; after 3 failed reads in a row the portal is `failed` as unreachable. Two reviewers each. Not covered: downloads (a failed file already leaves the tender pending for the next refresh), robots.txt fetch (not retried, cached per run), browser recipes (Playwright net::ERR_* still trigger a repair; browser code belongs to B-21/B-32), OpenAI (5 retries already). Find a Tender retest (fresh DB): pages that took 43-94 s now load, but the attach still failed (16 calls, USD 0.07) after a single 429; the agent gave up without running test_recipe (B-33 territory). Next: 429 with Retry-After backoff.
 
 ### B-24 Browser subresources skip robots.txt
 - **Priority:** low
