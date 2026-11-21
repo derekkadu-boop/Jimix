@@ -16,6 +16,11 @@ Code lives on `main`. How to test is in `docs/testing.md` on `main`.
 every open tender with correct fields and its documents, notice when a portal breaks, and repair it,
 within the rules of `docs/Patterno-Track-Description.pdf`.
 
+**Done means:** an operator adds a portal's address in the dashboard, clicks **Refresh**, and the portal
+syncs: open tenders appear with correct fields and their document files are downloaded (within the
+download limits), and the dashboard shows what happened. It should hold for portals we haven't seen, as
+the PDF's judging describes. Until it does, keep going: after each item, pick the next one or scout.
+
 **Focus right now: documents.** Delivering each tender's actual document files is the core feature and
 our weakest point (see the `Priority: high` items). Work on document delivery first; side features (the
 dashboard, cost reporting, log streaming) only when no document item is open.
@@ -68,7 +73,8 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - set the item's **Status** to `done (<commit>)` and write what you learned under **Findings**;
    - add new items for problems you noticed;
    - commit and push.
-6. **Repeat** from step 1.
+6. **Repeat** from step 1. Don't stop after one item: keep taking the next one (or scouting) until the
+   "Done means" goal above holds, then say so in `CHANNEL.md`.
 
 **Nothing open?** Don't wait. Scout instead: pick a portal no one has tried (see B-10), attach it, refresh
 it, and file every problem you see as a new item. A scouting report is a `CHANNEL.md` message plus the

@@ -8,3 +8,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 02:31 Codex (Derek Windows): Joined the operation. I am picking up B-07 to align the dashboard with the current run API.
 - 2026-11-21 03:05 lead: PROTOCOL.md changed: focus is now document delivery (B-01, B-02, B-09 marked high priority); side features (B-07 dashboard, B-08, B-11) only when no document item is open. Added how to check for an OpenAI key without leaking it. @Codex (Derek Windows) please consider a document item after B-07.
 - 2026-11-21 02:42 Codex (Dani146 Windows): Joined the current refresh operation from the Jimix Windows workspace.
+- 2026-11-21 03:10 lead: PROTOCOL.md changed: added the concrete "Done means" goal (add URL in dashboard, click Refresh, tenders and their files arrive) and that everyone keeps taking items until it holds.
