@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl, urlsplit
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, Request, Response, Route, async_playwright
 
+from .asset_cache import PUBLIC_ASSETS, same_origin, shareable_request
 from .fetch import USER_AGENT, Blocked, Fetcher, block_reason, check_public, site, wait_turn
 
 log = logging.getLogger("watchtower.browser")
@@ -158,12 +159,12 @@ async def render(
     routes: set[asyncio.Task] = set()
     closing = False
 
-    async def fetch_route(route: Route):
+    async def fetch_route(route: Route, headers: dict[str, str] | None):
         await wait_turn(route.request.url)
         if netserver_files:
             return await route.fetch(max_redirects=0)
         timeout = max(1, min(REQUEST_TIMEOUT_MS, int((deadline - activity.clock()) * 1000)))
-        return await route.fetch(max_redirects=0, timeout=timeout)
+        return await route.fetch(max_redirects=0, timeout=timeout, headers=headers)
 
     async def handle(route: Route):
         nonlocal file_tree_denied, file_tree_requested
@@ -171,10 +172,9 @@ async def render(
         if request.resource_type in SKIPPED:
             await route.abort()
             return
-        parts = urlsplit(request.url)
-        same_origin = (parts.scheme, parts.netloc) == (origin.scheme, origin.netloc)
+        on_portal = same_origin(request.url, url)
         if netserver_files:
-            if not same_origin:
+            if not on_portal:
                 await route.abort()
                 return
             if request.method not in ("GET", "HEAD"):
@@ -182,7 +182,7 @@ async def render(
                     await route.abort()
                     return
                 file_tree_requested = True
-        if (netserver_files or (same_origin and request.resource_type in {"fetch", "xhr"})) and not await (
+        if (netserver_files or (on_portal and request.resource_type in {"fetch", "xhr"})) and not await (
             fetcher.allowed(request.url)
         ):
             if netserver_files and request.method == "POST":
@@ -194,14 +194,29 @@ async def render(
         if request.method == "GET" and (cached := fetcher.assets.get(request.url)):
             await route.fulfill(status=cached[0], headers=cached[1], body=cached[2])
             return
+        headers = None
         try:
             await check_public(request.url)
+            if (not netserver_files and request.method == "GET" and request.resource_type in CACHED
+                    and not request.service_worker and request.frame == page.main_frame
+                    and same_origin(request.frame.url, request.url)):
+                current_headers = await request.all_headers()
+                if shareable_request(request.url, current_headers):
+                    if not await fetcher.allowed(request.url):
+                        await route.abort()
+                        return
+                    asset = PUBLIC_ASSETS.get(request.url, request.resource_type)
+                    if asset:
+                        await route.fulfill(status=200, headers=asset.response_headers(), body=asset.body)
+                        return
+                    # route.fetch otherwise adds cookies from the browser context's current jar.
+                    headers = current_headers | {"accept-encoding": "identity", "cookie": ""}
             try:
-                response = await fetch_route(route)
+                response = await fetch_route(route, headers)
             except PlaywrightError:
                 if closing or page.is_closed() or (netserver_files and request.method not in ("GET", "HEAD")):
                     raise
-                response = await fetch_route(route)
+                response = await fetch_route(route, headers)
         except (ValueError, OSError, PlaywrightError) as exc:
             reason = str(exc).splitlines() or [type(exc).__name__]
             log.info("browser %s %s aborted: %s", request.method, request.url, reason[0][:150])
@@ -214,7 +229,10 @@ async def render(
             return
         if request.resource_type in CACHED and response.status == 200:
             try:
-                fetcher.assets[request.url] = (200, response.headers, await response.body())
+                body = await response.body()
+                fetcher.assets[request.url] = (200, response.headers, body)
+                if headers is not None:
+                    PUBLIC_ASSETS.save(request.url, request.resource_type, response.headers, body)
             except PlaywrightError:
                 pass
         await route.fulfill(response=response)

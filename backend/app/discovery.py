@@ -46,7 +46,7 @@ async def scan_scripts(url: str, fetcher: Fetcher) -> list[dict]:
             continue
         seen.add(src)
         try:
-            text = (await fetcher.get(src)).text
+            text = await fetcher.script_text(src, base)
         except (Blocked, httpx.HTTPError, ValueError, OSError):
             continue
         _collect(text, src, found)

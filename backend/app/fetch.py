@@ -14,6 +14,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from . import db
+from .asset_cache import PUBLIC_ASSETS, same_origin, shareable_request
 from .tls import CONTEXT, ChainFillingTransport
 
 log = logging.getLogger("watchtower.fetch")
@@ -278,12 +279,12 @@ class Fetcher:
             return False
         return True
 
-    async def get(self, url: str) -> httpx.Response:
+    async def get(self, url: str, *, headers: dict[str, str] | None = None) -> httpx.Response:
         if not await self.allowed(url):
             raise Blocked(f"robots.txt disallows {url}")
         for delay in (*RETRY_DELAYS, None):
             try:
-                resp = await self.client.get(url)
+                resp = await self.client.get(url, headers=headers)
             except (httpx.TransportError, socket.gaierror) as exc:
                 if delay is None:
                     raise
@@ -316,6 +317,23 @@ class Fetcher:
         if "json" not in resp.headers.get("content-type", "").lower():
             raise ValueError(f"POST {url} did not return JSON")
         return resp
+
+    async def script_text(self, url: str, page_url: str) -> str:
+        if not same_origin(url, page_url):
+            return (await self.get(url)).text
+        if not await self.allowed(url):
+            raise Blocked(f"robots.txt disallows {url}")
+        if self.check_hosts:
+            await check_public(url)
+        request = self.client.build_request("GET", url)
+        if not shareable_request(url, request.headers):
+            return (await self.get(url)).text
+        if asset := PUBLIC_ASSETS.get(url, "script"):
+            return httpx.Response(200, headers=asset.response_headers(), content=asset.body).text
+        response = await self.get(url, headers={"Accept-Encoding": "identity"})
+        if response.status_code == 200 and not response.history and shareable_request(url, response.request.headers):
+            PUBLIC_ASSETS.save(url, "script", response.headers, response.content)
+        return response.text
 
     async def download(self, url: str, folder: Path) -> tuple[Path, str]:
         limit = min(MAX_FILE_BYTES, MAX_RUN_DOWNLOAD_BYTES - self.downloaded)
