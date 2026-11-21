@@ -85,7 +85,8 @@ A recipe is JSON:
   "documents_page": {{"path": "selector of the link from the tender page to its documents page",
                      "attribute": "href"}} or null,
   "documents_by_host": {{"host.example": {{"files": {{"path": "selector of file links"}},
-                        "page": {{"path": "optional selector of a public documents-page link"}}}}}},
+                        "page": {{"path": "optional selector of a public documents-page link"}},
+                        "modal": "netserver_file_tree" or null}}}},
   "timezone": "IANA zone of the portal's local times, e.g. Europe/Berlin",
   "dayfirst": true when dates are written day first
 }}
@@ -95,6 +96,9 @@ When listings link to different document platforms, use documents_by_host with e
 If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
 match its destination host. Each matching rule may follow one public page link before reading files.
 Hosts without a rule use documents.
+On a public NetServer documents page with an a.zipFileContents control, the netserver_file_tree modal
+opens the highest-numbered file list version. The files selector is scoped to the opened dialog, for
+example a.filenameEllipsis[href].
 CSS selectors are BeautifulSoup/soupsieve: use :-soup-contains("text"), not :contains.
 Fields: {", ".join(TENDER_FIELDS)}.
 id is the portal's own stable identifier (often a number in the tender URL, e.g. pattern "pid=(\\d+)").
@@ -179,6 +183,7 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
     urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
     warnings = []
     if recipe.documents_by_host:
+        warnings.extend(f"tender {t['id']}: document page unavailable" for t in tenders if t.get("_documentPageError"))
         checked = [t for t in tenders if t.get("_documentChecked")]
         for tender in checked:
             if not tender["_documentUrls"]:
@@ -193,6 +198,8 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
             urls = list(by_host.values())
     urls = urls[:3]
     if not urls:
+        if any(t.get("_documentPageError") for t in tenders):
+            return "could not read the sampled document pages", warnings
         return None, warnings
     blocked, downloaded = None, False
     for url in urls:

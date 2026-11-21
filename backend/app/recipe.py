@@ -72,6 +72,7 @@ class Detail(BaseModel):
 class DocumentSource(BaseModel):
     files: Selector
     page: Selector | None = None
+    modal: Literal["netserver_file_tree"] | None = None
 
 
 class Recipe(BaseModel):
@@ -237,6 +238,8 @@ async def apply(
                     raise
                 raw["_docs"] = []
                 raw["_documentBlock"] = str(exc)
+            except PlaywrightError:
+                raw["_documentPageError"] = True
     if attempted and len(blocked) == attempted:
         raise Blocked(f"detail pages: {blocked[0]}")
     tenders = {}
@@ -277,6 +280,9 @@ async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> 
             return []
         page, base = result
         kind = "html"
+    if source and source.modal == "netserver_file_tree":
+        html, _, base = await render(base, fetcher, netserver_files=True)
+        page, kind = BeautifulSoup(html, "html.parser"), "html"
     selector = source.files if source else recipe.documents
     return [urljoin(base, u) for u in _link_values(page, selector, kind)] if selector else []
 
@@ -339,6 +345,8 @@ def normalize(raw: dict, recipe: Recipe) -> dict | None:
         tender["_documentChecked"] = True
     if "_documentBlock" in raw:
         tender["_documentBlock"] = raw["_documentBlock"]
+    if raw.get("_documentPageError"):
+        tender["_documentPageError"] = True
     for name in ("referenceNumber", "description"):
         if raw.get(name):
             tender[name] = raw[name]

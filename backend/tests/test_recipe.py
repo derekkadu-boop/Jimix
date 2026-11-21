@@ -5,8 +5,10 @@ import zipfile
 
 import httpx
 import pytest
+from playwright.async_api import Error as PlaywrightError
 
 from app import agent, db, documents, fetch, watchtower
+from app import recipe as recipes
 from app.documents import fetch_documents
 from app.fetch import Blocked, Fetcher
 from app.recipe import Recipe, apply
@@ -174,6 +176,65 @@ def test_recipe_reads_documents_from_multiple_buyer_platforms(monkeypatch, tmp_p
     with db.connect() as conn:
         rows = conn.execute("SELECT json_extract(data, '$.documents[0].fileName') FROM tender ORDER BY id")
         assert [row[0] for row in rows] == ["spec.pdf", "spec.pdf", "local.pdf", "previous.pdf"]
+
+
+def test_failed_modal_preserves_previous_files_for_one_tender(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    previous_url = "https://buyer.example/files/old.pdf"
+    previous = {
+        "status": "open",
+        "documents": [{"fileName": "old.pdf"}],
+        "_documentUrls": [previous_url],
+        "_documentSkips": {previous_url: "over size limit"},
+        "_documentsComplete": True,
+    }
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('modal', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute(
+            "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('modal', '1', ?, ?)",
+            (json.dumps(previous), db.now()),
+        )
+
+    async def failed_render(url, fetcher, *, netserver_files):
+        assert url == "https://buyer.example/notice" and netserver_files
+        raise PlaywrightError("file list timed out")
+
+    monkeypatch.setattr(recipes, "render", failed_render)
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"next_page": None},
+        "documents_page": {"path": "a.platform"},
+        "documents_by_host": {
+            "buyer.example": {"modal": "netserver_file_tree", "files": {"path": "a.filenameEllipsis[href]"}},
+        },
+    })
+
+    def response(request):
+        if request.url.path == "/t/1":
+            return httpx.Response(200, html='<a class="platform" href="https://buyer.example/notice">Notice</a>')
+        if request.url.path == "/t/2":
+            return httpx.Response(200, html='<a class="platform" href="/t/file-list">Documents</a>')
+        if request.url.path == "/notice":
+            return httpx.Response(200, html="<p>Published invitation</p>")
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await watchtower._deliver("modal", recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    assert asyncio.run(run()) == (2, None, "Could not read document pages for 1 of 2 tenders")
+    with db.connect() as conn:
+        rows = conn.execute("SELECT data FROM tender ORDER BY id").fetchall()
+    failed, successful = (json.loads(row["data"]) for row in rows)
+    for key in ("documents", "_documentUrls", "_documentSkips"):
+        assert failed[key] == previous[key]
+    assert not failed["_documentsComplete"]
+    assert successful["_documentsComplete"]
+    assert [doc["fileName"] for doc in successful["documents"]] == ["notice.pdf", "terms.txt"]
 
 
 def test_recipe_validation_samples_each_document_host(monkeypatch):
