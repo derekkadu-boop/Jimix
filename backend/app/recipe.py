@@ -238,7 +238,7 @@ async def apply(
                     raise
                 raw["_docs"] = []
                 raw["_documentBlock"] = str(exc)
-            except PlaywrightError:
+            except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
                 raw["_documentPageError"] = True
     if attempted and len(blocked) == attempted:
         raise Blocked(f"detail pages: {blocked[0]}")
@@ -257,10 +257,7 @@ def _link_values(node, selector: Selector, kind: Kind) -> list[str]:
 
 async def _follow_document_page(selector: Selector, page, base: str, kind: Kind, fetcher: Fetcher):
     if links := _link_values(page, selector, kind):
-        try:
-            return await _load("html", urljoin(base, links[0]), fetcher)
-        except (httpx.HTTPError, ValueError, OSError):
-            pass
+        return await _load("html", urljoin(base, links[0]), fetcher)
     return None
 
 
