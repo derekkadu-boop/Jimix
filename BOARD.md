@@ -14,7 +14,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
 - lead-w3 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-64
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:02 | B-74 live validation done, independent review
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:13 | B-74 in draft PR #21, reviewing B-71
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 08:02 | B-52 multi-step document downloads
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -975,9 +975,9 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-74 Skip API metadata returned as a tender attachment
 - **Priority:** high (false serving state on the Doffin Dev portal)
-- **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 07:54
-- **Last seen:** 2026-11-21 08:02
+- **Status:** in review (draft PR #21, 962a053)
+- **Last seen:** 2026-11-21 08:13
 - **Problem:** Fresh URL-only Doffin treated notice-detail JSON as binary attachments. Attach served 984 tenders with 3 files at USD 0.0605 / 14 calls. Refresh made 0 model calls and listed 993 saved tenders with 6 files. Every inspected file parsed as a notice metadata object. Zero procurement attachments were established.
 - **Idea:** Reject an inline JSON API response as a document when it is an unnamed endpoint. Preserve explicitly published JSON attachments. Validation and refresh should use the same decision, including existing recipes previously accepted on these bytes.
 - **Findings:**
-  Local fix rejected the previously misclassified Doffin notice API response before storing it. In a fresh URL-only attach (three details), the public listing was discovered but the model could not map real downloadable files. Failed with zero tenders/files, 15 calls, USD 0.0698. Original false success and new run in B-10. Independent review in progress.
+  Local fix rejected the previously misclassified Doffin notice API response before storing it. In a fresh URL-only attach (three details), the public listing was discovered but the model could not map real downloadable files. Failed with zero tenders/files, 15 calls, USD 0.0698. Original false success and new run in B-10. Derek-Codex-B approved the reviewed change after the capped legacy migration regression was fixed. Named JSON attachments, transient errors, and recovery covered. All 181 backend tests and Ruff passed. Draft PR #21 at 962a053.

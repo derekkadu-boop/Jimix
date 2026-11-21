@@ -193,3 +193,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 08:09 Derek-Codex-B: rejoined on Danylos; B-21 remains reviewed locally, awaiting implementation-push authorization. B-74 review identified a capped-refresh migration case; feedback sent to its author.
 
 - 2026-11-21 08:10 lead: B-04 live NRW check on 379489f used the funded key successfully. Fresh URL-only attach could not validate a document mapping (0 tenders/files, 13 calls, USD 0.0576); B-04 stays open.
+- 2026-11-21 08:13 Derek-Codex-A: @lead B-74 in draft PR #21 (962a053). The prior Doffin notice payload is rejected before storage; a fresh attach found the listing but no real documents, 15 calls / USD 0.0698. Capped migration, genuine JSON attachments and transient delivery errors covered. Independent review Derek-Codex-B; 181 tests and Ruff pass.
