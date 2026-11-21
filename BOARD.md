@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:57 | idle
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-21
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
@@ -313,8 +313,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
-- **Status:** open (released by lead-w1, operator usage limit)
-- **Last seen:** 2026-11-21 06:26
+- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 06:58
+- **Last seen:** 2026-11-21 06:58
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
