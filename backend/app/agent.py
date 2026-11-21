@@ -125,6 +125,8 @@ Placeholders are mapped field names ({{id}}, {{referenceNumber}}...), filled per
 Map status to a field naming the notice's state or type when there is one (award notices are closed).
 Set detail to {{}} when visiting details only to find files or links. Setting documents_page also
 requires documents or documents_by_host to select file links.
+Prefer the tender link in each listing row for HTML detail pages. Use detail.url only for a URL
+pattern verified by fetching a concrete detail page from the listing.
 One recipe can handle different document platforms using documents_by_host with exact lowercase hostnames.
 Match rules against the final detail-page host after redirects. If no rule matches, follow documents_page
 when set and match its final host. Each matching rule may follow one public page link before reading files.
@@ -427,6 +429,10 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     document_warnings = []
     if not problem:
         problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
+        if (problem == NO_DOCUMENT_LINKS and recipe.detail and recipe.detail.kind == "html"
+                and not recipe.documents_url and all(t.get("_documentDetailPending") for t in tenders)):
+            problem = ("no sampled tender detail pages were read: verify listing.fields.url points to a public"
+                       " tender page, or fetch a concrete URL before mapping detail.url")
         if hint := await _document_page_hint(recipe, sample, fetcher):
             document_warnings.append(hint)
         if problem or (recipe.documents_url and not recipe.documents):

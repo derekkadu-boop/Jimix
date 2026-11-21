@@ -248,6 +248,16 @@ async def _load(kind: Kind, url: str, fetcher: Fetcher):
     return BeautifulSoup(resp.text, "html.parser"), str(resp.url)
 
 
+async def _load_detail(detail: Detail, url: str, listing_url: str | None, fetcher: Fetcher):
+    try:
+        return await _load(detail.kind, url, fetcher)
+    except httpx.HTTPStatusError as exc:
+        if (detail.kind != "html" or not detail.url or not listing_url or listing_url == url
+                or exc.response.status_code not in (404, 410)):
+            raise
+    return await _load(detail.kind, listing_url, fetcher)
+
+
 def _with_param(url: str, name: str, step: int) -> str:
     parts = urlsplit(url)
     query = dict(parse_qsl(parts.query))
@@ -340,7 +350,7 @@ async def apply(
         if detail_url:
             attempted += 1
             try:
-                page, base = await _load(recipe.detail.kind, detail_url, fetcher)
+                page, base = await _load_detail(recipe.detail, detail_url, raw.get("url"), fetcher)
             except Blocked as exc:
                 blocked.append(str(exc))
                 continue

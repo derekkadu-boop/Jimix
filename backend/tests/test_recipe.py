@@ -301,6 +301,38 @@ def test_recipe_validation_requires_document_links():
     assert warnings == ["tender 1: no file links"]
 
 
+@pytest.mark.parametrize("template_status", [200, 404, 410, 503])
+def test_validation_uses_listing_detail_when_html_template_is_gone(template_status):
+    recipe = Recipe.model_validate(RECIPE | {"detail": RECIPE["detail"] | {"url": "/template/{id}"}})
+    paths = []
+
+    def response(request):
+        path = request.url.path
+        paths.append(path)
+        if path.startswith("/template/"):
+            if template_status == 200:
+                return httpx.Response(200, html=DETAIL.format(n=path.rsplit("/", 1)[1]))
+            return httpx.Response(template_status)
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    report = asyncio.run(run())
+    if template_status == 503:
+        assert report["problem"].startswith("no sampled tender detail pages were read")
+        assert "/t/2" not in paths
+    else:
+        assert report["problem"] is None
+        assert report["withDocumentLinks"] == 3
+        assert "/files/1.zip" in paths
+        assert ("/t/2" in paths) == (template_status in (404, 410))
+
+
 def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
     monkeypatch.setattr(fetch, "MAX_FILE_BYTES", 1024)
