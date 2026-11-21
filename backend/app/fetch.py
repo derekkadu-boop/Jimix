@@ -278,12 +278,12 @@ class Fetcher:
             return False
         return True
 
-    async def get(self, url: str) -> httpx.Response:
+    async def get(self, url: str, *, follow_redirects: bool = True) -> httpx.Response:
         if not await self.allowed(url):
             raise Blocked(f"robots.txt disallows {url}")
         for delay in (*RETRY_DELAYS, None):
             try:
-                resp = await self.client.get(url)
+                resp = await self.client.get(url, follow_redirects=follow_redirects)
             except (httpx.TransportError, socket.gaierror) as exc:
                 if delay is None:
                     raise
