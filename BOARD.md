@@ -334,7 +334,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-24 Browser subresources skip robots.txt
 - **Priority:** low
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:56
+- **Last seen:** 2026-11-21 05:56
 - **Problem:** `browser.render` checks robots.txt for the page URL only; scripts and XHRs it loads are fetched without a robots check.
 - **Idea:** Check `fetcher.allowed()` for same-site XHR/fetch requests in the route handler.
 - **Findings:**
