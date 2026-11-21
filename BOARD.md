@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:44 | B-65
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:38 | B-42 reviewed field hints; cross-portal trial running
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:47 | B-42 in draft PR #18, taking next document task
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:43 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -198,6 +198,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | Irish eTenders | Codex (Derek Windows B-42) | serving | 10 | 6 | USD 0.0358 attach, USD 0 Refresh | All six files were public notice PDFs, not tender attachments; sample hash matched and Refresh retained six with 0 calls (B-50).
   - 2026-11-21 | Doffin | Derek-Codex-A | failed | 0 | 0 | USD 0.0738, 17 calls | Fresh eade7ae attach found the public listing, but six recipe tests could not map any document. No refresh.
   - 2026-11-21 | TenderNed | Derek-Codex-A | failed | 0 | 0 | USD 0.0583, 14 calls | Fresh eade7ae attach made three submissions. The model reported JSONDecodeError while validating its candidate; no refresh. This is another B-49 variability observation.
+  - 2026-11-21 | Doffin | Derek-Codex-A | failed | 0 | 0 | USD 0.0871, 19 calls | Fresh JSON-hint build reached an external buyer restriction. No portal-wide restriction established.
+  - 2026-11-21 | TenderNed | Derek-Codex-A | serving | 200 | 159 | USD 0.0568 attach, USD 0 refresh | Fresh 01703d8, URL only, 11 calls. Files across all 10 sampled tenders, including 52 Word or Excel files. Refresh retained 200/159 with zero model calls and a verified 227492-byte sample SHA-256.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -606,8 +608,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 07:15
-- **Last seen:** 2026-11-21 07:38
+- **Status:** in review (draft PR #18, JSON document-link hints; B-52/B-67 cover external buyer documents)
+- **Last seen:** 2026-11-21 07:47
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
@@ -638,7 +640,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 2026-11-21 Codex (Derek Windows B-42): Fresh Doffin and Finland Hilma URL-only attaches on main acefd4c failed before listing (0 tenders/files; 13/$0.0634 and 16/$0.0634 calls). eTenders reached serving with 10 tenders and 6 files (8 calls/$0.0358), but all six source references were notice-download links. Refresh retained six at 0 calls and the sample file hash matched. See B-50; B-42 remains open for generic document discovery on portals with usable listings.
   Derek-Codex-A: Fresh eade7ae Doffin and TenderNed results in B-10. Manually following a listed Doffin competition showed the response's external document-page field at character 817; render_page cuts JSON previews at 600. The referenced buyer page advertises ten attachments on a separate details page. A generic JSON field-hint change is in fresh validation; no site identifiers or endpoints in code.
 
-  Reviewed branch b-42-validate-document-discovery (01703d8): Doffin normal render tool now reports the document-reference key that fell outside its JSON preview. A fresh URL-only run (.0871, 19 calls) found a buyer-platform restriction but still saved 0 tenders/files; the recorded state is failed, not a confirmed portal-wide block. No host-specific rules. The 168-test suite and Ruff passed. A separate TenderNed attach on the reviewed change is in progress.
+  Reviewed branch b-42-validate-document-discovery (01703d8): Doffin normal render tool now reports the document-reference key that fell outside its JSON preview. A fresh URL-only run (USD 0.0871, 19 calls) found a buyer-platform restriction but still saved 0 tenders/files; the recorded state is failed, not a confirmed portal-wide block. No host-specific rules. The 168-test suite and Ruff passed. TenderNed served 200 tenders and 159 files, including 52 Office attachments. A zero-model-call refresh preserved the counts and a checked file hash. See B-10 and draft PR #18.
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
