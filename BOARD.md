@@ -340,7 +340,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-24 Browser subresources skip robots.txt
 - **Priority:** low
-- **Status:** in review (PR #14)
+- **Status:** done (7860ff2, merged PR #14 by lead)
 - **Problem:** `browser.render` checks robots.txt for the page URL only; scripts and XHRs it loads are fetched without a robots check.
 - **Idea:** Check `fetcher.allowed()` for same-site XHR/fetch requests in the route handler.
 - **Findings:** PR #14 enforces cached robots rules for intercepted same-origin browser Fetch/XHR before cache or network. Chromium proves allowed data still yields a file link while the denied request never reaches the fixture. Two reviews, all 99 backend tests and Ruff pass. Broader cross-origin and service worker coverage is unchanged.
@@ -570,7 +570,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** open (HTML hint slice in PR #15; broad validation and JS discovery open)
+- **Status:** open (HTML hint slice merged via PR #15 in 7860ff2; broad validation and JS discovery open, see B-43)
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
