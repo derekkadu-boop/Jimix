@@ -1,10 +1,11 @@
 import json
 import logging
 import re
+from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, urldefrag, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -39,6 +40,8 @@ PROCEDURES = tuple(KEYWORDS["procedureType"].items())
 NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
 MAX_INDEX_LISTS = 50
+MAX_DOCUMENT_FOLDERS = 8
+MAX_DOCUMENT_FOLDER_DEPTH = 2
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 PAGINATION_PATH = r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+"
 PAGINATION_HANDLER = re.compile(
@@ -116,6 +119,7 @@ class Recipe(BaseModel):
     detail: Detail | None = None
     documents: Selector | None = None
     documents_page: Selector | None = None
+    document_folders: Selector | None = None
     documents_url: DocumentsUrl | None = None
     documents_by_host: dict[str, DocumentSource] = Field(default_factory=dict)
     timezone: str = "UTC"
@@ -141,6 +145,11 @@ class Recipe(BaseModel):
             raise ValueError("id must come from the listing, not the detail page")
         if self.documents_page and not (self.detail and (self.documents or self.documents_by_host)):
             raise ValueError("documents_page needs detail and a document selector")
+        if self.document_folders and (
+            not self.detail or not self.documents or self.documents_url or self.documents_by_host
+            or (self.detail.kind == "json" and not self.documents_page)
+        ):
+            raise ValueError("document_folders needs an HTML document or detail page and documents")
         if self.documents_by_host and not self.detail:
             raise ValueError("documents_by_host needs detail")
         if (self.documents_page or self.documents_by_host) and self.documents_url:
@@ -521,7 +530,9 @@ async def apply(
             raw.update(_extract(page, recipe.detail.fields, recipe.detail.kind))
             if (recipe.documents or recipe.documents_by_host) and not recipe.documents_url:
                 try:
-                    raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+                    raw["_docs"], folders_complete = await _document_links(recipe, page, base, fetcher)
+                    if not folders_complete:
+                        raw["_documentFoldersIncomplete"] = True
                 except _AutomaticModalBlocked:
                     raw["_documentPageError"] = True
                 except Blocked as exc:
@@ -556,20 +567,20 @@ async def _follow_document_page(selector: Selector, page, base: str, kind: Kind,
     return None
 
 
-async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> list[str]:
+async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> tuple[list[str], bool]:
     kind = recipe.detail.kind
     source = recipe.documents_by_host.get(urlsplit(base).hostname)
     if not source and recipe.documents_page:
         result = await _follow_document_page(recipe.documents_page, page, base, kind, fetcher)
         if result is None:
-            return []
+            return [], True
         page, base = result
         kind = "html"
         source = recipe.documents_by_host.get(urlsplit(base).hostname)
     if source and source.page:
         result = await _follow_document_page(source.page, page, base, kind, fetcher)
         if result is None:
-            return []
+            return [], True
         page, base = result
         kind = "html"
     selector = source.files if source else recipe.documents
@@ -585,7 +596,44 @@ async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> 
         if not explicit_modal:
             selector = Selector(path=NETSERVER_FILE_LINK, attribute="href")
         links = _link_values(BeautifulSoup(html, "html.parser"), selector, "html")
-    return [urljoin(base, link) for link in links]
+    urls = [urljoin(base, link) for link in links]
+    if recipe.document_folders:
+        return await _folder_documents(recipe, page, base, urls, fetcher)
+    return urls, True
+
+
+async def _folder_documents(recipe: Recipe, page, base: str, urls: list[str], fetcher: Fetcher):
+    origin = urlsplit(base)
+    seen = {urldefrag(base).url}
+    queue = deque([(page, base, 0)])
+    complete = True
+    while queue:
+        page, base, depth = queue.popleft()
+        for link in _link_values(page, recipe.document_folders, "html"):
+            try:
+                target = urldefrag(urljoin(base, link)).url
+                parts = urlsplit(target)
+            except ValueError:
+                continue
+            if target in seen:
+                continue
+            if (parts.scheme, parts.netloc) != (origin.scheme, origin.netloc):
+                complete = False
+                continue
+            if depth >= MAX_DOCUMENT_FOLDER_DEPTH or len(seen) > MAX_DOCUMENT_FOLDERS:
+                complete = False
+                break
+            seen.add(target)
+            try:
+                response = await fetcher.get(target, follow_redirects=False)
+            except (Blocked, httpx.HTTPError, ValueError, OSError):
+                complete = False
+                continue
+            folder = BeautifulSoup(response.text, "html.parser")
+            final = str(response.url)
+            urls.extend(urljoin(final, u) for u in _link_values(folder, recipe.documents, "html"))
+            queue.append((folder, final, depth + 1))
+    return urls, complete
 
 
 async def _listed_documents(recipe: Recipe, raw: dict, fetcher: Fetcher) -> None:
@@ -658,6 +706,8 @@ def normalize(raw: dict, recipe: Recipe) -> dict | None:
     }
     if recipe.documents_by_host and "_docs" in raw:
         tender["_documentChecked"] = True
+    if raw.get("_documentFoldersIncomplete"):
+        tender["_documentFoldersIncomplete"] = True
     if "_documentBlock" in raw:
         tender["_documentBlock"] = raw["_documentBlock"]
     elif raw.get("_documentPageError"):

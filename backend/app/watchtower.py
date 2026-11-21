@@ -170,13 +170,15 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     known = {row["id"]: json.loads(row["data"]) for row in rows}
     if problem := check(tenders, sum(t["status"] == "open" for t in known.values())):
         raise Broken(problem)
-    fetched = cached = blocked = blocked_pages = failed_pages = missing = pending = 0
+    fetched = cached = blocked = blocked_pages = failed_pages = missing = pending = incomplete_folders = 0
     skips: Counter[str] = Counter()
     reason = None
     for tender in tenders:
         old = known.get(tender["id"])
         tender.pop("_documentChecked", None)
         page_error = tender.pop("_documentPageError", False)
+        folders_incomplete = tender.pop("_documentFoldersIncomplete", False)
+        incomplete_folders += folders_incomplete
         detail_pending = tender.pop("_documentDetailPending", False)
         if page_error or detail_pending:
             if old:
@@ -197,10 +199,10 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
             reason = why
             continue
         urls = tender["_documentUrls"]
-        missing += not urls
+        missing += not urls and not folders_incomplete
         same_urls = old and old.get("_documentUrls") == urls
         if (
-            same_urls and old.get("_documentsComplete")
+            same_urls and old.get("_documentsComplete") and not folders_incomplete
             and (not urls or "_documentSkips" in old)
             and (
                 not urls or old.get("_officePackagesChecked") or not has_unpacked_office(old["documents"])
@@ -216,7 +218,7 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
             continue
         all_blocked = not recipe.documents_by_host and blocked >= 5 and blocked == fetched
         if all_blocked or (MAX_DETAILS is not None and fetched >= MAX_DETAILS):
-            if same_urls:
+            if same_urls or (folders_incomplete and old):
                 tender["documents"] = old["documents"]
                 if "_documentSkips" in old:
                     tender["_documentSkips"] = old["_documentSkips"]
@@ -225,7 +227,8 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         previous_skips = old.get("_documentSkips", {}) if old else {}
         tender_skips = {url: OVERSIZE_SKIP for url in urls if previous_skips.get(url) == OVERSIZE_SKIP}
         docs, done, why = await fetch_documents(urls, fetcher, skipped=tender_skips)
-        if not done and same_urls:
+        done = done and not folders_incomplete
+        if not done and old and (same_urls or folders_incomplete):
             kept = {
                 (doc["sha256"], doc["fileName"]): doc
                 for doc in [*old.get("documents", []), *docs]
@@ -256,6 +259,8 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         notes.append(f"Document pages blocked for {blocked_pages} of {len(tenders)} tenders")
     if failed_pages:
         notes.append(f"Could not read document pages for {failed_pages} of {len(tenders)} tenders")
+    if incomplete_folders:
+        notes.append(f"Document folder coverage incomplete for {incomplete_folders} of {len(tenders)} tenders")
     if missing:
         notes.append(f"No document links found for {missing} of {len(tenders)} tenders")
     if pending:

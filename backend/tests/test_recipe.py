@@ -599,6 +599,99 @@ def test_url_templates_read_detail_and_document_list():
     assert len(docs) == 2
 
 
+def test_document_folders_read_nested_lots_and_report_partial_coverage(monkeypatch):
+    monkeypatch.setattr(recipes, "MAX_DOCUMENT_FOLDERS", 4)
+    paths = []
+    pages = {
+        "/t/1": """
+            <a class="doc" href="/files/base.pdf">Base</a>
+            <a class="lot" href="/lots/a">Lot A</a>
+            <a class="lot" href="/lots/a#heading">Duplicate</a>
+            <a class="lot" href="/lots/redirect">Redirect</a>
+            <a class="lot" href="https://external.example/lot/">Another site</a>
+        """,
+        "/lots/a": """
+            <a class="doc" href="/files/a.pdf">Lot A</a>
+            <a class="lot" href="/t/1#top">Back to tender</a>
+            <a class="lot" href="b">Lot B</a>
+            <a class="lot" href="c">Lot C</a>
+            <a class="lot" href="d">Beyond page cap</a>
+        """,
+        "/lots/b": """
+            <a class="doc" href="/files/base.pdf">Duplicate</a>
+            <a class="doc" href="/files/b.pdf">Lot B</a>
+            <a class="lot" href="e">Beyond depth cap</a>
+        """,
+        "/lots/c": '<a class="doc" href="/files/c.pdf">Lot C</a>',
+    }
+
+    def response(request):
+        path = request.url.path
+        paths.append(path)
+        assert request.url.host == "portal.example"
+        if path in pages:
+            return httpx.Response(200, html=pages[path])
+        if path == "/lots/redirect":
+            return httpx.Response(302, headers={"location": "https://external.example/lot/"})
+        if path.startswith("/files/") and path.endswith(".pdf"):
+            return httpx.Response(200, content=f"%PDF-1.4 {path}".encode(),
+                                  headers={"content-type": "application/pdf"})
+        return portal(request)
+
+    recipe = RECIPE | {"document_folders": {"path": "a.lot"}}
+    tenders, _, docs = _apply(recipe, response, max_details=1)
+
+    assert tenders[0]["_documentFoldersIncomplete"] is True
+    assert [doc["fileName"] for doc in docs] == ["base.pdf", "a.pdf", "b.pdf", "c.pdf"]
+    assert [path for path in paths if path.startswith("/lots/")] == [
+        "/lots/a", "/lots/redirect", "/lots/b", "/lots/c",
+    ]
+    assert paths.count("/t/1") == 1
+
+
+def test_incomplete_document_folder_refresh_keeps_old_files_and_adds_available_files(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('lots', 'https://portal.example/list', ?)",
+                     (db.now(),))
+
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"next_page": None},
+        "document_folders": {"path": "a.lot"},
+    })
+    second_run = False
+
+    def response(request):
+        path = request.url.path
+        if path == "/t/1":
+            new = '<a class="doc" href="/files/new.pdf">New file</a>' if second_run else ""
+            return httpx.Response(200, html=f'<a class="lot" href="/lots/old">Lot</a>{new}')
+        if path == "/lots/old":
+            if second_run:
+                return httpx.Response(404)
+            return httpx.Response(200, html='<a class="doc" href="/files/old.pdf">Old file</a>')
+        if path.startswith("/files/") and path.endswith(".pdf"):
+            return httpx.Response(200, content=f"%PDF-1.4 {path}".encode(),
+                                  headers={"content-type": "application/pdf"})
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await watchtower._deliver("lots", recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    assert asyncio.run(run()) == (2, None, "")
+    second_run = True
+    assert asyncio.run(run()) == (2, None, "Document folder coverage incomplete for 1 of 2 tenders")
+    with db.connect() as conn:
+        tender = json.loads(conn.execute("SELECT data FROM tender WHERE id = '1'").fetchone()["data"])
+    assert [doc["fileName"] for doc in tender["documents"]] == ["old.pdf", "new.pdf"]
+    assert not tender["_documentsComplete"]
+
+
 def test_jsonpath_wildcards_and_indexes():
     data = {"content": [{"a": {"b": [{"h": "x"}, {"h": "y"}]}}, {"a": {"b": [{"h": "z"}]}}], "m": {"k": {"h": "w"}}}
     assert recipes._json_path(data, "$.content[*].a.b[*].h") == ["x", "y", "z"]
@@ -1281,7 +1374,7 @@ def test_netserver_fallback_preserves_configured_links_and_requires_complete_con
     monkeypatch.setattr(recipes, "render", unexpected_render)
     recipe = Recipe.model_validate(RECIPE)
     page = BeautifulSoup(html, "html.parser")
-    assert asyncio.run(recipes._document_links(recipe, page, "https://portal.example/notice", None)) == urls
+    assert asyncio.run(recipes._document_links(recipe, page, "https://portal.example/notice", None)) == (urls, True)
 
 
 def test_blocked_automatic_modal_keeps_other_tenders_accessible(monkeypatch, tmp_path):

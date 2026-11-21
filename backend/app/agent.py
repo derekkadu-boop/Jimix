@@ -129,6 +129,8 @@ A recipe is JSON:
   "documents": {{"path": "selector or dot path matching every document file link", "attribute": "href"}} or null,
   "documents_page": {{"path": "selector of the link from the tender page to its documents page",
                      "attribute": "href"}} or null,
+  "document_folders": {{"path": "selector of public same-origin lot or folder links",
+                        "attribute": "href"}} or null,
   "documents_url": {{"template": "URL with {{field}} placeholders, e.g. https://host/api/tenders/{{id}}/files",
                     "kind": "html" | "json" | "browser"}} or null,
   "documents_by_host": {{"host.example": {{"files": {{"path": "selector of file links"}},
@@ -147,6 +149,8 @@ over a list and [0] to index, e.g. "$.files[*].links.download.href". A field kee
 Map status to a field naming the notice's state or type when there is one (award notices are closed).
 Set detail to {{}} when visiting details only to find files or links. Setting documents_page also
 requires documents or documents_by_host to select file links.
+Use document_folders when the HTML detail or documents page links to separate lot or folder pages.
+The same documents selector applies there. Up to eight folder pages and two levels are read per tender.
 Prefer the tender link in each listing row for HTML detail pages. Use detail.url only for a URL
 pattern verified by fetching a concrete detail page from the listing.
 One recipe can handle different document platforms using documents_by_host with exact lowercase hostnames.
@@ -367,6 +371,8 @@ async def _check_documents(
         return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
     urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
     warnings = []
+    if any(t.get("_documentFoldersIncomplete") for t in tenders):
+        warnings.append("Some sampled document folders could not be read or exceeded the folder limit.")
     if recipe.documents_by_host:
         warnings.extend(f"tender {t['id']}: document page unavailable" for t in tenders if t.get("_documentPageError"))
         checked = [t for t in tenders if t.get("_documentChecked")]
