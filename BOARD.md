@@ -208,7 +208,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
-- **Status:** open
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 03:50
+- **Last seen:** 2026-11-21 03:50
 - **Problem:** A failed or deferred tender detail request can produce empty document URLs. The
   refresh stores an empty document list and can mark it complete even though discovery never ran.
   This can erase saved files and make B-14 display no document links for an unchecked tender.
