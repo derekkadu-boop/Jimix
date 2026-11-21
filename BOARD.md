@@ -113,7 +113,8 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-14 Dashboard: show per-tender document state
 - **Priority:** high (part of "Done means": the operator sees what happened)
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:06
+- **Last seen:** 2026-11-21 03:06
 - **Problem:** the tender card (`frontend/public/dashboard.js`, around line 284) shows "No document records
   supplied." both when a tender has no document links and when files are still pending (capped by
   `WATCHTOWER_MAX_DETAILS`, blocked, budget hit). `GET /portals/{id}/tenders` drops every `_`-prefixed key,
