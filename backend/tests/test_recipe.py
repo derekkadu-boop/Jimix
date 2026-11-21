@@ -1202,3 +1202,39 @@ def test_document_hints_find_ordinary_accessible_links(html, expected):
     else:
         assert hint is None
     assert requests == ["/t/1"]
+
+
+def test_page_cap_is_reported_in_validation_and_delivery(monkeypatch, tmp_path):
+    async def covered_documents(*_args):
+        return None, []
+
+    monkeypatch.setattr(agent, "_check_documents", covered_documents)
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('test', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute(
+            "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('test', 'old', ?, ?)",
+            ('{"status":"open"}', db.now()),
+        )
+
+    async def run(max_pages):
+        recipe = Recipe.model_validate(RECIPE | {"max_pages": max_pages, "detail": None, "documents": None})
+        fetcher = Fetcher(transport=httpx.MockTransport(portal))
+        try:
+            report = await agent._test(recipe, fetcher)
+            delivered = await watchtower._deliver("test", recipe, fetcher)
+            return report["warnings"], delivered
+        finally:
+            await fetcher.close()
+
+    warnings, (count, _, note) = asyncio.run(run(1))
+    assert count == 2 and "Listing coverage incomplete at the page limit" in note
+    assert any("recipe max_pages: 1" in warning for warning in warnings)
+    with db.connect() as conn:
+        assert conn.execute("SELECT data FROM tender WHERE id='old'").fetchone()[0] == '{"status":"open"}'
+
+    warnings, (count, _, note) = asyncio.run(run(2))
+    assert count == 3 and "Listing coverage incomplete at the page limit" not in note
+    assert not any("Listing coverage is incomplete" in warning for warning in warnings)

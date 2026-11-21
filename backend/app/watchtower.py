@@ -244,6 +244,9 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     _save_tenders(portal_id, tenders, close_missing=complete)
     attempted = fetched + cached if recipe.documents_by_host else fetched
     notes = []
+    if tenders and not complete:
+        notes.append(f"Listing coverage incomplete at the page limit (max_pages: {recipe.max_pages} per list); "
+                     "older tenders were kept")
     if skips:
         notes.append("Skipped documents: " + ", ".join(f"{reason} ({n})" for reason, n in sorted(skips.items())))
     if blocked and blocked * 2 >= attempted:
