@@ -16,7 +16,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
-- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:16 | B-05 in review (PR #17)
+- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:24 | B-41 and B-05 in review
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
@@ -596,6 +596,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** Recipe.apply caps unique category links at MAX_INDEX_LISTS. If all visited categories finish, it reports complete despite unvisited categories. Synthetic index with MAX_INDEX_LISTS + 1 ordinary category links reproduces the coverage error; no real site was probed.
 - **Idea:** Mark truncated category indexes as incomplete and verify that refreshing preserves the open status and files of a previously saved tender in a skipped category.
 - **Findings:** PR #13 marks an indexed listing incomplete if unique category links exceed the existing cap, preserving saved tenders and their files. Duplicate links still permit closure when all distinct categories finish. Two reviewers, 93 backend tests and Ruff passed with synthetic fixtures.
+  PR updated to 2ca52ed preserving new indexed sampling and reservation. Derek-Codex-A and the Codex
+  document reviewer independently checked integration; 169 backend tests and Ruff passed.
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
