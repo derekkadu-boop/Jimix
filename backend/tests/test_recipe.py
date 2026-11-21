@@ -998,3 +998,53 @@ def test_tls_reads_issuer_url_and_detects_incomplete_chains():
                                             "unable to get local issuer certificate (_ssl.c:1010)")
     assert tls.incomplete_chain(error)
     assert not tls.incomplete_chain(ssl.SSLCertVerificationError(1, "CERTIFICATE_VERIFY_FAILED: hostname mismatch"))
+
+
+@pytest.mark.parametrize(("failure", "earlier"), [(httpx.ConnectError("connection reset"), 0), (503, 0), (503, 2)])
+def test_refresh_does_not_repair_after_a_temporary_failure(monkeypatch, tmp_path, failure, earlier):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+
+    async def no_agent(*args, **kwargs):
+        raise AssertionError("a temporary failure must not start a repair")
+
+    monkeypatch.setattr(watchtower, "explore", no_agent)
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO portal (id, url, state, created_at) VALUES ('p', 'https://portal.example/list', 'serving', ?)",
+            (db.now(),),
+        )
+    attach = watchtower._new_run("p", "read")
+    watchtower._save_recipe("p", attach, Recipe.model_validate(RECIPE))
+    watchtower._finish(attach, "ok", "read 3 tenders", agent.Usage())
+    for _ in range(earlier):
+        watchtower._finish(watchtower._new_run("p", "read"), "failed", "ConnectError: reset", agent.Usage())
+    run_id = watchtower._new_run("p", "read")
+
+    def site(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        if isinstance(failure, int):
+            return httpx.Response(failure)
+        raise failure
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(site))
+        try:
+            await watchtower._read("p", run_id, fetcher)
+        finally:
+            await fetcher.close()
+
+    asyncio.run(run())
+    with db.connect() as conn:
+        portal_row = conn.execute("SELECT state, reason FROM portal").fetchone()
+        runs = conn.execute("SELECT kind, result FROM run WHERE id = ?", (run_id,)).fetchall()
+        repairs = conn.execute("SELECT count(*) FROM run WHERE kind = 'repair'").fetchone()[0]
+    if earlier:
+        assert portal_row["state"] == "failed"
+        assert portal_row["reason"].startswith("Unreachable for 3 reads in a row")
+    else:
+        assert portal_row["state"] == "serving"
+        assert "temporary error" in portal_row["reason"]
+    assert [tuple(r) for r in runs] == [("read", "failed")]
+    assert repairs == 0
