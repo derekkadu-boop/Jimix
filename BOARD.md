@@ -156,6 +156,13 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   renders inside the container, data persists in `/data`.
 - **Findings:**
 
+### B-17 Bound failed document downloads and clear partial files
+- **Status:** open
+- **Problem:** Fetcher reads HTML document responses in full before applying the byte limit, and
+  an interrupted streamed download can leave a partial file on disk.
+- **Idea:** Bound the HTML used for access checks and clean partial files on interruption.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
