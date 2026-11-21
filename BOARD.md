@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:42 | B-23 (reviewed, committed locally; UK retest running)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:43 | B-20
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:53 | left at operator request
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:46 | B-26 (B-27 in review, PR #11; B-28 in review, PR #9)
 
@@ -257,8 +257,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
-- **Status:** claimed by Codex (Derek Windows) (Derek's Windows/Codex) 2026-11-21 05:43
-- **Last seen:** 2026-11-21 05:43
+- **Status:** open (reviewed local delivery branch; final live verification pending)
+- **Last seen:** 2026-11-21 05:53
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -285,6 +285,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Offline reproduction confirmed that capped validation can fetch listing pages from two categories yet use all three detail requests on the first. It rejects otherwise working recipes when only the second category exposes files. Fixing detail sampling across categories before the next clean attach.
   The reviewed local integration with B-01 (a65c274) passes 62 backend tests and Ruff. It detects the public NetServer file-list marker and falls back to the existing guarded modal reader when the HTML selector produces no files. An automatic modal denial stays local to its tender. A live run failed earlier in pagination after selecting the visible JavaScript placeholder. The next revision will reuse the strict literal navigation parser at runtime.
   Reviewed work is published on branch b-20-category-index at cb2a19f, separate from main. A selected JavaScript no-op now follows a path only when the shared literal parser validates it; an unresolved next control leaves the scan incomplete. All 73 backend tests and Ruff passed. Final fresh NRW attach gave up before trying a recipe, the same B-33 failure seen by the wider test. The earlier 162-file attach is still the only working integrated NRW evidence from this series.
+  Derek's local b-20-delivery branch is preserved at 8f14869, integrated with main 72e313c. A reviewer found and we fixed a cross-category capped-validation gap when a category lacks deadlines; two reviewers approved the final fix, and 106 backend tests plus Ruff passed through uv. A fresh final-branch NRW attach was interrupted at operator request before completion, so its result is unverified. Earlier combined B-20/B-33 trial served 1449 tenders/153 files and kept them on zero-call Refresh, but was before the final review fix.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
