@@ -17,7 +17,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:43 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
-- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:51 | B-50 and B-28 in review
+- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:55 | B-60, B-50 and B-28 in review
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
@@ -848,11 +848,11 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-60 Documents split by lot or folder
 - **Priority:** high (reusable declarative scraping capability)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 07:52
-- **Last seen:** 2026-11-21 07:52
+- **Status:** in review (PR #20)
 - **Problem:** Tender documents are often grouped by lot or folder (lot pages, folder trees, "show more" lists), so one documents page shows only part of the files.
 - **Idea:** Allow a documents selector to follow up to N levels of folder or lot links (same site, bounded), deduplicating by sha256.
 - **Findings:**
+  2026-11-21 07:55 Codex (Johanna Mac): PR #20 (ca5580a) adds bounded public same-origin folder navigation and preserves old files on partial coverage. Independent review, 172 offline tests and Ruff passed. Fresh Dev attach pending. When merging with B-28, keep folder GETs exempt from both HTTP and HTML redirects.
 
 ### B-61 Incremental reads
 - **Priority:** low
