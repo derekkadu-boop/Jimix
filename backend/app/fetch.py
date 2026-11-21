@@ -15,6 +15,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from . import db
+from .tls import CONTEXT, ChainFillingTransport
 
 log = logging.getLogger("watchtower.fetch")
 USER_AGENT = os.environ.get("WATCHTOWER_USER_AGENT", "JimixWatchtower/0.1 (public tender monitoring)")
@@ -123,7 +124,7 @@ class Fetcher:
     def __init__(self, portal_id: str | None = None, transport: httpx.AsyncBaseTransport | None = None):
         self.portal_id = portal_id
         self.client = httpx.AsyncClient(
-            transport=transport,
+            transport=transport or ChainFillingTransport(verify=CONTEXT),
             follow_redirects=True,
             timeout=30,
             headers={"User-Agent": USER_AGENT},
