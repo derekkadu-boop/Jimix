@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:19 | protocol keeper
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:47 | protocol keeper, B-18
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:42 | B-23 (reviewed, committed locally; UK retest running)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
@@ -246,7 +246,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-18 Read public listings backed by POST search
 - **Priority:** high (sweep 2: the main blocker for JS portals now that rendering works)
-- **Status:** open
+- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 05:47
+- **Last seen:** 2026-11-21 05:47
 - **Problem:** On https://www.oeffentlichevergabe.de/, the search page returns only region data
   before a search action. Listing recipes currently use GET and cannot read a public POST search.
 - **Idea:** Verify the site's unfiltered public search and add narrowly scoped listing support.
