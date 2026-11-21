@@ -16,6 +16,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 ### B-02 Documents on a different external platform per tender
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 02:47
+- **Last seen:** 2026-11-21 03:04
 - **Problem:** evergabe.nrw.de (https://www.evergabe.nrw.de/VMPCenter/, cosinex software) lists tenders
   fine (id via pattern `pid=(\d+)`, unfiltered "welcome" list), but each tender's files live on an
   external platform (e.g. `vergabe.duesseldorf.de` NetServer), different per buyer. One `documents`
