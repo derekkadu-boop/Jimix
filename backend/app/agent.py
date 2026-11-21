@@ -133,6 +133,8 @@ when set and match its final host. Each matching rule may follow one public page
 Hosts without a rule use documents.
 When documents_page leads to a buyer's notice, use the host rule's page for a documents tab on that notice.
 File download links can be extensionless, so use the page's actual file controls.
+Publication notice PDFs can appear alongside a separate attachment page. If validation points to that
+page, inspect it and map its files instead of treating the notice PDF as the tender's attachments.
 On a public NetServer documents page with an a.zipFileContents control, the netserver_file_tree modal
 opens the highest-numbered file list version. The files selector is scoped to the opened dialog, for
 example a.filenameEllipsis[href].
@@ -229,8 +231,10 @@ def _category_hint(soup: BeautifulSoup, base: str) -> str | None:
     return hint
 
 
-def _document_navigation(soup: BeautifulSoup, base: str):
+def _document_navigation(soup: BeautifulSoup, base: str, *, content_only: bool = False):
     for link in soup.select("a[href]"):
+        if content_only and link.find_parent(["nav", "header", "footer", "aside"]):
+            continue
         label = " ".join(link.get_text(" ").split()).casefold()
         if not 0 < len(label) <= 60 or not DOCUMENT_PAGE.search(label):
             continue
@@ -306,9 +310,16 @@ NO_DOCUMENT_LINKS = (
     "no document links in the sampled tenders: map the actual file links (documents, documents_page or"
     " documents_by_host); call give_up with blocked=true only if a login or captcha on documents was detected"
 )
+NOTICE_PDF = re.compile(
+    r"(?:\Anotice\.pdf\Z|\b(?:contract notice|procurement notice|(?:auftrags)?bekanntmachung(?:sorte)?|"
+    r"avis de march[eé]|aankondiging)\b.*\.pdf\Z)", re.IGNORECASE,
+)
+NOTICE_ONLY = "sampled downloads look like publication notices only"
 
 
-async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
+async def _check_documents(
+    recipe: Recipe, tenders: list[dict], fetcher: Fetcher, *, hashes: set[str] | None = None
+) -> tuple[str | None, list[str]]:
     if not (recipe.documents or recipe.documents_by_host or recipe.documents_url):
         return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
     urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
@@ -332,20 +343,25 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
         if any(t.get("_documentPageError") for t in tenders):
             return "could not read the sampled document pages", warnings
         return NO_DOCUMENT_LINKS, warnings
-    blocked, downloaded = None, False
+    blocked, downloaded, attachment = None, False, False
     for url in urls:
         try:
             docs, _, why = await fetch_documents([url], fetcher)
         except Exception:  # noqa: BLE001
             docs, why = [], None
         if docs:
-            if not recipe.documents_by_host:
+            if hashes is not None:
+                hashes.update(doc["sha256"] for doc in docs if "sha256" in doc)
+            attachment |= any(not NOTICE_PDF.search(doc.get("fileName", "")) for doc in docs)
+            if attachment and not recipe.documents_by_host:
                 return None, warnings
             downloaded = True
         elif recipe.documents_by_host:
             warnings.append(f"could not download sampled file from {urlsplit(url).hostname}")
         blocked = blocked or why
     if downloaded:
+        if not attachment:
+            warnings.append(NOTICE_ONLY)
         return None, warnings
     if blocked:
         return f"document download blocked ({blocked}); call give_up with blocked=true if that holds for all", warnings
@@ -397,27 +413,67 @@ async def _probe(parent: str, tid: str, fetcher: Fetcher) -> list[str]:
     return []
 
 
-async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> str | None:
-    if recipe.documents_page or recipe.documents_by_host or recipe.documents_url:
-        return None
-    if not recipe.detail or recipe.detail.kind != "html":
-        return None
-    tender = next((t for t in tenders if t.get("url")), None)
-    if not tender:
-        return None
+async def _has_unmapped_attachment(url: str, known: set[str], hashes: set[str], fetcher: Fetcher) -> bool:
+    blocks = len(fetcher.blocks)
     try:
-        resp = await fetcher.get(tender["url"])
+        response = await fetcher.get(url)
+        for tag in BeautifulSoup(response.text, "html.parser").select("a[href]"):
+            if tag.find_parent(["nav", "header", "footer", "aside"]):
+                continue
+            file_url = urljoin(str(response.url), tag["href"])
+            target = urlsplit(file_url)
+            if target.scheme not in ("http", "https") or not target.netloc or target.username is not None:
+                continue
+            if any(SENSITIVE_KEY.search(key) for key, _ in parse_qsl(target.query, keep_blank_values=True)):
+                continue
+            path = target.path
+            if file_url in known or not FILE_SUFFIX.search(path) or NOTICE_PDF.search(path.rsplit("/", 1)[-1]):
+                continue
+            docs, _, _ = await fetch_documents([file_url], fetcher)
+            return any(doc["sha256"] not in hashes and not NOTICE_PDF.search(doc["fileName"]) for doc in docs)
     except (Blocked, httpx.HTTPError, ValueError, OSError):
-        return None
-    known = set(tender["_documentUrls"]) | {tender["url"], str(resp.url)}
-    for text, href in _document_navigation(BeautifulSoup(resp.text, "html.parser"), str(resp.url)):
-        if href not in known:
-            return (
-                f"tender page {tender['url']} links to {text!r} ({href}) but documents_page is not set. If that"
-                " page lists the tender's files (often more than the notice), set documents_page to that link"
-                " and documents to the file links there"
-            )
-    return None
+        pass
+    finally:
+        del fetcher.blocks[blocks:]
+    return False
+
+
+async def _document_page_hint(
+    recipe: Recipe, tenders: list[dict], fetcher: Fetcher, *, notice_hashes: set[str] | None = None,
+    retry_mapping: bool = False,
+) -> tuple[str | None, bool]:
+    mapped_page = recipe.documents_page or recipe.documents_by_host
+    if recipe.documents_url or (mapped_page and not retry_mapping):
+        return None, False
+    if not recipe.detail or recipe.detail.kind != "html":
+        return None, False
+    mapped = {url for tender in tenders for url in tender["_documentUrls"]}
+    candidates = [t for t in tenders if t.get("url")]
+    first_hint = None
+    for tender in candidates[:3 if notice_hashes or retry_mapping else 1]:
+        try:
+            resp = await fetcher.get(tender["url"])
+        except (Blocked, httpx.HTTPError, ValueError, OSError):
+            continue
+        known = mapped | {tender["url"], str(resp.url)}
+        page = BeautifulSoup(resp.text, "html.parser")
+        content_links = ({href for _, href in _document_navigation(page, str(resp.url), content_only=True)}
+                         if notice_hashes else set())
+        for text, href in _document_navigation(page, str(resp.url)):
+            if href not in known:
+                action = ("Verify that your documents_page or host rule follows this link and selects its files"
+                          if mapped_page else "Set documents_page to this link and documents to the file links there")
+                hint = (
+                    f"tender page {tender['url']} links to {text!r} ({href}). {action} if it lists the tender's files"
+                )
+                if not notice_hashes:
+                    return hint, False
+                if href in content_links and await _has_unmapped_attachment(href, known, notice_hashes, fetcher):
+                    return hint, True
+                first_hint = first_hint or hint
+                if href in content_links:
+                    break
+    return first_hint, False
 
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
@@ -428,13 +484,20 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     problem = check(tenders)
     document_warnings = []
     if not problem:
-        problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
+        hashes: set[str] = set()
+        problem, document_warnings = await _check_documents(recipe, tenders, fetcher, hashes=hashes)
         if (problem == NO_DOCUMENT_LINKS and recipe.detail and recipe.detail.kind == "html"
                 and not recipe.documents_url and all(t.get("_documentDetailPending") for t in tenders)):
             problem = ("no sampled tender detail pages were read: verify listing.fields.url points to a public"
                        " tender page, or fetch a concrete URL before mapping detail.url")
-        if hint := await _document_page_hint(recipe, sample, fetcher):
+        hint, attachment_confirmed = await _document_page_hint(
+            recipe, sample, fetcher, notice_hashes=hashes if NOTICE_ONLY in document_warnings else None,
+            retry_mapping=problem == NO_DOCUMENT_LINKS,
+        )
+        if hint:
             document_warnings.append(hint)
+        if not problem and attachment_confirmed:
+            problem = "sampled files are publication notices and a separate documents page has a downloadable attachment"
         if problem or (recipe.documents_url and not recipe.documents):
             document_warnings += await _document_lists(recipe, tenders, fetcher)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS

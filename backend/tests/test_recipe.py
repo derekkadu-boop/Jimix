@@ -751,6 +751,42 @@ NOTICE_ONLY = """<html><body><nav><a href="/help">Help</a></nav>
 <a href="/files/all.zip">Documents (ZIP)</a><a href="./documents">Vergabeunterlagen</a></body></html>"""
 
 
+@pytest.mark.parametrize(("attachment_page", "file_content", "global_link"), [
+    (None, b"", False), (404, b"", False), (200, b"%PDF-1.4", False),
+    (200, b"%PDF-1.4 spec", False), (200, b"%PDF-1.4 spec", True),
+])
+def test_notice_only_validation_requires_a_distinct_tender_attachment(attachment_page, file_content, global_link):
+    detail = '<a class="doc" href="/Bekanntmachung.pdf">Download</a>'
+    if attachment_page:
+        link = '<a href="/documents">Tender documents</a>'
+        detail += f"<nav>{link}</nav>" if global_link else link
+
+    def response(request):
+        if request.url.path.startswith("/t/"):
+            return httpx.Response(200, html=detail)
+        if request.url.path == "/Bekanntmachung.pdf":
+            return httpx.Response(200, content=b"%PDF-1.4", headers={"content-type": "application/pdf"})
+        if request.url.path == "/documents":
+            return httpx.Response(attachment_page, html='<a href="/Specification.pdf">Specification</a>')
+        if request.url.path == "/Specification.pdf":
+            return httpx.Response(200, content=file_content, headers={"content-type": "application/pdf"})
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(Recipe.model_validate(RECIPE), fetcher)
+        finally:
+            await fetcher.close()
+
+    report = asyncio.run(run())
+    if file_content == b"%PDF-1.4 spec" and not global_link:
+        assert "separate documents page" in report["problem"]
+        assert any("/documents" in warning for warning in report["warnings"])
+    else:
+        assert report["problem"] is None
+
+
 @pytest.mark.parametrize(("page", "hinted"), [(NOTICE_ONLY, True), (DETAIL.format(n=1), False)])
 def test_recipe_test_hints_at_linked_documents_page(page, hinted):
     def site(request: httpx.Request) -> httpx.Response:
@@ -760,20 +796,24 @@ def test_recipe_test_hints_at_linked_documents_page(page, hinted):
     tenders = [{"id": "1", "url": "https://portal.example/p/1/overview",
                 "_documentUrls": ["https://portal.example/p/1/announcements/1/Bekanntmachung.pdf"]}]
 
-    async def run(recipe):
+    async def run(recipe, *, retry_mapping=False):
         fetcher = Fetcher(transport=httpx.MockTransport(site))
         try:
-            return await agent._document_page_hint(recipe, tenders, fetcher)
+            return await agent._document_page_hint(recipe, tenders, fetcher, retry_mapping=retry_mapping)
         finally:
             await fetcher.close()
 
-    hint = asyncio.run(run(recipe))
+    hint, confirmed = asyncio.run(run(recipe))
+    assert not confirmed
     if hinted:
         assert "'vergabeunterlagen' (https://portal.example/p/1/documents)" in hint
     else:
         assert hint is None
     with_page = Recipe.model_validate(RECIPE | {"documents_page": {"path": "a.docs"}})
-    assert asyncio.run(run(with_page)) is None
+    assert asyncio.run(run(with_page)) == (None, False)
+    retry_hint, confirmed = asyncio.run(run(with_page, retry_mapping=True))
+    assert not confirmed
+    assert bool(retry_hint) == hinted
 
 
 @pytest.mark.parametrize("by_host", [False, True])
