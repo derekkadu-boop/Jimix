@@ -179,7 +179,7 @@ def _with_param(url: str, name: str, step: int) -> str:
 async def apply(
     recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None
 ) -> tuple[list[dict], bool]:
-    listing, raws, seen = recipe.listing, [], set()
+    listing, raws = recipe.listing, []
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
     starts = [listing.url]
     if listing.index:
@@ -189,6 +189,7 @@ async def apply(
         budget -= 1
     complete = bool(starts)
     for start in starts:
+        seen: set[str] = set()
         url, finished = start, False
         for page_number in range(min(recipe.max_pages, budget)):
             budget -= 1

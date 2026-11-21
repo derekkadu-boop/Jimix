@@ -575,3 +575,61 @@ def test_refresh_preserves_files_after_document_page_error(monkeypatch, tmp_path
     assert result == (1, None, "No document links found for 1 of 1 tenders")
     assert empty["documents"] == []
     assert empty["_documentsComplete"] is True
+
+
+def test_cosinex_category_pagination_uses_the_public_get_path():
+    category = "/VMPCenter/company/announcements/categoryOverview.do"
+    next_page = category + "?method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=2"
+    control = (
+        f"""<a class="browseForward" href="javascript:void(0);" """
+        f"""onclick="setTargetAndSubmit('{next_page}'); untrusted()">next</a>"""
+    )
+    listing = LIST_1.replace('<a class="next" href="/list?page=2">next</a>', control)
+    simplified = agent.simplify(listing)
+    assert "selectedTablePagePROJECT_RESULT=2" in simplified
+    assert "untrusted()" not in simplified
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {
+            "url": f"https://portal.example{category}?method=showCategoryOverview",
+            "index": {"path": "a[href*='cpvCode=']"},
+            "next_page": {
+                "path": "a.browseForward",
+                "attribute": "onclick",
+                "pattern": f"'{agent.COSINEX_PAGE_PATH}'",
+            },
+        },
+        "detail": None,
+        "documents": None,
+    })
+    requested = []
+    active_category = None
+
+    def response(request: httpx.Request):
+        nonlocal active_category
+        requested.append(request.url)
+        if request.url.params.get("method") == "showCategoryOverview":
+            links = [
+                f'<a href="{category}?method=showTable&cpvCode={code}">{code}</a>'
+                for code in ("90000000-7", "45000000-7")
+            ]
+            return httpx.Response(200, html="".join(links))
+        page = listing
+        if code := request.url.params.get("cpvCode"):
+            active_category = code
+        elif "selectedTablePagePROJECT_RESULT" in request.url.params:
+            page = LIST_2
+        if active_category == "45000000-7":
+            page = page.replace("/t/1", "/t/4").replace("/t/2", "/t/5").replace("/t/3", "/t/6")
+        return httpx.Response(200, html=page)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await apply(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    tenders, complete = asyncio.run(run())
+    assert [tender["id"] for tender in tenders] == ["1", "2", "3", "4", "5", "6"]
+    assert complete
+    assert requested.count(httpx.URL(f"https://portal.example{next_page}")) == 2
