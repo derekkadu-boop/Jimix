@@ -1,11 +1,14 @@
 import asyncio
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from threading import Thread
+from threading import Event, Thread
 
 import httpx
+import pytest
+from playwright.async_api import Error as PlaywrightError
 
 from app import browser, fetch
-from app.fetch import Fetcher
+from app.fetch import Blocked, Fetcher
 from app.recipe import Recipe, apply
 
 PAGE = """
@@ -116,3 +119,113 @@ def test_netserver_modal_reads_links_without_other_actions(monkeypatch):
     ]
     assert ("GET", "/jump") in calls
     assert not any(call[1] in ("/outside", "/forbidden", "/redirect-target") for call in calls)
+
+
+@pytest.mark.parametrize("stalled", [False, True])
+def test_browser_waits_for_delayed_files_within_the_render_budget(monkeypatch, stalled):
+    release = Event()
+    requested = Event()
+    resolving = Event()
+    stopped = Event()
+    if stalled:
+        page = (
+            '<main><a href="/notice">Published notice</a></main>'
+            "<script>fetch('/files.json'); fetch('/queued.json');</script>"
+        )
+    else:
+        page = """
+        <app-root></app-root>
+        <script>
+        setTimeout(async () => {
+            const {file} = await (await fetch("/files.json")).json();
+            setTimeout(() => {
+                const link = document.createElement("a");
+                link.href = file;
+                link.textContent = "Specification";
+                document.querySelector("app-root").append(link);
+            }, 200);
+        }, 2300);
+        </script>
+        """
+
+    class Site(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/files.json":
+                requested.set()
+                if stalled:
+                    release.wait(5)
+                    return
+                body, content_type = '{"file": "/specification.pdf"}', "application/json"
+            elif self.path == "/robots.txt":
+                body, content_type = "User-agent: *\nDisallow:", "text/plain"
+            elif self.path == "/challenge":
+                body = '<div class="g-recaptcha"></div><script>fetch("/queued.json");</script>'
+                content_type = "text/html"
+            else:
+                body, content_type = page, "text/html"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.end_headers()
+            self.wfile.write(body.encode())
+
+        def log_message(self, *_args):
+            pass
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Site) as site:
+        base = f"http://127.0.0.1:{site.server_port}"
+
+        async def allow_fixture(url):
+            assert url.startswith(base + "/")
+            if url.endswith("/queued.json"):
+                resolving.set()
+                try:
+                    await asyncio.sleep(300)
+                finally:
+                    stopped.set()
+
+        monkeypatch.setattr(browser, "check_public", allow_fixture)
+        monkeypatch.setattr(fetch, "INTERVAL", 0)
+        monkeypatch.setattr(browser, "QUIET_SECONDS", 0.35)
+        monkeypatch.setattr(browser, "RENDER_TIMEOUT_MS", 1200 if stalled else 5000)
+        worker = Thread(target=site.serve_forever, daemon=True)
+        worker.start()
+
+        async def read(*, listing=False, path="/"):
+            fetcher = Fetcher(transport=httpx.AsyncHTTPTransport())
+            try:
+                if listing:
+                    recipe = Recipe.model_validate({
+                        "method": "browser",
+                        "listing": {
+                            "kind": "browser", "url": base + "/", "records": "main a[href]",
+                            "fields": {"id": {"path": "$", "attribute": "href"}, "title": {"path": "$"}},
+                        },
+                    })
+                    return await apply(recipe, fetcher)
+                return await browser.render(base + path, fetcher, require_stable=path == "/challenge")
+            finally:
+                await fetcher.close()
+
+        started = time.monotonic()
+        try:
+            html, calls, final = asyncio.run(read())
+            elapsed = time.monotonic() - started
+            if stalled:
+                assert resolving.is_set() and stopped.is_set()
+                with pytest.raises(PlaywrightError, match="did not settle"):
+                    asyncio.run(read(listing=True))
+                with pytest.raises(Blocked, match="captcha"):
+                    asyncio.run(read(path="/challenge"))
+        finally:
+            release.set()
+            site.shutdown()
+            worker.join()
+    assert requested.is_set()
+    assert final == base + "/"
+    if stalled:
+        assert elapsed < 5
+        assert 'href="/notice">Published notice' in html
+        assert calls == []
+    else:
+        assert '<a href="/specification.pdf">Specification</a>' in html
+        assert calls == [{"url": base + "/files.json", "method": "GET", "sample": '{"file": "/specification.pdf"}'}]
