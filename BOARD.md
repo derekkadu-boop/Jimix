@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:06 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:25 | B-01
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:25 | idle (B-01 done)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:35 | B-29 (then B-09 report)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:38 | B-20
@@ -19,22 +19,29 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-01 Document URLs built from tender fields
 - **Priority:** high (documents are the core feature)
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 03:15
+- **Status:** done (4f3751a)
 - **Problem:** TenderNed (https://www.tenderned.nl/) attaches through its own JSON API
   (`/papi/tenderned-rs-tns/v2/publicaties?page=0&size=50`, 150 tenders in a test), but documents are
   at `/papi/tenderned-rs-tns/v2/publicaties/{publicatieId}/pdf` and a recipe can't build that URL.
 - **Idea:** a declarative URL template in the recipe, e.g. `"documents": {"template": ".../{id}/pdf"}`,
   filled from mapped fields. Also check whether that PDF is the notice or the actual tender documents.
 - **Test with:** TenderNed.
-- **Last seen:** 2026-11-21 04:25
-- **Findings:** (in progress, branch `b-01-url-templates`, not merged, awaiting review) Recipe gains
-  `detail.url` and `documents_url: {template, kind}` (placeholders = mapped fields) plus dot-path
-  `attribute`. TenderNed attaches with it ($0.04-0.05, serving, 9 of 10 sampled tenders got a file), but
-  the agent picks `/{id}/pdf`, which is only the notice. The real tender files are at
-  `/papi/tenderned-rs-tns/v2/publicaties/{id}/documenten` (JSON, `documenten[].links.download.href`,
-  e.g. 450212 has bestek, leidraad, ZIPs). That list loads only when the Documents tab is clicked, so
-  render_page misses it. Branch now also has test_recipe probe sibling `documents`/`documenten`/...
-  endpoints next to a single-file documents_url; not yet tried on the real portal.
+- **Last seen:** 2026-11-21 04:46
+- **Findings:** Generic, no portal rules. Recipe gains `detail.url` and `documents_url: {template, kind}`
+  (placeholders = mapped field names, URL-quoted; host must be literal, no `//`), and JSON `attribute`
+  may be a dot path (`links.download.href`). `documents_url` + `documents` reads file links from the
+  templated page; without `documents` the templated URL is the file. Errors/blocks on that page set
+  `_documentPageError` / `_documentBlock` like documents_by_host. test_recipe now probes per-tender JSON
+  document lists by REST convention (`<json listing path>/<id>/<name>`, JSON detail URL, sibling of a
+  single-file documents_url; names documents/attachments/files/dokumente/documenten/documentos/documenti),
+  cached per run, restores `fetcher.blocks` on a probe 403, and hands the agent a ready template.
+  Reviewed by 2 subagents (6 + 3 findings, all fixed). 51 tests + ruff pass.
+  Real runs (fresh DB, unassisted): run 1-2 serving ($0.04/$0.05), files delivered, but only the notice
+  PDF (`/{id}/pdf`); the actual tender files are in `/publicaties/{id}/documenten` (loads only when the
+  Documents tab is clicked, so render_page never shows it). Run 3 (probe only on single-file recipes)
+  failed: agent gave up. Runs 4-5 (generalized probe) failed before reaching the API: render_page got
+  an empty Angular shell (B-21). So the probe is unit-tested but not yet confirmed live on TenderNed;
+  retest after B-21. No second JSON-API portal tried yet. Spend: about $0.21 over 5 attaches.
 
 ### B-02 Documents on a different external platform per tender
 - **Priority:** high (documents are the core feature)
