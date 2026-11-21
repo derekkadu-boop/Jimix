@@ -352,14 +352,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-26 Listings silently capped at max_pages
 - **Priority:** medium (tenders beyond the cap never get documents)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:46
-- **Last seen:** 2026-11-21 05:46
+- **Status:** in review (PR #12)
 - **Problem:** `Recipe.max_pages` defaults to 20 and the agent leaves it. On https://www.vergabe.metropoleruhr.de/
   (20 rows per page, about 41 pages) a repaired recipe read 400 tenders and stopped; `complete` is false,
   but no run reason or test warning says the listing was cut.
 - **Idea:** report "listing stopped at max_pages" in test_recipe and the run reason; raise the default or
   let the agent set it from the page count it sees.
-- **Findings:**
+- **Findings:** PR #12 reports incomplete listing coverage in recipe validation and run/portal reasons. Page limits and preservation of older records stay intact. Two reviewers, 84 backend tests and Ruff passed. No fresh real-portal attach was run.
 
 ### B-27 test_recipe doesn't flag a listing without pagination
 - **Priority:** medium
