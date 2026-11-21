@@ -962,3 +962,11 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** The model can stop after an unsuccessful recipe or a narrow discovery path while viable public listing and document routes remain untried.
 - **Idea:** Encourage distinct public discovery paths and use feedback from failed candidates to guide the next probe. Separate discovery coverage from final tender/detail/file preview limits. Keep existing cost, request pacing, robots, and download safeguards. Test early give-up and a later successful candidate deterministically.
 - **Findings:**
+
+### B-74 Skip API metadata returned as a tender attachment
+- **Priority:** high (false serving state on the Doffin Dev portal)
+- **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 07:54
+- **Last seen:** 2026-11-21 07:54
+- **Problem:** Fresh URL-only Doffin treated notice-detail JSON as binary attachments. Attach served 984 tenders with 3 files at USD 0.0605 / 14 calls. Refresh made 0 model calls and listed 993 saved tenders with 6 files. Every inspected file parsed as a notice metadata object. Zero procurement attachments were established.
+- **Idea:** Reject an inline JSON API response as a document when it is an unnamed endpoint. Preserve explicitly published JSON attachments. Validation and refresh should use the same decision, including existing recipes previously accepted on these bytes.
+- **Findings:**
