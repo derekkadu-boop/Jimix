@@ -1,9 +1,11 @@
+import asyncio
 import logging
 import os
+from contextlib import suppress
 from urllib.parse import parse_qsl, urlsplit
 
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Locator, Page, Request, async_playwright
+from playwright.async_api import Locator, Page, Request, Response, Route, async_playwright
 
 from .fetch import USER_AGENT, Blocked, Fetcher, block_reason, check_public, wait_turn
 
@@ -12,9 +14,66 @@ BROWSER_WS = os.environ.get("WATCHTOWER_BROWSER_WS")
 RENDER_TIMEOUT_MS = int(float(os.environ.get("WATCHTOWER_RENDER_TIMEOUT", "240")) * 1000)
 CACHED = {"script", "stylesheet"}
 SKIPPED = {"image", "font", "media"}
+TRACKED = CACHED | {"document", "fetch", "xhr"}
+REQUEST_TIMEOUT_MS = 60_000
+QUIET_SECONDS = 3
+EMPTY_SHELL_GRACE_SECONDS = 15
 FILE_TREE_TIMEOUT_MS = 25_000
 NETSERVER_DIALOG = "#detailModal"
 NETSERVER_FILE_LINK = "a.filenameEllipsis[href]"
+
+DOM_STATE = """() => {
+    const body = document.body;
+    if (!body) return [0, 0, true];
+    const mount = body.querySelector('#root, #app, app-root, #__next, #__nuxt');
+    const text = body.innerText.trim();
+    const empty = node => !node.innerText.trim() && !node.querySelector('a[href], input, button, table');
+    return [body.getElementsByTagName('*').length, text.length, empty(body) || (!!mount && empty(mount))];
+}"""
+
+
+class PageActivity:
+    def __init__(self):
+        self.clock = asyncio.get_running_loop().time
+        self.last_request_at = self.clock()
+        self.pending: set[Request] = set()
+        self.request_count = 0
+        self.readers: set[asyncio.Task] = set()
+
+    def started(self, request: Request) -> None:
+        if request.resource_type in TRACKED:
+            self.pending.add(request)
+            self.last_request_at = self.clock()
+            self.request_count += 1
+
+    def finished(self, request: Request) -> None:
+        if request in self.pending:
+            self.pending.remove(request)
+            self.last_request_at = self.clock()
+
+    async def wait_until_stable(self, page: Page) -> None:
+        await page.wait_for_load_state("domcontentloaded", timeout=0)
+        last_change = self.clock()
+        shell_grace_ends = last_change + EMPTY_SHELL_GRACE_SECONDS
+        previous = None
+        while True:
+            if not self.pending and not self.readers:
+                try:
+                    current = await page.evaluate(DOM_STATE)
+                except PlaywrightError:
+                    if page.is_closed():
+                        raise
+                    previous = None
+                else:
+                    now = self.clock()
+                    if current != previous:
+                        previous = current
+                        last_change = now
+                    idle = now - max(last_change, self.last_request_at)
+                    if (not self.pending and not self.readers and idle >= QUIET_SECONDS
+                            and (not current[2] or now >= shell_grace_ends)):
+                        return
+            await asyncio.sleep(0.25)
 
 
 def _netserver_file_tree(request: Request, expected: tuple[str, str] | None) -> bool:
@@ -52,7 +111,9 @@ async def _latest_netserver_control(page: Page) -> Locator:
     return max(versions, key=lambda item: item[0])[1]
 
 
-async def render(url: str, fetcher: Fetcher, *, netserver_files: bool = False) -> tuple[str, list[dict], str]:
+async def render(
+    url: str, fetcher: Fetcher, *, netserver_files: bool = False, require_stable: bool = False
+) -> tuple[str, list[dict], str]:
     if not await fetcher.allowed(url):
         raise Blocked(f"robots.txt disallows {url}")
     if fetcher.browser is None:
@@ -64,8 +125,20 @@ async def render(url: str, fetcher: Fetcher, *, netserver_files: bool = False) -
     expected_tree: tuple[str, str] | None = None
     file_tree_requested = False
     file_tree_denied = False
+    activity = PageActivity()
+    started = activity.clock()
+    deadline = started + RENDER_TIMEOUT_MS / 1000
+    routes: set[asyncio.Task] = set()
+    closing = False
 
-    async def route(route):
+    async def fetch_route(route: Route):
+        await wait_turn(route.request.url)
+        if netserver_files:
+            return await route.fetch(max_redirects=0)
+        timeout = max(1, min(REQUEST_TIMEOUT_MS, int((deadline - activity.clock()) * 1000)))
+        return await route.fetch(max_redirects=0, timeout=timeout)
+
+    async def handle(route: Route):
         nonlocal file_tree_denied, file_tree_requested
         request = route.request
         if request.resource_type in SKIPPED:
@@ -94,16 +167,16 @@ async def render(url: str, fetcher: Fetcher, *, netserver_files: bool = False) -
         try:
             await check_public(request.url)
             try:
-                await wait_turn(request.url)
-                response = await route.fetch(max_redirects=0)
+                response = await fetch_route(route)
             except PlaywrightError:
-                if netserver_files and request.method not in ("GET", "HEAD"):
+                if closing or page.is_closed() or (netserver_files and request.method not in ("GET", "HEAD")):
                     raise
-                await wait_turn(request.url)
-                response = await route.fetch(max_redirects=0)
+                response = await fetch_route(route)
         except (ValueError, OSError, PlaywrightError) as exc:
-            log.info("browser %s %s aborted: %s", request.method, request.url, str(exc).splitlines()[0][:150])
-            await route.abort()
+            reason = str(exc).splitlines() or [type(exc).__name__]
+            log.info("browser %s %s aborted: %s", request.method, request.url, reason[0][:150])
+            if not page.is_closed():
+                await route.abort()
             return
         log.info("browser %s %s -> %s", request.method, request.url, response.status)
         if netserver_files and 300 <= response.status < 400 and response.headers.get("location"):
@@ -116,29 +189,79 @@ async def render(url: str, fetcher: Fetcher, *, netserver_files: bool = False) -
                 pass
         await route.fulfill(response=response)
 
-    async def on_response(response):
-        if "json" in response.headers.get("content-type", "") and len(calls) < 10:
-            try:
-                body = await response.text()
-            except PlaywrightError:
-                return
-            calls.append({"url": response.url, "method": response.request.method, "sample": body[:1500]})
+    async def route(intercepted: Route):
+        if closing:
+            with suppress(PlaywrightError):
+                await intercepted.abort()
+            return
+        task = asyncio.current_task()
+        assert task is not None
+        routes.add(task)
+        try:
+            if netserver_files:
+                await handle(intercepted)
+            else:
+                async with asyncio.timeout_at(deadline):
+                    await handle(intercepted)
+        except TimeoutError:
+            if not closing:
+                with suppress(PlaywrightError):
+                    await intercepted.abort()
+        except asyncio.CancelledError:
+            if closing:
+                with suppress(PlaywrightError):
+                    await intercepted.abort()
+            raise
+        finally:
+            routes.discard(task)
+
+    async def read_json(response: Response):
+        try:
+            body = await response.text()
+        except PlaywrightError:
+            return
+        calls.append({"url": response.url, "method": response.request.method, "sample": body[:1500]})
+
+    def on_response(response: Response):
+        if "json" in response.headers.get("content-type", "").lower() and len(calls) + len(activity.readers) < 10:
+            reader = asyncio.create_task(read_json(response))
+            activity.readers.add(reader)
+            reader.add_done_callback(activity.readers.discard)
 
     options = {"service_workers": "block", "accept_downloads": False} if netserver_files else {}
     page = await fetcher.browser.new_page(user_agent=USER_AGENT, **options)
+    settle_error = None
     try:
+        page.on("request", activity.started)
+        page.on("requestfinished", activity.finished)
+        page.on("requestfailed", activity.finished)
         if netserver_files:
             await page.context.route("**/*", route)
             await page.context.route_web_socket("**/*", lambda socket: socket.close())
+            response = await page.goto(url, wait_until="load", timeout=RENDER_TIMEOUT_MS)
+            await page.wait_for_timeout(2_000)
+            html = await page.content()
         else:
             await page.route("**/*", route)
             page.on("response", on_response)
-        response = await page.goto(url, wait_until="load", timeout=RENDER_TIMEOUT_MS)
-        await page.wait_for_timeout(2_000)
-        html, final = await page.content(), page.url
+            timeout = max(1, int((deadline - activity.clock()) * 1000))
+            response = await page.goto(url, wait_until="commit", timeout=timeout)
+            if response and (reason := block_reason(response.status, response.headers, url, page.url, None)):
+                raise fetcher.blocked(reason)
+            try:
+                async with asyncio.timeout_at(deadline):
+                    await activity.wait_until_stable(page)
+            except TimeoutError as exc:
+                log.info("render %s reached its time limit with %d pending requests",
+                         origin.hostname, len(activity.pending))
+                settle_error = exc
+            html = await asyncio.wait_for(page.content(), timeout=max(1, deadline - activity.clock()))
+        final = page.url
         status = response.status if response else 200
         if reason := block_reason(status, response.headers if response else {}, url, final, html):
             raise fetcher.blocked(reason)
+        if require_stable and settle_error is not None:
+            raise PlaywrightError("Browser page did not settle before the render timeout") from settle_error
         if netserver_files:
             control = await _latest_netserver_control(page)
             dialog = page.locator(NETSERVER_DIALOG)
@@ -166,5 +289,15 @@ async def render(url: str, fetcher: Fetcher, *, netserver_files: bool = False) -
             await links.first.wait_for(timeout=FILE_TREE_TIMEOUT_MS)
             html = await dialog.inner_html(timeout=FILE_TREE_TIMEOUT_MS)
     finally:
+        closing = True
+        if not netserver_files:
+            page.remove_listener("response", on_response)
+        tasks = tuple(routes | activity.readers)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         await page.close()
+        log.info("render %s in %.1fs, %d tracked requests, %d JSON responses",
+                 origin.hostname, activity.clock() - started, activity.request_count, len(calls))
     return html, calls, final

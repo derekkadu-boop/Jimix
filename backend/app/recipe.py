@@ -192,7 +192,7 @@ def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
 
 async def _load(kind: Kind, url: str, fetcher: Fetcher):
     if kind == "browser":
-        html, _, final = await render(url, fetcher)
+        html, _, final = await render(url, fetcher, require_stable=True)
         return BeautifulSoup(html, "html.parser"), final
     resp = await fetcher.get(url)
     if kind == "json":
