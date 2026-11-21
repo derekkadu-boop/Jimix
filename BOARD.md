@@ -530,6 +530,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Accept `[*]` (map over a list) and `[N]` (index) in dot paths, anywhere in the path.
 - **Findings:**
 
+### B-41 Preserve tenders when a listing index is truncated
+- **Priority:** high (unvisited categories can lose open status and stop receiving documents)
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:50
+- **Last seen:** 2026-11-21 05:50
+- **Problem:** Recipe.apply caps unique category links at MAX_INDEX_LISTS. If all visited categories finish, it reports complete despite unvisited categories. Synthetic index with MAX_INDEX_LISTS + 1 ordinary category links reproduces the coverage error; no real site was probed.
+- **Idea:** Mark truncated category indexes as incomplete and verify that refreshing preserves the open status and files of a previously saved tender in a skipped category.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
