@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:30 | B-56 draft PR #23, UK run in progress
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:31 | B-55 cursor pagination; monitoring B-56 UK
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -824,7 +824,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-55 Cursor and token pagination
 - **Priority:** high (reusable declarative scraping capability)
-- **Status:** open
+- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 08:31
+- **Last seen:** 2026-11-21 08:31
 - **Problem:** APIs often page with a cursor from the previous response (`nextPageToken`, `cursor`, `after`, a `Link: rel=next` header) rather than page numbers or next links.
 - **Idea:** Listing `next_from`: JSON path (or header name) of the next cursor in the response, and where to put it (query parameter or body path). Stop when absent.
 - **Findings:**
