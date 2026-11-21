@@ -84,6 +84,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
+  Completion requires a fresh URL-only attach where the product agent independently discovers the public document path, validates a real attachment, and then reuses the resulting recipe on Refresh. NRW is the test case. A manually supplied document route or recipe does not satisfy this check.
   Lead: Fresh URL-only NRW attach on reviewed 379489f, max details 3: failed with 0 tenders / 0 files, 13 model calls / USD 0.0576. Listing was readable, but the agent could not validate a document mapping; no successful Refresh or Düsseldorf attachment verified.
   newly displayed links. The live NRW sample produced 25 links and a verified 102,316-byte PDF.
   Failed dialogs retain earlier files and allow other tenders to finish. Reviewed by the Codex
