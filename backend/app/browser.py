@@ -1,13 +1,15 @@
 import asyncio
+import json
 import logging
 import os
+import re
 from contextlib import suppress
 from urllib.parse import parse_qsl, urlsplit
 
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, Request, Response, Route, async_playwright
 
-from .fetch import USER_AGENT, Blocked, Fetcher, block_reason, check_public, wait_turn
+from .fetch import USER_AGENT, Blocked, Fetcher, block_reason, check_public, site, wait_turn
 
 log = logging.getLogger("watchtower.browser")
 BROWSER_WS = os.environ.get("WATCHTOWER_BROWSER_WS")
@@ -110,6 +112,30 @@ async def _latest_netserver_control(page: Page) -> Locator:
             raise PlaywrightError("Could not read NetServer document version")
         versions.append((int(version), control))
     return max(versions, key=lambda item: item[0])[1]
+
+
+SENSITIVE = re.compile(r"pass(word)?|token|csrf|secret|session|auth|credential", re.IGNORECASE)
+MAX_POST_BODY = 8 * 1024
+
+
+def listing_post(response, sent: str, page_url: str) -> bool:
+    if not 200 <= response.status < 300 or len(sent) > MAX_POST_BODY or site(response.url) != site(page_url):
+        return False
+    try:
+        body = json.loads(sent)
+    except ValueError:
+        return False
+    return isinstance(body, dict) and not SENSITIVE.search(json.dumps(list(_keys(body))))
+
+
+def _keys(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield key
+            yield from _keys(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _keys(item)
 
 
 async def render(
@@ -221,7 +247,13 @@ async def render(
             body = await response.text()
         except PlaywrightError:
             return
-        calls.append({"url": response.url, "method": response.request.method, "sample": body[:1500]})
+        call = {"url": response.url, "method": response.request.method, "sample": body[:1500]}
+        if response.request.method == "POST":
+            sent = response.request.post_data or ""
+            call["requestBody"] = sent[:1500]
+            if listing_post(response, sent, url):
+                fetcher.observed_posts.setdefault(response.url, []).append(json.loads(sent))
+        calls.append(call)
 
     def on_response(response: Response):
         if "json" in response.headers.get("content-type", "").lower() and len(calls) + len(activity.readers) < 10:

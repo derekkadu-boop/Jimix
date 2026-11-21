@@ -103,6 +103,7 @@ def portal(request: httpx.Request) -> httpx.Response:
 @pytest.fixture(autouse=True)
 def fast(monkeypatch, tmp_path):
     monkeypatch.setattr(fetch, "INTERVAL", 0)
+    monkeypatch.setattr(fetch, "RETRY_DELAYS", (0, 0))
     monkeypatch.setattr(documents, "FILES_DIR", tmp_path)
 
 
@@ -1334,3 +1335,142 @@ def test_tls_reads_issuer_url_and_detects_incomplete_chains():
                                             "unable to get local issuer certificate (_ssl.c:1010)")
     assert tls.incomplete_chain(error)
     assert not tls.incomplete_chain(ssl.SSLCertVerificationError(1, "CERTIFICATE_VERIFY_FAILED: hostname mismatch"))
+
+
+@pytest.mark.parametrize(("failure", "earlier"), [(httpx.ConnectError("connection reset"), 0), (503, 0), (503, 2)])
+def test_refresh_does_not_repair_after_a_temporary_failure(monkeypatch, tmp_path, failure, earlier):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+
+    async def no_agent(*args, **kwargs):
+        raise AssertionError("a temporary failure must not start a repair")
+
+    monkeypatch.setattr(watchtower, "explore", no_agent)
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO portal (id, url, state, created_at) VALUES ('p', 'https://portal.example/list', 'serving', ?)",
+            (db.now(),),
+        )
+    attach = watchtower._new_run("p", "read")
+    watchtower._save_recipe("p", attach, Recipe.model_validate(RECIPE))
+    watchtower._finish(attach, "ok", "read 3 tenders", agent.Usage())
+    for _ in range(earlier):
+        watchtower._finish(watchtower._new_run("p", "read"), "failed", "ConnectError: reset", agent.Usage())
+    run_id = watchtower._new_run("p", "read")
+
+    def site(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        if isinstance(failure, int):
+            return httpx.Response(failure)
+        raise failure
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(site))
+        try:
+            await watchtower._read("p", run_id, fetcher)
+        finally:
+            await fetcher.close()
+
+    asyncio.run(run())
+    with db.connect() as conn:
+        portal_row = conn.execute("SELECT state, reason FROM portal").fetchone()
+        runs = conn.execute("SELECT kind, result FROM run WHERE id = ?", (run_id,)).fetchall()
+        repairs = conn.execute("SELECT count(*) FROM run WHERE kind = 'repair'").fetchone()[0]
+    if earlier:
+        assert portal_row["state"] == "failed"
+        assert portal_row["reason"].startswith("Failing on temporary errors for 3 reads in a row")
+    else:
+        assert portal_row["state"] == "serving"
+        assert "temporary error" in portal_row["reason"]
+    assert [tuple(r) for r in runs] == [("read", "failed")]
+    assert repairs == 0
+
+
+def test_post_json_listing_pages_inside_the_body():
+    import json as jsonlib
+
+    bodies = []
+    pages = {0: [{"id": "N-1", "title": "Bridge works", "link": "/n/1"}, {"id": "N-2", "title": "IT services", "link": "/n/2"}],
+             1: [{"id": "N-3", "title": "Road supplies", "link": "/n/3"}], 2: []}
+
+    def api(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        if request.method == "POST" and request.url.path == "/api/search":
+            body = jsonlib.loads(request.content)
+            bodies.append(body)
+            return httpx.Response(200, json={"hits": pages[body["paging"]["page"]]})
+        return httpx.Response(404)
+
+    recipe = Recipe.model_validate({
+        "method": "discovered_api",
+        "listing": {"kind": "json", "url": "https://portal.example/api/search", "method": "POST",
+                    "body": {"query": "", "paging": {"page": 0, "size": 2}}, "records": "hits",
+                    "page_param": "paging.page",
+                    "fields": {"id": {"path": "id"}, "title": {"path": "title"}, "url": {"path": "link"}}},
+    })
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(api))
+        try:
+            return await apply(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    tenders, complete = asyncio.run(run())
+    assert [t["id"] for t in tenders] == ["N-1", "N-2", "N-3"]
+    assert [b["paging"]["page"] for b in bodies] == [0, 1, 2]
+    assert all(b["query"] == "" and b["paging"]["size"] == 2 for b in bodies)
+    assert complete
+    assert tenders[0]["url"] == "https://portal.example/n/1"
+
+
+def test_post_listing_requires_json_body_and_observed_endpoint():
+    base = {"method": "discovered_api", "listing": {"kind": "json", "url": "https://portal.example/api/search",
+            "method": "POST", "records": "hits", "fields": {"id": {"path": "id"}}}}
+    with pytest.raises(ValueError, match="JSON body"):
+        Recipe.model_validate(base)
+    fetcher = Fetcher()
+    posting = base | {"listing": base["listing"] | {"body": {"q": "", "page": 0}, "page_param": "page"}}
+    output, recipe = asyncio.run(agent._call("test_recipe", {"recipe": posting}, fetcher))
+    assert output.startswith("REFUSED: a POST must repeat") and recipe is None
+    fetcher.observed_posts["https://portal.example/api/search/"] = [{"q": "", "page": 3}]
+    assert agent._observed_post(Recipe.model_validate(posting), fetcher)
+    fetcher.observed_posts["https://portal.example/api/search/"] = [{"q": "x", "page": 0}]
+    assert not agent._observed_post(Recipe.model_validate(posting), fetcher)
+    fetcher.observed_posts["https://portal.example/api/search/"] = [{"q": "", "page": 0, "extra": "x"}]
+    assert not agent._observed_post(Recipe.model_validate(posting), fetcher)
+    assert not agent.same_shape({"n": True}, {"n": 5})
+    assert not agent.same_shape({"n": 1}, {"n": True})
+    assert agent.same_shape({"n": 1, "s": "a"}, {"n": 50.0, "s": "a"})
+
+
+def test_post_paging_stops_cleanly_on_a_later_client_error():
+    import json as jsonlib
+
+    def api(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        page = jsonlib.loads(request.content)["page"]
+        if page > 2:
+            return httpx.Response(400, json={"error": "too deep"})
+        return httpx.Response(200, json={"hits": [{"id": f"P{page}", "title": "Works", "link": f"/n/{page}"}]})
+
+    recipe = Recipe.model_validate({
+        "method": "discovered_api",
+        "listing": {"kind": "json", "url": "https://portal.example/api/search", "method": "POST",
+                    "body": {"page": 1}, "records": "hits", "page_param": "page",
+                    "fields": {"id": {"path": "id"}, "title": {"path": "title"}, "url": {"path": "link"}}},
+    })
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(api))
+        try:
+            return await apply(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    tenders, complete = asyncio.run(run())
+    assert [t["id"] for t in tenders] == ["P1", "P2"]
+    assert not complete

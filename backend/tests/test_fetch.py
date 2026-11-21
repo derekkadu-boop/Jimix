@@ -1,7 +1,12 @@
+import asyncio
+import socket
+import time
+
 import httpx
 import pytest
 
-from app.fetch import _file_name, block_reason, parse_robots, robots_allows
+from app import fetch
+from app.fetch import Fetcher, _file_name, block_reason, parse_robots, robots_allows
 
 
 @pytest.mark.parametrize(
@@ -104,3 +109,59 @@ def test_robots_parsing_edge_cases():
 def test_robots_wildcards_stay_linear():
     rules = parse_robots("User-agent: *\nDisallow: /" + "*a" * 30 + "b\n")
     assert robots_allows(rules, "https://p.example/" + "a" * 5000)
+
+
+@pytest.mark.parametrize(
+    ("failures", "ok"),
+    [
+        ([httpx.ReadTimeout("slow")], True),
+        ([socket.gaierror(-2, "Name or service not known"), 503], True),
+        ([502, 504], True),
+        ([429], True),
+        ([httpx.ConnectError("reset")] * 3, False),
+        ([503] * 3, False),
+    ],
+)
+def test_get_retries_transient_errors(monkeypatch, failures, ok):
+    monkeypatch.setattr(fetch, "INTERVAL", 0)
+    monkeypatch.setattr(fetch, "RETRY_DELAYS", (0, 0))
+    attempts = []
+
+    def site(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        attempts.append(request.url.path)
+        if len(attempts) <= len(failures):
+            failure = failures[len(attempts) - 1]
+            if isinstance(failure, int):
+                return httpx.Response(failure, headers={"retry-after": "0"})
+            raise failure
+        return httpx.Response(200, html="<p>list</p>")
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(site))
+        try:
+            return await fetcher.get("https://p.example/list")
+        finally:
+            await fetcher.close()
+
+    if ok:
+        assert asyncio.run(run()).text == "<p>list</p>"
+    else:
+        with pytest.raises((httpx.TransportError, httpx.HTTPStatusError)):
+            asyncio.run(run())
+    assert len(attempts) == min(len(failures) + 1, 3)
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [("7", 7), ("600", 60), ("", 15), ("²", 15), ("Fri, 21 Nov 2026 05:00:00 GMT", 15)],
+)
+def test_retry_after_is_bounded(header, expected):
+    resp = httpx.Response(429, headers=[(b"retry-after", header.encode("latin-1"))] if header else [])
+    assert fetch.retry_after(resp, 2.0) == expected
+
+
+def test_pause_holds_back_the_next_request_to_that_site():
+    fetch.pause("https://slow.example/list", 5)
+    assert fetch._gates["slow.example"].last > time.monotonic() + 4

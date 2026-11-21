@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, quote, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 from weakref import WeakKeyDictionary
 
 import httpx
@@ -61,6 +61,12 @@ Pick the most direct source, in this order:
 1. documented_api: a public, free, documented API. Look for links named API, Schnittstelle, open data,
    developer, OpenAPI or Swagger, often in the footer or help pages, and check the automatic discovery below.
 2. discovered_api: a public JSON endpoint the site itself calls (see render_page's JSON responses).
+   Many search pages load results with a POST: when render_page shows a JSON call with method POST and a
+   requestBody that returns tenders, use it. Explore it with fetch_json (method POST, the exact body), then
+   set listing.method POST, listing.body to that body and page_param to its page field. A GET to that URL
+   usually fails.
+If an API is disallowed by robots.txt or needs a key, don't stop: fall back to the HTML or browser listing,
+which may be allowed.
 3. html: server-rendered HTML pages.
 4. browser: HTML that only appears after JavaScript runs.
 Do not read JavaScript bundles with fetch_page or fetch_json. Use scan_scripts to list the API paths
@@ -101,7 +107,9 @@ A recipe is JSON:
     "fields": {{"<field>": {{"path": "CSS selector inside the row ($ is the row) or dot path",
                             "attribute": null, "pattern": "optional regex; group 1 (or the match) is kept"}}}},
     "next_page": {{"path": "selector or dot path of the next page link", "attribute": "href"}} or null,
-    "page_param": "query parameter to increment instead of next_page" or null,
+    "page_param": "query parameter to increment instead of next_page (for POST: a dot path in body)" or null,
+    "method": "GET" (default) or "POST" for JSON search APIs the page itself calls,
+    "body": {{...the JSON request body the page sent, from render_page's requestBody...}} or null,
     "index": {{"path": "selector of links on url to the actual list pages", "attribute": "href"}} or null
   }},
   "detail": {{"kind": "html" | "json" | "browser", "url": "optional URL template, e.g. https://host/api/tenders/{{id}}",
@@ -164,7 +172,13 @@ RECIPE = {"recipe": {"type": "object"}}
 TOOLS = [
     _tool("fetch_page", "GET a page and return its simplified HTML.", CHUNKED, ["url"]),
     _tool("render_page", "Render a page in a browser. Returns its DOM and the JSON responses it loaded.", URL),
-    _tool("fetch_json", "GET a URL and return the raw body, for APIs and API specifications.", CHUNKED, ["url"]),
+    _tool(
+        "fetch_json",
+        "GET a URL and return the raw body, for APIs and specifications. To repeat a POST the page made, pass"
+        " method POST and its exact JSON body (from render_page's requestBody).",
+        CHUNKED | {"method": {"type": "string", "enum": ["GET", "POST"]}, "body": {"type": "object"}},
+        ["url"],
+    ),
     _tool("scan_scripts", "List API-like paths found in a page's scripts, with surrounding code.", URL),
     _tool("test_recipe", "Run a recipe on 3 list pages and 3 detail pages. Returns samples and problems.", RECIPE),
     _tool("submit_recipe", "Submit a recipe. Accepted only when test_recipe would report no problem.", RECIPE),
@@ -306,6 +320,11 @@ def _page_content(html: str, offset: int = 0, *, base: str | None = None) -> str
     return "\n".join([*hints, _chunk(simplified, offset)])
 
 
+POST_NOT_OBSERVED = (
+    "REFUSED: a POST must repeat a JSON request the site itself made: same url, same keys and same non-number"
+    " values (numbers such as page or size may change); run render_page on the page that shows the tenders and"
+    " copy url and requestBody"
+)
 NO_DOCUMENT_LINKS = (
     "no document links in the sampled tenders: map the actual file links (documents, documents_page or"
     " documents_by_host); call give_up with blocked=true only if a login or captcha on documents was detected"
@@ -520,6 +539,11 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
     if name in ("fetch_page", "fetch_json") and urlsplit(args.get("url", "")).path.endswith((".js", ".mjs")):
         return "REFUSED: do not read JavaScript bundles; use scan_scripts on the page that loads them.", None
     try:
+        if name == "fetch_json" and args.get("method") == "POST":
+            body = args.get("body") or {}
+            if not _observed(args["url"], body, fetcher):
+                return POST_NOT_OBSERVED, None
+            return _chunk((await fetcher.post_json(args["url"], body)).text, args.get("offset", 0)), None
         if name in ("fetch_page", "fetch_json"):
             resp = await fetcher.get(args["url"])
             kind = resp.headers.get("content-type", "")
@@ -532,13 +556,17 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
             return f"URL: {base}\n{_page_content(resp.text, args.get('offset', 0), base=base)}", None
         if name == "render_page":
             html, calls, final = await render(args["url"], fetcher)
-            return f"URL: {final}\n{_page_content(html, base=final)}\nJSON responses: {json.dumps(calls)[:4000]}", None
+            calls = sorted(calls, key=lambda c: c["method"] != "POST")
+            calls = [{k: v for k, v in c.items() if k != "sample"} | {"sample": c["sample"][:600]} for c in calls]
+            return f"URL: {final}\n{_page_content(html, base=final)}\nJSON responses: {json.dumps(calls)[:5000]}", None
         if name == "fetch_json":
             return _chunk(resp.text, args.get("offset", 0)), None
         if name == "scan_scripts":
             return json.dumps(await scan_scripts(args["url"], fetcher), ensure_ascii=False)[:PAGE_CHARS], None
         if name in ("test_recipe", "submit_recipe"):
             recipe = Recipe.model_validate(args["recipe"])
+            if recipe.listing.method == "POST" and not _observed_post(recipe, fetcher):
+                return POST_NOT_OBSERVED, None
             report = await _test(recipe, fetcher)
             accepted = name == "submit_recipe" and report["problem"] is None
             return json.dumps(report, ensure_ascii=False), recipe if accepted else None
@@ -547,6 +575,33 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
     except Exception as exc:  # noqa: BLE001
         return f"ERROR: {type(exc).__name__}: {exc}"[:1500], None
     return f"ERROR: unknown tool {name}", None
+
+
+def _norm(url: str) -> str:
+    parts = urlsplit(url)
+    path = parts.path.rstrip("/") or "/"
+    return f"{parts.scheme}://{parts.netloc.lower()}{path}?{urlencode(sorted(parse_qsl(parts.query)))}"
+
+
+def same_shape(seen, wanted) -> bool:
+    if isinstance(seen, dict) and isinstance(wanted, dict):
+        return seen.keys() == wanted.keys() and all(same_shape(seen[k], wanted[k]) for k in seen)
+    if isinstance(seen, list) and isinstance(wanted, list):
+        return len(seen) == len(wanted) and all(map(same_shape, seen, wanted))
+    if isinstance(seen, bool) or isinstance(wanted, bool):
+        return type(seen) is type(wanted) and seen == wanted
+    if isinstance(seen, (int, float)) and isinstance(wanted, (int, float)):
+        return True
+    return seen == wanted
+
+
+def _observed(url: str, body: dict, fetcher: Fetcher) -> bool:
+    seen = [b for u, bodies in fetcher.observed_posts.items() if _norm(u) == _norm(url) for b in bodies]
+    return any(same_shape(b, body) for b in seen)
+
+
+def _observed_post(recipe: Recipe, fetcher: Fetcher) -> bool:
+    return _observed(recipe.listing.url, recipe.listing.body, fetcher)
 
 
 def _key(name: str, args: dict) -> str:
