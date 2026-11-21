@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:31 | B-21
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:40 | B-21
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:59 | protocol keeper, B-43
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
@@ -329,7 +329,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
 - **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 06:58
-- **Last seen:** 2026-11-21 07:31
+- **Last seen:** 2026-11-21 07:40
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
@@ -916,6 +916,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** A dashboard attach to https://oeffentlichevergabe.de/ui/de failed on 2026-11-21 at 06:21 UTC. The agent reported that it could read the portal and see the POST search endpoint, but the replay check refused the candidate recipe during validation. The attach ended without a validated recipe.
 - **Idea:** Trace the same captured public search through `test_recipe` and `submit_recipe` to identify the first refusal. Verify that a matching capture can pass both steps and that a mismatched request still gets a clear refusal.
 - **Findings:** The failed run is confirmed in dashboard history on main `acefd4cc`. Exact-body replay was the explanation in the run report. The specific mismatch is still unverified. Related to B-18, which added support for captured POST listings.
+  Derek-Codex-B: a local Chromium portal on the demo revision acefd4c generated a genuine public JSON search, observed by its Fetcher. The captured body passed both test_recipe and submit_recipe, including a real fixture document download and an accepted recipe. Changing a nonpaging search value was refused by both calls. The original live mismatch is still unconfirmed.
 
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
