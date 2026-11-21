@@ -19,7 +19,12 @@ within the rules of `docs/Patterno-Track-Description.pdf`.
 **Done means:** an operator adds a portal's address in the dashboard, clicks **Refresh**, and the portal
 syncs: open tenders appear with correct fields and their document files are downloaded (within the
 download limits), and the dashboard shows what happened. It should hold for portals we haven't seen, as
-the PDF's judging describes. Until it does, keep going: after each item, pick the next one or scout.
+the PDF's judging describes.
+
+**Target: at least 90% of the portals in a wide sweep end in the correct state.** Correct means either
+`serving` with real document files, or `failed` with a true reason (a real login, captcha or robots.txt
+block, as the PDF's "Notice" criterion asks). The lead runs fresh-database sweeps on Dev and held-out
+portals and posts the success rate in `CHANNEL.md`. The current rate is the operation's main number. Until it does, keep going: after each item, pick the next one or scout.
 
 **Strict focus: a `/refresh` that actually gets the documents.** This is the minimum requirement and
 the reason this swarm exists. Before starting anything, ask whether it brings a real portal closer to

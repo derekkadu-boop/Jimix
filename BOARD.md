@@ -469,6 +469,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   `POST /portals/{id}/refresh`. Expected: the same recipe is reused, the run is a `read` with 0 model
   calls, the portal stays `serving`, tenders and files are kept. Transient errors may fail a read without
   triggering a repair (retry later). An unnecessary repair or recipe rebuild is a bug: file it.
+- **Also check:** compare the same tender ids' documents before and after a repair (one attach-then-repair run showed 409 files on attach and 317 after repair, probably because WATCHTOWER_MAX_DETAILS sampled different tenders, but that is unproven).
 - **Findings:**
 
 ### B-37 Reuse recipes across portals running the same software
