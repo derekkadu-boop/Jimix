@@ -53,7 +53,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:**
 
 ### B-07 Dashboard against the new API
-- **Status:** open
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 02:31
 - **Problem:** check the dashboard shows the new fields: run `reason`, `llmCalls`, `costUsd`, portal
   `reason` texts, the four states. The PDF wants an operator to see which portals deliver, which broke and
   what the system did.
