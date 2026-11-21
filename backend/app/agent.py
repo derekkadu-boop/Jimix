@@ -38,11 +38,17 @@ KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetim
 DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
 FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
 
-COSINEX_PAGE_PATH = (
-    r"(/VMPCenter/company/announcements/categoryOverview[.]do"
-    r"[?]method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=[0-9]+)"
+PAGINATION_HANDLER = re.compile(
+    r"""setTargetAndSubmit\(\s*(?P<quote>['"])"""
+    r"(?P<path>/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+)"
+    r"(?P=quote)\s*(?=[,)])"
 )
-COSINEX_PAGE_LINK = re.compile(r"setTargetAndSubmit\(\s*'" + COSINEX_PAGE_PATH + "'")
+PAGINATION_KEY = re.compile(
+    r"page(?:index|number|num|no)?|offset|cursor|start|selectedTablePage\w+", re.IGNORECASE
+)
+SENSITIVE_KEY = re.compile(
+    r"token|session|secret|auth|key|password|csrf|^(sid|sig|signature)$", re.IGNORECASE
+)
 
 
 INSTRUCTIONS = f"""You connect a public procurement portal so that its open tenders can be read without you.
@@ -65,10 +71,9 @@ The listing must cover every open tender the portal has: no category, region, CP
 Prefer the broadest list (all current notices) and paginate through it. If the portal only offers lists
 split by category, set listing.url to the page linking to all of them and index to those links:
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
-On Cosinex category listings, use the overview's links with cpvCode= in index to read every category.
-For a.browseForward with a setTargetAndSubmit path shown in onclick, use next_page with
-path a.browseForward, attribute onclick, and pattern '{COSINEX_PAGE_PATH}'.
-That path supports GET. A javascript:void(0) href is a placeholder and cannot be fetched.
+If a next-page control has a placeholder href and a root-relative pagination path in onclick, test
+that path with GET. If it returns the next list page, map next_page to that control with attribute
+onclick and a pattern capturing only the literal URL. Never execute the handler.
 If you find no list of open tenders, keep searching before giving up:
 - a search or "all notices" page (Suche, Bekanntmachungen, recherche, búsqueda, zoeken, wyszukiwarka...),
   tried with an empty query: a GET search URL works as a listing URL;
@@ -110,6 +115,8 @@ When listings link to different document platforms, use documents_by_host with e
 If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
 match its destination host. Each matching rule may follow one public page link before reading files.
 Hosts without a rule use documents.
+When documents_page leads to a buyer's notice, use the host rule's page for a documents tab on that notice.
+File download links can be extensionless, so use the page's actual file controls.
 On a public NetServer documents page with an a.zipFileContents control, the netserver_file_tree modal
 opens the highest-numbered file list version. The files selector is scoped to the opened dialog, for
 example a.filenameEllipsis[href].
@@ -180,14 +187,21 @@ def simplify(html: str) -> str:
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in soup.find_all(True):
+        placeholder = tag.get("href", "").strip().casefold().rstrip(";")
         pagination = (
-            COSINEX_PAGE_LINK.search(tag.get("onclick", ""))
+            PAGINATION_HANDLER.search(tag.get("onclick", ""))
             if tag.name == "a" and "browseForward" in tag.get("class", [])
+            and placeholder in ("", "#", "javascript:void(0)")
             else None
         )
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
-        if pagination:
-            tag["onclick"] = f"setTargetAndSubmit('{pagination[1]}')"
+        if pagination and len(path := pagination["path"]) <= 300:
+            params = parse_qsl(urlsplit(path).query, keep_blank_values=True)
+            if not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
+                PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
+            ):
+                quote = pagination["quote"]
+                tag["onclick"] = f"setTargetAndSubmit({quote}{path}{quote})"
     return re.sub(r"\s+", " ", str(soup))
 
 
@@ -279,11 +293,14 @@ async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetc
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
+    sample = tenders
+    if recipe.detail and (recipe.documents or recipe.documents_by_host):
+        sample = [t for t in tenders if not t.get("_documentDetailPending")] or tenders
     problem = check(tenders)
     document_warnings = []
     if not problem:
         problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
-        if not problem and (hint := await _document_page_hint(recipe, tenders, fetcher)):
+        if hint := await _document_page_hint(recipe, sample, fetcher):
             document_warnings.append(hint)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
@@ -293,7 +310,7 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
         "warnings": warnings,
         "tenderCount": len(tenders),
         "withDocumentLinks": sum(bool(t["_documentUrls"]) for t in tenders),
-        "sample": tenders[:3],
+        "sample": sample[:3],
     }
 
 

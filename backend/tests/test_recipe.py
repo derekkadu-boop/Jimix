@@ -5,6 +5,7 @@ import zipfile
 
 import httpx
 import pytest
+from bs4 import BeautifulSoup
 from playwright.async_api import Error as PlaywrightError
 
 from app import agent, db, documents, fetch, watchtower
@@ -619,17 +620,26 @@ def test_refresh_preserves_files_after_document_page_error(monkeypatch, tmp_path
     assert empty["_documentsComplete"] is True
 
 
-def test_cosinex_category_pagination_uses_the_public_get_path():
-    category = "/VMPCenter/company/announcements/categoryOverview.do"
-    next_page = category + "?method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=2"
+def test_category_pagination_uses_the_public_get_path():
+    category = "/notices/categories"
+    next_page = category + "?table=list&pageIndex=2"
     control = (
         f"""<a class="browseForward" href="javascript:void(0);" """
         f"""onclick="setTargetAndSubmit('{next_page}'); untrusted()">next</a>"""
     )
     listing = LIST_1.replace('<a class="next" href="/list?page=2">next</a>', control)
     simplified = agent.simplify(listing)
-    assert "selectedTablePagePROJECT_RESULT=2" in simplified
+    assert "pageIndex=2" in simplified
     assert "untrusted()" not in simplified
+    for key in ("csrf", "csrfToken", "sid", "signature"):
+        assert "onclick=" not in agent.simplify(control.replace("pageIndex=2", f"pageIndex=2&{key}=private"))
+    assert "onclick=" not in agent.simplify(control.replace(category, "//outside.example/path"))
+    assert "onclick=" not in agent.simplify(control.replace("pageIndex=2", "restart=2"))
+    assert "onclick=" not in agent.simplify(control.replace("');", "' + other);"))
+    assert "onclick=" not in agent.simplify(control.replace("javascript:void(0);", "/download"))
+    double_quoted = control.replace(f"'{next_page}'", f"&quot;{next_page}&quot;")
+    double_quoted = BeautifulSoup(agent.simplify(double_quoted), "html.parser").select_one("a")
+    assert double_quoted["onclick"] == f'setTargetAndSubmit("{next_page}")'
     recipe = Recipe.model_validate(RECIPE | {
         "listing": RECIPE["listing"] | {
             "url": f"https://portal.example{category}?method=showCategoryOverview",
@@ -637,7 +647,7 @@ def test_cosinex_category_pagination_uses_the_public_get_path():
             "next_page": {
                 "path": "a.browseForward",
                 "attribute": "onclick",
-                "pattern": f"'{agent.COSINEX_PAGE_PATH}'",
+                "pattern": "'(/notices/categories[?]table=list&pageIndex=[0-9]+)'",
             },
         },
         "detail": None,
@@ -658,7 +668,7 @@ def test_cosinex_category_pagination_uses_the_public_get_path():
         page = listing
         if code := request.url.params.get("cpvCode"):
             active_category = code
-        elif "selectedTablePagePROJECT_RESULT" in request.url.params:
+        elif "pageIndex" in request.url.params:
             page = LIST_2
         if active_category == "45000000-7":
             page = page.replace("/t/1", "/t/4").replace("/t/2", "/t/5").replace("/t/3", "/t/6")
@@ -675,3 +685,75 @@ def test_cosinex_category_pagination_uses_the_public_get_path():
     assert [tender["id"] for tender in tenders] == ["1", "2", "3", "4", "5", "6"]
     assert complete
     assert requested.count(httpx.URL(f"https://portal.example{next_page}")) == 2
+
+
+def test_recipe_validation_checks_open_bidding_after_advance_notices():
+    advance_notices = "".join(
+        f'<tr class="t"><td><a href="/t/{i}">Advance notice {i}</a></td></tr>' for i in (4, 5, 6)
+    )
+    listing = LIST_1.replace("<table>", f"<table>{advance_notices}", 1)
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"next_page": None},
+    })
+    checked = []
+
+    def response(request: httpx.Request):
+        path = request.url.path
+        if path == "/list":
+            return httpx.Response(200, html=listing)
+        if path.startswith("/t/"):
+            checked.append(path)
+            if path != "/t/1":
+                return httpx.Response(200, html="<p>Documents have not been published yet.</p>")
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    result = asyncio.run(run())
+    assert checked[:3] == ["/t/1", "/t/4", "/t/5"]
+    assert set(checked) == {"/t/1", "/t/4", "/t/5"}
+    assert result["problem"] is None
+    assert result["withDocumentLinks"] == 1
+    assert {tender["id"] for tender in result["sample"]} == {"1", "4", "5"}
+
+
+def test_capped_detail_sample_uses_first_valid_tender_occurrences():
+    listing = """
+    <table>
+      <tr class="t" data-id="1"><td><a href="/t/1">First occurrence</a></td></tr>
+      <tr class="t" data-id="1"><td><a href="/t/1">Duplicate</a></td>
+        <td class="due">20.12.2099 10:00</td></tr>
+      <tr class="t" data-id="3"><td><a>Missing URL</a></td><td class="due">20.12.2099 10:00</td></tr>
+      <tr class="t"><td><a href="/t/4">Missing ID</a></td><td class="due">20.12.2099 10:00</td></tr>
+      <tr class="t" data-id="2"><td><a href="/t/2">Current bid</a></td>
+        <td class="due">20.12.2099 10:00</td></tr>
+    </table>
+    """
+    fields = RECIPE["listing"]["fields"] | {"id": {"path": "$", "attribute": "data-id"}}
+    recipe = Recipe.model_validate(RECIPE | {"listing": RECIPE["listing"] | {"fields": fields}})
+    fetched = []
+
+    def response(request: httpx.Request):
+        if request.url.path == "/list":
+            return httpx.Response(200, html=listing)
+        if request.url.path.startswith("/t/"):
+            fetched.append(request.url.path)
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await apply(recipe, fetcher, max_details=1)
+        finally:
+            await fetcher.close()
+
+    tenders, _ = asyncio.run(run())
+    assert fetched == ["/t/2"]
+    assert tenders[0]["title"] == "First occurrence"
+    assert tenders[0]["_documentDetailPending"]
+    assert tenders[2]["_documentUrls"] == ["https://portal.example/files/2.zip"]
