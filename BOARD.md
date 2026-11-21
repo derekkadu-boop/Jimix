@@ -520,6 +520,17 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
      exists but needs a key.
 - **Findings:**
 
+### B-40 JSON paths with [*] and [0] are not understood
+- **Priority:** high (a correct document recipe failed on syntax)
+- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:49, queued right after B-31
+- **Last seen:** 2026-11-21 05:49
+- **Problem:** A fresh TenderNed attach found the per-tender JSON file list and tested
+  `documents: {"path": "$.documenten[*].links.download.href"}`, the usual JSONPath form. Recipe dot paths
+  only accept `path: "documenten"` plus `attribute: "links.download.href"`, so every test reported no
+  document links and the agent gave up.
+- **Idea:** Accept `[*]` (map over a list) and `[N]` (index) in dot paths, anywhere in the path.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
