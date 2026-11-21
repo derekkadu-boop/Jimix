@@ -1548,3 +1548,78 @@ def test_page_content_hints_keep_accessible_labels_and_skip_hidden_links():
             '<a href="/tender-files" aria-label="Tender documents"></a>')
     hints = agent.simplify(page, "https://portal.example/t/1")[2]
     assert hints == ["Possible document-page link: 'tender documents' -> 'https://portal.example/tender-files'"]
+
+
+def test_page_cap_is_reported_in_validation_and_delivery(monkeypatch, tmp_path):
+    async def covered_documents(*_args, **_kwargs):
+        return None, []
+
+    monkeypatch.setattr(agent, "_check_documents", covered_documents)
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('test', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute(
+            "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('test', 'old', ?, ?)",
+            ('{"status":"open"}', db.now()),
+        )
+
+    async def run(max_pages):
+        recipe = Recipe.model_validate(RECIPE | {"max_pages": max_pages, "detail": None, "documents": None})
+        fetcher = Fetcher(transport=httpx.MockTransport(portal))
+        try:
+            report = await agent._test(recipe, fetcher)
+            delivered = await watchtower._deliver("test", recipe, fetcher)
+            return report["warnings"], delivered
+        finally:
+            await fetcher.close()
+
+    warnings, (count, _, note) = asyncio.run(run(1))
+    assert count == 2 and "Listing coverage incomplete" in note
+    assert any("recipe max_pages: 1" in warning for warning in warnings)
+    with db.connect() as conn:
+        assert conn.execute("SELECT data FROM tender WHERE id='old'").fetchone()[0] == '{"status":"open"}'
+
+    warnings, (count, _, note) = asyncio.run(run(2))
+    assert count == 3 and "Listing coverage incomplete" not in note
+    assert not any("Listing coverage is incomplete" in warning for warning in warnings)
+
+
+@pytest.mark.parametrize(
+    ("link", "hinted"),
+    [
+        ('<link rel="next" href="/list/2">', True),
+        ('<a href="/list?page=2" aria-label="Nächste Seite">›</a>', True),
+        ('<a href="/list?offset=20">2</a>', True),
+        ('<a href="/list?offset=20&buyer=42">2</a>', False),
+        ('<a href="https://other.example/list?page=2" rel="next">Next</a>', False),
+        ('<a href="#next" rel="next">Next</a>', False),
+        ('<template><a href="/list?page=2">Next</a></template>', False),
+    ],
+)
+def test_recipe_validation_warns_about_unhandled_pagination(monkeypatch, link, hinted):
+    async def covered_documents(*_args, **_kwargs):
+        return None, []
+
+    monkeypatch.setattr(agent, "_check_documents", covered_documents)
+    listing = {**RECIPE["listing"], "next_page": None}
+    recipe = Recipe.model_validate({**RECIPE, "listing": listing, "detail": None, "documents": None})
+    requests = []
+
+    def response(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        requests.append(str(request.url))
+        return httpx.Response(200, html=LIST_2 + link)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    report = asyncio.run(run())
+    assert any("likely next-page" in warning for warning in report["warnings"]) == hinted
+    assert requests == ["https://portal.example/list"]
