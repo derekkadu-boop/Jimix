@@ -101,6 +101,7 @@ def portal(request: httpx.Request) -> httpx.Response:
 @pytest.fixture(autouse=True)
 def fast(monkeypatch, tmp_path):
     monkeypatch.setattr(fetch, "INTERVAL", 0)
+    monkeypatch.setattr(fetch, "RETRY_DELAYS", (0, 0))
     monkeypatch.setattr(documents, "FILES_DIR", tmp_path)
 
 

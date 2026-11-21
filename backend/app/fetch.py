@@ -24,6 +24,9 @@ MAX_FILE_BYTES = int(os.environ.get("WATCHTOWER_MAX_FILE_MB", "250")) * MB
 MAX_RUN_DOWNLOAD_BYTES = int(os.environ.get("WATCHTOWER_MAX_RUN_DOWNLOAD_MB", "1000")) * MB
 OVERSIZE_SKIP = "over size limit"
 DOCUMENT_HTML_PROBE_BYTES = 64 * 1024
+TIMEOUT = httpx.Timeout(float(os.environ.get("WATCHTOWER_HTTP_TIMEOUT", "120")), connect=30)
+RETRY_DELAYS = (2.0, 5.0)
+RETRY_STATUS = {502, 503, 504}
 CAPTCHA_WIDGETS = (
     ".g-recaptcha:not([data-size=invisible]), .h-captcha:not([data-size=invisible]), .cf-turnstile,"
     " #challenge-form, #challenge-running, #cf-challenge-running, .cf-browser-verification,"
@@ -203,7 +206,7 @@ class Fetcher:
         self.client = httpx.AsyncClient(
             transport=transport or ChainFillingTransport(verify=CONTEXT),
             follow_redirects=True,
-            timeout=30,
+            timeout=TIMEOUT,
             headers={"User-Agent": USER_AGENT},
             event_hooks={"request": [self._before_request], "response": [self._after_response]},
         )
@@ -264,10 +267,18 @@ class Fetcher:
     async def get(self, url: str) -> httpx.Response:
         if not await self.allowed(url):
             raise Blocked(f"robots.txt disallows {url}")
-        try:
-            resp = await self.client.get(url)
-        except httpx.TransportError:
-            resp = await self.client.get(url)
+        for delay in (*RETRY_DELAYS, None):
+            try:
+                resp = await self.client.get(url)
+            except (httpx.TransportError, socket.gaierror) as exc:
+                if delay is None:
+                    raise
+                log.info("retrying %s in %.0fs after %s", url, delay, type(exc).__name__)
+            else:
+                if resp.status_code not in RETRY_STATUS or delay is None:
+                    break
+                log.info("retrying %s in %.0fs after HTTP %s", url, delay, resp.status_code)
+            await asyncio.sleep(delay)
         html = resp.text if "html" in resp.headers.get("content-type", "") else None
         if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
             raise self.blocked(reason, url)
