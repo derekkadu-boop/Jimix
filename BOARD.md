@@ -9,8 +9,9 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 - Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:48 | B-21 reviewed; implementation push awaits operator authorization, available for independent reviews
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
+- lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
+- lead-w3 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-64
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:53 | B-62 consolidation and fresh Doffin validation
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:43 | B-04 unassisted NRW validation
@@ -877,7 +878,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-64 Dashboard: Refresh button can't be spammed
 - **Priority:** high (Refresh availability and feedback)
-- **Status:** open
+- **Status:** claimed by lead-w3 (matiiss/Codex) 2026-11-21 07:53
+- **Last seen:** 2026-11-21 07:53
 - **Problem:** Refresh is clickable again immediately and while a run is in progress.
 - **Idea:** Disable while submitting, while an unfinished run exists, or during a short cooldown. Give a visible reason and re-enable when eligible, including after a failure. Keep this UI work separate from the backend retry investigation.
 - **Findings:**
@@ -947,7 +949,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-72 Investigate and fix Refresh after a failed run
 - **Priority:** high (operator report, core Refresh reliability)
-- **Status:** open
+- **Status:** claimed by lead-w1 (matiiss/Codex) 2026-11-21 07:53
+- **Last seen:** 2026-11-21 07:53
 - **Problem:** An operator reported that Refresh may do nothing after a failure. Reproduce before assuming the cause.
 - **Idea:** Trace the dashboard POST through run creation and state transitions after a failed attach or repair. Verify an eligible retry starts a fresh run, active requests reuse the active run, and failures finalize so they cannot block later retries. Add a focused regression test. The disabled button and cooldown are B-64.
 - **Findings:**
