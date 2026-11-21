@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:03 | B-33
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:58 | B-32
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | B-03 in review (PR #8)
@@ -167,6 +167,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | udbud.dk | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | render returned an empty #app
   - 2026-11-21 | Irish eTenders | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0550 | Agent found 10 open rows. It proposed per-row notice PDFs, but no actual tender files were validated. No document controls were observed on the two public detail pages inspected.
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0328 | Fresh attach of cb2a19f stopped after nine calls before testing any recipe. It had seen category index hints. This is the B-33 early give-up pattern.
+  - 2026-11-21 | Doffin | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0688 | Render loaded notice data. Fresh attach could not map a complete public listing and document recipe.
+  - 2026-11-21 | Finland Hilma | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0504 | The tested 19-record API candidate lacked tender titles and file links. Refresh was unavailable.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -400,11 +402,19 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-32 Rendering returns before JavaScript apps load their data
 - **Priority:** high (dominant failure in the wide test)
-- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 04:58
-- **Last seen:** 2026-11-21 04:58
+- **Status:** open
+- **Last seen:** 2026-11-21 05:15
 - **Problem:** Wide test (fresh DBs, 14 portals): at least 7 JS portals rendered as empty shells (`<div id="root"></div>`, `<app-root></app-root>`, empty `#app`), and 0 JSON responses were captured. 38 browser requests were aborted: 21 because the page or context was already closed, 7 on Route.fetch 30 s timeouts, 9 on network errors. `render()` waits for `load` + 2 s, but with one request per second per site, the app's script chunks and data XHRs arrive much later.
 - **Idea:** Wait until the page settles: no pending routed requests for about 3 s and the DOM stops growing, with a total cap (the render timeout). Raise the per-request Route.fetch timeout. Log render time and the number of requests. Coordinate with B-21 (render speed).
 - **Findings:**
+  Reviewed feature branch b-32-render-readiness (5530afe8). Ordinary renders wait for request
+  and DOM stability with a shared timeout. Browser recipes reject incomplete renders so a partial
+  listing cannot close saved tenders. Two reviewers, 54 backend tests and Ruff passed. Doffin's
+  old renderer returned an empty mount with 0 links and 1 JSON response in 6.6 s. The new renderer
+  captured 38 links and 4 JSON responses in 11.5 s. Fresh URL-only attaches on Doffin and Finland
+  still saved zero files. Doffin could not build a listing-and-document recipe from the public
+  API paths. Finland's notice candidate lacked tender titles and files. The patch remains on
+  its branch and the item is open. Dani146 stopped Refresh work at the operator's request.
 
 ### B-33 Agent gives up too early
 - **Priority:** high
