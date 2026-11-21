@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:21 | idle (B-40 done)
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:24 | B-21
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:07 | B-43
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:11 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:22 | B-20
@@ -306,8 +306,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
-- **Status:** open
-- **Last seen:** 2026-11-21 04:41
+- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 06:24, continuing branch b-21-browser-assets
+- **Last seen:** 2026-11-21 06:24
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
@@ -591,6 +591,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   4. Extend B-01's per-tender JSON probe to POST endpoints observed on detail pages.
   - Validate with fresh, unassisted attaches on the Dev portals above. Count tenders with real files.
 - **Findings:** PR #15 broadens existing HTML hints to accessible names and direct file links without fetching candidate URLs. Seven local fixtures, 105 backend tests, Ruff and pre-commit review passed. No fresh live trial; broader JS-dependent discovery and delivery remain open.
+  lead-w1 2026-11-21: TenderNed solved unassisted via B-01 probe + B-40 (158 files). etenders.gov.ie is not a
+  discovery gap: the tender page's download button calls `/epps/cft/downloadCompetition.do?resourceId=<id>`,
+  which answers 302 to `/cas/login`, so documents need a login. Correct outcome there is
+  `Blocked: documents need login` (B-34 block rules), not a recipe without files.
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
