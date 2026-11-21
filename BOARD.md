@@ -175,6 +175,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | Find a Tender (UK) | lead-w2 | failed | 0 | 0 | USD 0.0199 | Site answered very slowly (curl: 36 s to first byte, 79 s for the results page, 40 s even for a 404 robots.txt); our fixed 30 s read timeout plus one retry turned every listing fetch into ReadTimeout, plus 2 DNS failures. Agent gave up after 11 calls. Taken up in B-23.
   - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 1449 | 153 | USD 0.0596 attach, USD 0 Refresh | Fresh combined B-20/B-33 URL-only attach on the Dev URL; three recipe tests, two submits, zero deferred give-ups. Refresh retained tenders/files with zero calls; file API bytes matched SHA-256.
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0684 | Fresh URL-only attach at 8f14869, 15 calls, final recipe document validation failed; Refresh unavailable.
+  - Note (lead): Find a Tender notice pages answer a 118-byte `403 Forbidden` to our honest user agent, while the listing gives 200 and there is no robots.txt. That's bot filtering, not a login. Don't spoof user agents. The right route is its official public OCDS API (see B-39's hint: look for an official API when blocked).
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -553,6 +554,30 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** Recipe.apply caps unique category links at MAX_INDEX_LISTS. If all visited categories finish, it reports complete despite unvisited categories. Synthetic index with MAX_INDEX_LISTS + 1 ordinary category links reproduces the coverage error; no real site was probed.
 - **Idea:** Mark truncated category indexes as incomplete and verify that refreshing preserves the open status and files of a previously saved tender in a skipped category.
 - **Findings:** PR #13 marks an indexed listing incomplete if unique category links exceed the existing cap, preserving saved tenders and their files. Duplicate links still permit closure when all distinct categories finish. Two reviewers, 93 backend tests and Ruff passed with synthetic fixtures.
+
+### B-42 Document discovery when the listing already works
+- **Priority:** high (sweep 2: the next blocker after POST listings)
+- **Status:** open
+- **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
+  links in the sampled tenders, so B-22 correctly refuses the recipe:
+  - etenders.gov.ie: detail pages have no file links;
+  - hankintailmoitukset.fi: a JSON listing works, but notice pages have no links;
+  - TenderNed: the real files only load when the "Documents" tab is clicked;
+  - Doffin: its guessed `/notices/{id}/documents` endpoints return 404.
+
+  Documents are often loaded by JavaScript after a tab click, live on a separate documents page or on
+  the buyer's external platform, or sit behind a per-tender JSON endpoint the page calls.
+- **Idea:** (all generic, no portal rules)
+  1. `render_page` on one tender's own page and report the JSON calls it makes, including POSTs (B-18).
+     Document lists are often among them.
+  2. A small declarative browser action for detail pages: click an element matching common document-tab
+     labels in many languages (Documents, Dokumente, Documenten, Pièces, Documentos...), then capture the
+     JSON calls and links it loads.
+  3. Follow "documents", "tender documents", "procurement documents", "DCE", "pliegos" or "Vergabeunterlagen"
+     links (documents_page), including links to external buyer platforms (B-02).
+  4. Extend B-01's per-tender JSON probe to POST endpoints observed on detail pages.
+  - Validate with fresh, unassisted attaches on the Dev portals above. Count tenders with real files.
+- **Findings:**
 
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
