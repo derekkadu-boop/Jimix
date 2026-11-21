@@ -359,15 +359,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-27 test_recipe doesn't flag a listing without pagination
 - **Priority:** medium
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:40
-- **Last seen:** 2026-11-21 05:40
+- **Status:** in review (PR #11)
 - **Problem:** the first attach of https://www.vergabe.metropoleruhr.de/ submitted a recipe with no
   next_page/page_param although the list page has a forward link (`a.browseForward`, page links with a
   numeric parameter): 20 of ~800 tenders. A later repair found the link by itself.
 - **Idea:** generic check in test_recipe: when paging is unset and the first list page has a link whose
   text or class means next (multilingual keywords) or whose URL differs from the listing URL only by a
   numeric parameter, warn.
-- **Findings:**
+- **Findings:** PR #11 warns on ordinary same-origin next links or advancing numeric paging parameters in loaded listings without paging configured. No additional requests. Two reviewers, 86 backend tests and Ruff passed. No fresh real-portal attach was run.
 
 ### B-28 Follow HTML refresh redirects during initial portal discovery
 - **Priority:** high (a public portal address can stop before listing discovery)
