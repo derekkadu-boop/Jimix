@@ -1,12 +1,12 @@
 # Protocol
 
 > **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 07:24: liveness is now 30 minutes (Last seen every 10 min); fan out helpers when you can.
 > - 2026-11-21 06:27: fetch right before claiming; prefer the longest-unclaimed high item; a self-claimed follow-up may sit next to your one claim.
 > - 2026-11-21 06:19: new section "The lead": the lead's duties, and a copy-paste prompt to appoint a new lead.
 > - 2026-11-21 06:04: one reviewer is enough for follow-up commits to an already reviewed design; new shared
 >   mechanisms still get two.
 > - 05:48: target is >=90% of sweep portals in the correct state (serving with files, or a true block).
-> - 05:13: re-read AGENTS.md and docs/testing.md when they change; Python only via uv.
 
 This branch (`coord`) is how everyone working on Jimix coordinates: humans and agents, on any machine.
 It holds only three files:
@@ -175,8 +175,8 @@ stops you. Joined workers are meant to stay alive indefinitely.
 
 - **The Workers list.** The top of `BOARD.md` has a `## Workers` list with one line per worker:
   `- <name> | <machine/tool> | last seen <date time> | <claim or idle>`. Refresh your line at least every
-  30 minutes, including while idle or on standby.
-- **A worker is dead** when its last seen time is older than 90 minutes. Anyone may then post
+  10 minutes, including while idle or on standby.
+- **A worker is dead** when its last seen time is older than 30 minutes. Anyone may then post
   `@<name> appears dead` in `CHANNEL.md` and reopen that worker's claims (see Liveness). Its operator
   restarts it.
 - **Restarting.** An operator restarts a worker, or starts a new one, by giving any agent this prompt:
@@ -191,6 +191,10 @@ stops you. Joined workers are meant to stay alive indefinitely.
 
   Use the same name as before so claims and history stay connected.
 
+**Fan out when you can.** If your tool supports subagents or parallel sessions and your operator agrees,
+start a helper or two for open high-priority items, each with its own Workers line and claim, within your
+operator's spending limits.
+
 **Nothing open?** Don't wait. Scout instead: pick a portal no one has tried (see B-10), attach it, refresh
 it, and file every problem you see as a new item. A scouting report is a `CHANNEL.md` message plus the
 items it produced.
@@ -203,8 +207,8 @@ items it produced.
   `- YYYY-MM-DD HH:MM <name>: <message>`. Use your real current time in CET (UTC+1), e.g. from
   `TZ=Europe/Berlin date '+%F %H:%M'`, since claim ages are judged by it. Address people with `@lead` or `@<name>`. On a merge conflict,
   keep both sides.
-- **Liveness.** While you hold a claim, refresh its **Last seen** at least every 30 minutes: commit
-  and push the updated time on `coord`. A claim whose **Last seen** is older than 90 minutes counts as
+- **Liveness.** While you hold a claim, refresh its **Last seen** at least every 10 minutes: commit
+  and push the updated time on `coord`. A claim whose **Last seen** is older than 30 minutes counts as
   dead. Anyone may then set it back to `open`, adding a note with the old claimer's findings so far, and
   must post that in `CHANNEL.md`. If you know you'll stop, release your claim yourself.
 - Don't put secrets, API keys or raw logs that might contain them in any file.
@@ -266,7 +270,7 @@ stored in the repo.
 
 The previous lead, if still running, stops doing lead duties once that message appears. It posts a short
 handover (open proposals, sweep status, anything in progress) and carries on as a normal worker.
-If the lead seems dead (no channel post or Workers update for 90 minutes), any operator may appoint a new
+If the lead seems dead (no channel post or Workers update for 30 minutes), any operator may appoint a new
 one the same way.
 
 ## Changing this protocol

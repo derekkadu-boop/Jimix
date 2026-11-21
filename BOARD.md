@@ -199,6 +199,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:**
 
 ### B-11 Cost per portal for the README
+- **Priority:** high (mandatory README content: what one portal costs)
 - **Status:** open
 - **Problem:** the PDF wants the model cost of one portal in the README. Runs record it
   (`GET /portals/{id}/runs`); collect numbers across the test set.
@@ -693,7 +694,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:**
 
 ### B-46 README: deployment and the PDF's hand-in requirements
-- **Priority:** normal
+- **Priority:** high (mandatory hand-in, per the PDF)
 - **Status:** open
 - **Problem:** The README covers local setup and how Watchtower works, but doesn't match the PDF's "What you
   hand in" section yet, and the Docker deployment isn't the main path.
@@ -842,6 +843,41 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Status:** open
 - **Problem:** Every refresh re-reads the whole listing and every detail page, which is slow at one request per second.
 - **Idea:** Skip unchanged tenders: use ETag/Last-Modified, list-level change dates, or only open detail pages for new or changed rows; still mark disappeared tenders closed only when the listing was read completely.
+- **Findings:**
+
+### B-62 Deliver tenders even when their documents can't be collected
+- **Priority:** high (UX, operator request)
+- **Status:** open
+- **Problem:** B-22 refuses any recipe whose sampled tenders yield no downloadable files. On portals whose documents are on buyers' platforms that block crawlers or need a login (Doffin: tendsign robots-disallowed, artifik/hyyr HTML pages; Ireland and Finland: documents behind login), we deliver nothing at all, although the tenders and their links are public.
+- **Idea:** Accept a recipe that reads tenders correctly even if documents can't be collected, once the agent has really tried (documents mapped, the downloads blocked or not files). Deliver tenders with `url` so people can open them in a browser, `documents: []`, and a per-tender reason (e.g. `documentsNote: "hosted on tendsign.com, which disallows crawlers"`). The portal stays serving, with its reason saying documents are unavailable and why. Keep "no tenders" as a real failure. Update B-22's check accordingly and test it.
+- **Findings:**
+
+### B-63 Show as much as possible on partial failures
+- **Priority:** normal
+- **Status:** open
+- **Problem:** On failures we often show only a sentence. Operators would rather see what was found: the listing URL, sample tenders, the recipe tried, which step failed.
+- **Idea:** Store partial results of failed attaches and repairs (best tested recipe, sample tenders, the failing step and its evidence) and show them in the dashboard, clearly marked as not delivered. Never present them as delivered tenders through the API.
+- **Findings:**
+
+### B-64 Dashboard: Refresh button can't be spammed
+- **Priority:** normal (UI)
+- **Status:** open
+- **Problem:** Refresh is clickable again immediately and while a run is in progress.
+- **Idea:** Disable the button while the portal has an unfinished run (the API returns the running runId), and for a short cooldown after a click; show "read in progress" with the run's start time.
+- **Findings:**
+
+### B-65 API contract tests against the PDF's "Exact answers"
+- **Priority:** high (mandatory API behaviour)
+- **Status:** open
+- **Problem:** Nothing checks automatically that every endpoint matches the PDF's appendix.
+- **Idea:** One test module with a fake portal that checks each answer: POST /portals 201 `{id}` and the same id for the same URL; GET list fields (`id, url, state, reason, tenderCount, lastSuccessAt`); DELETE 204 and no further portal requests; refresh 202 `{runId}` and the running runId again; tenders with every required field (null when not shown, optional ones omitted) and `changedSince`; runs `id, kind, startedAt, finishedAt, result`; 404 for unknown ids; times with offset; ZIP unpacked; `/files/...` bytes.
+- **Findings:**
+
+### B-66 Three-minute demo video
+- **Priority:** high (mandatory hand-in, human task)
+- **Status:** open
+- **Problem:** The PDF wants a video of at most three minutes showing the system at work, including the dashboard.
+- **Idea:** Script: add 2-3 portals (one serving with files, one blocked with a clear reason, one repairing), show the dashboard, a refresh with 0 model calls, a repair after a recipe break, the cost per portal. Needs the B-08 live logs to look good. Record on the Docker image.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
