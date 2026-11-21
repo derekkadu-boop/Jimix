@@ -225,6 +225,34 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   distinguish it from a successful detail request containing no document links.
 - **Findings:** Unchecked details keep saved files, source URLs, and skip metadata and remain pending. A successful empty detail can clear files. Two Codex reviewers approved, 23 backend tests and Ruff passed, and live NRW notice 1138704 retained its verified PDF after a capped refresh.
 
+### B-21 Heavy JavaScript portals render slowly at one request per second
+- **Priority:** high (blocks documents on JS portals)
+- **Status:** open
+- **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
+- **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
+- **Findings:**
+
+### B-22 Agent can submit a recipe whose documents match nothing
+- **Priority:** high (portals end up serving without files)
+- **Status:** open
+- **Problem:** `test_recipe` only warns "no document links found in the sample"; the agent may submit again to accept the warning. TenderNed and evergabe.nrw.de both reached `serving` with 0 files this way.
+- **Idea:** Make a working sample document download a hard requirement for `submit_recipe`, unless a login/captcha block on documents was actually detected (then fail with `Blocked: documents ...`). Keep an explicit escape only for portals that publish no files at all.
+- **Findings:**
+
+### B-23 Transient network errors abort whole runs
+- **Priority:** medium
+- **Status:** open
+- **Problem:** On a flaky network single DNS timeouts or connection resets (httpx, Playwright route.fetch, OpenAI) fail the attach; there is only one retry for GETs and five for OpenAI.
+- **Idea:** Retry with backoff (2-3 tries) for listing and detail GETs and browser subresources; count retries against the rate limit; log them.
+- **Findings:**
+
+### B-24 Browser subresources skip robots.txt
+- **Priority:** low
+- **Status:** open
+- **Problem:** `browser.render` checks robots.txt for the page URL only; scripts and XHRs it loads are fetched without a robots check.
+- **Idea:** Check `fetcher.allowed()` for same-site XHR/fetch requests in the route handler.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.

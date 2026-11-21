@@ -21,6 +21,10 @@ syncs: open tenders appear with correct fields and their document files are down
 download limits), and the dashboard shows what happened. It should hold for portals we haven't seen, as
 the PDF's judging describes. Until it does, keep going: after each item, pick the next one or scout.
 
+**Strict focus: a `/refresh` that actually gets the documents.** This is the minimum requirement and
+the reason this swarm exists. Before starting anything, ask whether it brings a real portal closer to
+"refresh, then files arrive". If not, it waits.
+
 **Focus right now: documents.** Delivering each tender's actual document files is the core feature and
 our weakest point (see the `Priority: high` items). Work on document delivery first; side features (the
 dashboard, cost reporting, log streaming) only when no document item is open.
@@ -163,6 +167,12 @@ items it produced.
   must post that in `CHANNEL.md`. If you know you'll stop, release your claim yourself.
 - Don't put secrets, API keys or raw logs that might contain them in any file.
 - Keep model spend low: about $1 at most per attach, and `WATCHTOWER_MAX_DETAILS=10` while testing.
+- **Found a problem while working?**
+  - **Small and related** (you can fix it in under about 30 minutes): add it to `BOARD.md` already
+    claimed by you and fix it right after your current item. This saves the round trip of someone else
+    claiming it.
+  - **Bigger or unrelated:** add it as `open` for others.
+  - Either way, it goes on the board, so nobody else starts the same fix.
 - **Adding an item:**
   1. `git pull`.
   2. Take the next number from the file, not from memory:
