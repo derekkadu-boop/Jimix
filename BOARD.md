@@ -254,6 +254,18 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Check `fetcher.allowed()` for same-site XHR/fetch requests in the route handler.
 - **Findings:**
 
+### B-25 Preserve ZIP-based Office documents as tender files
+- **Priority:** high (deliver the original tender document)
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:03
+- **Last seen:** 2026-11-21 04:03
+- **Problem:** Live NRW notice 1138704 links to a public Vergabe-Westfalen specification DOCX.
+  Jimix unpacks every ZIP signature, so it exposes the Word file's package XML and loses the
+  original DOCX from the tender. Five source links produced 51 stored entries. A two-entry
+  synthetic DOCX also reproduces this via documents._save.
+- **Idea:** Keep Office packages intact, still unpack ordinary ZIP bundles, and recheck cached
+  results that previously exposed Office package internals. Test on NRW 1138704.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
