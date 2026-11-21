@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:51 | B-19
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:56 | idle
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:51 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
@@ -211,14 +211,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 03:50
-- **Last seen:** 2026-11-21 03:50
+- **Status:** done (8d2980a)
+- **Last seen:** 2026-11-21 03:56
 - **Problem:** A failed or deferred tender detail request can produce empty document URLs. The
   refresh stores an empty document list and can mark it complete even though discovery never ran.
   This can erase saved files and make B-14 display no document links for an unchecked tender.
 - **Idea:** Propagate unchecked detail discovery to delivery, keep previous files and URLs, and
   distinguish it from a successful detail request containing no document links.
-- **Findings:**
+- **Findings:** Unchecked details keep saved files, source URLs, and skip metadata and remain pending. A successful empty detail can clear files. Two Codex reviewers approved, 23 backend tests and Ruff passed, and live NRW notice 1138704 retained its verified PDF after a capped refresh.
 
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
