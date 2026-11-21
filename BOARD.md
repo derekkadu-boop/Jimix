@@ -557,7 +557,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:05 (public HTML hint slice)
+- **Last seen:** 2026-11-21 06:05
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
