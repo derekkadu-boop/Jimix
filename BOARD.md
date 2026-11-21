@@ -402,8 +402,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-32 Rendering returns before JavaScript apps load their data
 - **Priority:** high (dominant failure in the wide test)
-- **Status:** open
-- **Last seen:** 2026-11-21 05:15
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:26
+- **Last seen:** 2026-11-21 05:26
 - **Problem:** Wide test (fresh DBs, 14 portals): at least 7 JS portals rendered as empty shells (`<div id="root"></div>`, `<app-root></app-root>`, empty `#app`), and 0 JSON responses were captured. 38 browser requests were aborted: 21 because the page or context was already closed, 7 on Route.fetch 30 s timeouts, 9 on network errors. `render()` waits for `load` + 2 s, but with one request per second per site, the app's script chunks and data XHRs arrive much later.
 - **Idea:** Wait until the page settles: no pending routed requests for about 3 s and the DOM stops growing, with a total cap (the render timeout). Raise the per-request Route.fetch timeout. Log render time and the number of requests. Coordinate with B-21 (render speed).
 - **Findings:**
