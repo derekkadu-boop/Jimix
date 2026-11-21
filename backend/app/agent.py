@@ -175,8 +175,9 @@ class Usage:
         return round((fresh * rate_in + self.cached_tokens * rate_cached + self.output_tokens * rate_out) / 1e6, 4)
 
 
-def simplify(html: str) -> str:
+def simplify(html: str) -> tuple[str, str | None]:
     soup = BeautifulSoup(html, "html.parser")
+    next_page = None
     for tag in soup(["head", "style", "svg", "img", "noscript", "iframe", "link", "meta"]):
         tag.decompose()
     for tag in soup("script"):
@@ -202,7 +203,8 @@ def simplify(html: str) -> str:
             ):
                 quote = pagination["quote"]
                 tag["onclick"] = f"setTargetAndSubmit({quote}{path}{quote})"
-    return re.sub(r"\s+", " ", str(soup))
+                next_page = next_page or path
+    return re.sub(r"\s+", " ", str(soup)), next_page
 
 
 def _chunk(text: str, offset: int) -> str:
@@ -210,6 +212,15 @@ def _chunk(text: str, offset: int) -> str:
     end = offset + PAGE_CHARS
     more = f"\n[chars {offset}-{min(end, len(text))} of {len(text)}; offset={end} reads more]" if len(text) > end else ""
     return text[offset:end] + more
+
+
+def _page_content(html: str, offset: int = 0) -> str:
+    simplified, next_page = simplify(html)
+    chunk = _chunk(simplified, offset)
+    if next_page:
+        hint = f"Page navigation URL from a.browseForward's onclick: {next_page}"
+        return f"{hint}\n{chunk}"
+    return chunk
 
 
 NO_DOCUMENT_LINKS = (
@@ -326,10 +337,10 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
             ):
                 return f"BINARY FILE ({kind or 'unknown type'}, {len(resp.content)} bytes): a downloadable document", None
         if name == "fetch_page":
-            return f"URL: {resp.url}\n{_chunk(simplify(resp.text), args.get('offset', 0))}", None
+            return f"URL: {resp.url}\n{_page_content(resp.text, args.get('offset', 0))}", None
         if name == "render_page":
             html, calls, final = await render(args["url"], fetcher)
-            return f"URL: {final}\n{_chunk(simplify(html), 0)}\nJSON responses: {json.dumps(calls)[:4000]}", None
+            return f"URL: {final}\n{_page_content(html)}\nJSON responses: {json.dumps(calls)[:4000]}", None
         if name == "fetch_json":
             return _chunk(resp.text, args.get("offset", 0)), None
         if name == "scan_scripts":

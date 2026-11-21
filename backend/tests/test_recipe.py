@@ -628,18 +628,21 @@ def test_category_pagination_uses_the_public_get_path():
         f"""onclick="setTargetAndSubmit('{next_page}'); untrusted()">next</a>"""
     )
     listing = LIST_1.replace('<a class="next" href="/list?page=2">next</a>', control)
-    simplified = agent.simplify(listing)
+    simplified, hint = agent.simplify(listing)
     assert "pageIndex=2" in simplified
+    assert hint == next_page
     assert "untrusted()" not in simplified
     for key in ("csrf", "csrfToken", "sid", "signature"):
-        assert "onclick=" not in agent.simplify(control.replace("pageIndex=2", f"pageIndex=2&{key}=private"))
-    assert "onclick=" not in agent.simplify(control.replace(category, "//outside.example/path"))
-    assert "onclick=" not in agent.simplify(control.replace("pageIndex=2", "restart=2"))
-    assert "onclick=" not in agent.simplify(control.replace("');", "' + other);"))
-    assert "onclick=" not in agent.simplify(control.replace("javascript:void(0);", "/download"))
+        assert agent.simplify(control.replace("pageIndex=2", f"pageIndex=2&{key}=private"))[1] is None
+    assert agent.simplify(control.replace(category, "//outside.example/path"))[1] is None
+    assert agent.simplify(control.replace("pageIndex=2", "restart=2"))[1] is None
+    assert agent.simplify(control.replace("');", "' + other);"))[1] is None
+    assert agent.simplify(control.replace("javascript:void(0);", "/download"))[1] is None
     double_quoted = control.replace(f"'{next_page}'", f"&quot;{next_page}&quot;")
-    double_quoted = BeautifulSoup(agent.simplify(double_quoted), "html.parser").select_one("a")
+    double_quoted = BeautifulSoup(agent.simplify(double_quoted)[0], "html.parser").select_one("a")
     assert double_quoted["onclick"] == f'setTargetAndSubmit("{next_page}")'
+    first_chunk = agent._page_content("<p>" + "x" * agent.PAGE_CHARS + "</p>" + control)
+    assert first_chunk.splitlines()[0].endswith(next_page)
     recipe = Recipe.model_validate(RECIPE | {
         "listing": RECIPE["listing"] | {
             "url": f"https://portal.example{category}?method=showCategoryOverview",
