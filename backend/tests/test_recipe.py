@@ -55,6 +55,32 @@ def _zip() -> bytes:
     return buffer.getvalue()
 
 
+def _office_package(main_part: str, *, with_relationships: bool = True) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("[Content_Types].xml", b"<Types/>")
+        zf.writestr(main_part, b"Office document")
+        if with_relationships:
+            zf.writestr("_rels/.rels", b"<Relationships/>")
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("main_part", [
+    "word/document.xml", "xl/workbook.xml", "xl/workbook.bin", "ppt/presentation.xml",
+])
+def test_office_package_is_saved_intact_even_with_a_generic_filename(tmp_path, main_part):
+    package = _office_package(main_part)
+    part = tmp_path / ".part-office"
+    part.write_bytes(package)
+
+    saved, unpacked = documents._save(part, "download", 0)
+
+    assert unpacked == 0
+    assert [doc["fileName"] for doc in saved] == ["download"]
+    assert (tmp_path / saved[0]["sha256"]).read_bytes() == package
+    assert not part.exists()
+
+
 def portal(request: httpx.Request) -> httpx.Response:
     path = request.url.path
     if path == "/robots.txt":
@@ -329,6 +355,63 @@ def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
         "/files/archive.zip", "/files/landing.pdf",
     ]
     assert not list(tmp_path.glob(".part-*"))
+
+
+@pytest.mark.parametrize("with_relationships", [True, False], ids=["office", "ordinary-zip"])
+def test_refresh_rechecks_legacy_office_entries_once(monkeypatch, tmp_path, with_relationships):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    monkeypatch.setattr(watchtower, "MAX_DETAILS", None)
+    db.init()
+    url = "https://portal.example/files/download"
+    legacy = {
+        "status": "open",
+        "documents": [{"fileName": name, "sha256": name} for name in ("[Content_Types].xml", "document.xml")],
+        "_documentUrls": [url],
+        "_documentSkips": {},
+        "_documentsComplete": True,
+    }
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('files', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute(
+            "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('files', '1', ?, ?)",
+            (json.dumps(legacy), db.now()),
+        )
+    downloads = []
+    package = _office_package("word/document.xml", with_relationships=with_relationships)
+    name = "specification.docx" if with_relationships else "specification.zip"
+
+    def response(request):
+        if request.url.path == "/t/1":
+            return httpx.Response(200, html=f'<a class="doc" href="{url}">File</a>')
+        if str(request.url) == url:
+            downloads.append(url)
+            return httpx.Response(200, content=package,
+                                  headers={"content-disposition": f'attachment; filename="{name}"'})
+        return portal(request)
+
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"records": "tr.t:first-child", "next_page": None},
+    })
+
+    async def refresh_twice():
+        for _ in range(2):
+            fetcher = Fetcher(transport=httpx.MockTransport(response))
+            try:
+                await watchtower._deliver("files", recipe, fetcher)
+            finally:
+                await fetcher.close()
+
+    asyncio.run(refresh_twice())
+    with db.connect() as conn:
+        record = json.loads(conn.execute("SELECT data FROM tender WHERE id = '1'").fetchone()["data"])
+    assert record["_documentsComplete"]
+    assert downloads == [url]
+    if with_relationships:
+        assert [file["fileName"] for file in record["documents"]] == [name]
+        assert (tmp_path / record["documents"][0]["sha256"]).read_bytes() == package
+    else:
+        assert [file["fileName"] for file in record["documents"]] == ["[Content_Types].xml", "document.xml"]
 
 
 def test_skipped_legacy_recheck_leaves_last_documents_visible(monkeypatch, tmp_path):

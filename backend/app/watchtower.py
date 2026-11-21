@@ -11,7 +11,7 @@ import httpx
 
 from . import db
 from .agent import Failed, Usage, explore
-from .documents import fetch_documents
+from .documents import fetch_documents, has_unpacked_office
 from .fetch import OVERSIZE_SKIP, Blocked, Deleted, Fetcher
 from .recipe import Recipe, apply, check
 
@@ -185,8 +185,16 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         urls = tender["_documentUrls"]
         missing += not urls
         same_urls = old and old.get("_documentUrls") == urls
-        if same_urls and old.get("_documentsComplete") and (not urls or "_documentSkips" in old):
+        if (
+            same_urls and old.get("_documentsComplete")
+            and (not urls or "_documentSkips" in old)
+            and (
+                not urls or old.get("_officePackagesChecked") or not has_unpacked_office(old["documents"])
+            )
+        ):
             tender["documents"], tender["_documentsComplete"] = old["documents"], True
+            if old.get("_officePackagesChecked"):
+                tender["_officePackagesChecked"] = True
             if "_documentSkips" in old:
                 tender["_documentSkips"] = old["_documentSkips"]
                 skips.update(old["_documentSkips"].values())
@@ -211,6 +219,8 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
             docs = list(kept.values())
         tender["documents"], tender["_documentsComplete"] = docs, done
         if urls:
+            if done:
+                tender["_officePackagesChecked"] = True
             tender["_documentSkips"] = tender_skips
             skips.update(tender_skips.values())
         pending += not done
