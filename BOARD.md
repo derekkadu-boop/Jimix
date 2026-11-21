@@ -12,6 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:57 | idle
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
 - Codex (Derek Windows B-30) | Windows/Codex subagent | last seen 2026-11-21 06:58 | B-30 NetServer row discovery
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
