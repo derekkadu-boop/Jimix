@@ -843,6 +843,40 @@ def test_recipe_test_hints_at_linked_documents_page(page, hinted):
     assert bool(retry_hint) == hinted
 
 
+def test_document_page_hint_finds_unmapped_platform_in_mixed_recipe():
+    recipe = Recipe.model_validate(RECIPE | {
+        "documents_by_host": {"files-one.example": {"files": {"path": "a.doc"}}},
+    })
+    tenders = [
+        {"id": "1", "url": "https://portal.example/t/1",
+         "_documentUrls": ["https://files-one.example/spec.pdf"]},
+        {"id": "2", "url": "https://portal.example/t/2", "_documentUrls": []},
+    ]
+    detail_pages = {
+        "1": (BeautifulSoup('<a href="https://files-one.example/docs">Vergabeunterlagen</a>', "html.parser"),
+              "https://portal.example/t/1"),
+        "2": (BeautifulSoup('<a href="https://files-two.example/NetServer/notice?function=Detail">'
+                            "Vergabeunterlagen</a>", "html.parser"), "https://portal.example/t/2"),
+    }
+    requests = []
+
+    def response(request):
+        requests.append(request.url.path)
+        return httpx.Response(200, html="")
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._document_page_hint(recipe, tenders, fetcher, detail_pages=detail_pages)
+        finally:
+            await fetcher.close()
+
+    hint, confirmed = asyncio.run(run())
+    assert not confirmed
+    assert "https://files-two.example/NetServer/notice?function=Detail" in hint
+    assert requests == []
+
+
 @pytest.mark.parametrize("by_host", [False, True])
 def test_refresh_preserves_files_after_document_page_error(monkeypatch, tmp_path, by_host):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
@@ -1260,7 +1294,100 @@ def test_indexed_validation_samples_details_across_categories(missing_b_deadline
 
     checked.clear()
     asyncio.run(run(validation=False))
-    assert checked == ["/t/a1", "/t/a2", "/t/a3"]
+    assert checked == ["/t/a1", "/t/b1", "/t/a2"]
+
+
+def test_indexed_sampling_spreads_across_many_categories():
+    category_count = 20
+    categories = "".join(f'<a class="category" href="/category/{i}">{i}</a>' for i in range(category_count))
+    pages = {
+        f"/category/{i}": (
+            f'<tr class="t"><td class="ref">R{i}</td><td><a href="/t/{i}">Tender {i}</a></td>'
+            f'<td class="buyer">Buyer {i}</td><td class="due">20.12.2099 10:00</td></tr>'
+        )
+        for i in range(category_count)
+    }
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {
+            "index": {"path": "a.category"},
+            "next_page": None,
+        },
+    })
+    checked, visited = [], []
+
+    def response(request):
+        path = request.url.path
+        if path == "/list":
+            return httpx.Response(200, html=categories)
+        if path in pages:
+            visited.append(path)
+            return httpx.Response(200, html=f'<table>{pages[path]}</table>')
+        if path.startswith("/t/"):
+            checked.append(path)
+            return httpx.Response(200, html="<p>No files</p>")
+        return portal(request)
+
+    async def run(*, max_pages):
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await apply(recipe, fetcher, max_pages=max_pages, max_details=10 if max_pages else 3)
+        finally:
+            await fetcher.close()
+
+    _, complete = asyncio.run(run(max_pages=11))
+    expected_capped = [0, 2, 4, 6, 8, 11, 13, 15, 17, 19]
+    assert visited == [f"/category/{i}" for i in expected_capped]
+    assert checked == [f"/t/{i}" for i in expected_capped]
+    assert not complete
+
+    checked.clear()
+    visited.clear()
+    _, complete = asyncio.run(run(max_pages=None))
+    assert visited == [f"/category/{i}" for i in range(category_count)]
+    assert checked == ["/t/0", "/t/10", "/t/19"]
+    assert complete
+
+
+def test_indexed_validation_explains_its_category_sample_cap(monkeypatch):
+    async def covered_documents(*_args, **_kwargs):
+        return None, []
+
+    async def no_hint(*_args, **_kwargs):
+        return None, False
+
+    monkeypatch.setattr(agent, "_check_documents", covered_documents)
+    monkeypatch.setattr(agent, "_document_page_hint", no_hint)
+    categories = "".join(f'<a class="category" href="/category/{i}">{i}</a>' for i in range(20))
+
+    def response(request):
+        if request.url.path == "/list":
+            return httpx.Response(200, html=categories)
+        if request.url.path.startswith("/category/"):
+            i = request.url.path.rsplit("/", 1)[-1]
+            row = (f'<tr class="t"><td class="ref">R{i}</td><td><a href="/t/{i}">Tender</a></td>'
+                   f'<td class="buyer">Buyer</td><td class="due">20.12.2099 10:00</td></tr>')
+            return httpx.Response(200, html=f"<table>{row}</table>")
+        return httpx.Response(404)
+
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"index": {"path": "a.category"}, "next_page": None},
+        "detail": None,
+        "documents": None,
+    })
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    report = asyncio.run(run())
+    warning = next(item for item in report["warnings"] if "Listing coverage is incomplete" in item)
+    assert "validation sample" in warning
+    assert "up to 10 categories" in warning
+    assert "cannot be raised during validation" in warning
+    assert "set max_pages high enough" not in warning
 
 
 @pytest.mark.parametrize(("html", "urls"), [

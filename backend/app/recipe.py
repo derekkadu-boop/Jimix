@@ -187,6 +187,16 @@ def _fill(template: str, raw: dict) -> str | None:
     return urljoin(raw["_base"], url)
 
 
+def _even_sample(items: list, count: int) -> list:
+    if count <= 0:
+        return []
+    if len(items) <= count:
+        return items
+    if count == 1:
+        return items[:1]
+    return [items[round(i * (len(items) - 1) / (count - 1))] for i in range(count)]
+
+
 JSON_PATH = re.compile(r"(?:\.?[^.\[\]]+)?(?:\[(?:\*|\d+)\])*(?:\.[^.\[\]]+(?:\[(?:\*|\d+)\])*)*")
 
 
@@ -416,18 +426,26 @@ def _has_next_page(page, base: str) -> bool:
 
 async def apply(
     recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None,
-    warnings: list[str] | None = None,
+    warnings: list[str] | None = None, detail_pages: dict[str, tuple[BeautifulSoup, str]] | None = None,
 ) -> tuple[list[dict], bool]:
     listing, raws = recipe.listing, []
-    indexed_sample = listing.index is not None and max_pages is not None and max_details is not None
+    indexed_sample = listing.index is not None and max_details is not None
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
     starts = [listing.url]
+    coverage_complete = True
     if listing.index:
         page, base = await _load(listing.kind, listing.url, fetcher)
         links = [urljoin(base, u) for u in _values(page, listing.index, listing.kind)]
-        starts = list(dict.fromkeys(links))[:MAX_INDEX_LISTS]
+        all_starts = list(dict.fromkeys(links))
+        starts = all_starts[:MAX_INDEX_LISTS]
+        coverage_complete = len(starts) == len(all_starts)
+        if max_pages is not None:
+            category_limit = max(0, max_pages - 1)
+            if len(starts) > category_limit:
+                starts = _even_sample(starts, category_limit)
+                coverage_complete = False
         budget -= 1
-    complete = bool(starts)
+    complete = bool(starts) and coverage_complete
     for index, start in enumerate(starts):
         seen: set[str] = set()
         url, finished, body = start, False, listing.body if listing.method == "POST" else None
@@ -497,12 +515,13 @@ async def apply(
             categories = {}
             for raw in candidates:
                 categories.setdefault(raw["_categoryIndex"], []).append(raw)
-            for category in categories.values():
+            category_samples = _even_sample(list(categories.values()), max_details)
+            for category in category_samples:
                 category.sort(key=detail_priority)
             details = [
                 category[position]
-                for position in range(max(map(len, categories.values()), default=0))
-                for category in categories.values()
+                for position in range(max(map(len, category_samples), default=0))
+                for category in category_samples
                 if position < len(category)
             ]
         else:
@@ -518,6 +537,8 @@ async def apply(
                 continue
             except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
                 continue
+            if detail_pages is not None:
+                detail_pages[str(raw.get("id"))] = page, base
             raw.update(_extract(page, recipe.detail.fields, recipe.detail.kind))
             if (recipe.documents or recipe.documents_by_host) and not recipe.documents_url:
                 try:

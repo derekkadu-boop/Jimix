@@ -19,6 +19,7 @@ from .recipe import (
     SENSITIVE_KEY,
     TENDER_FIELDS,
     Recipe,
+    _values,
     apply,
     bad_json_path,
     check,
@@ -194,7 +195,7 @@ TOOLS = [
         ["url"],
     ),
     _tool("scan_scripts", "List API-like paths found in a page's scripts, with surrounding code.", URL),
-    _tool("test_recipe", "Run a recipe on 3 list pages and 3 detail pages. Returns samples and problems.", RECIPE),
+    _tool("test_recipe", "Run a bounded recipe sample; indexed listings sample up to 10 categories and details.", RECIPE),
     _tool("submit_recipe", "Submit a recipe. Accepted only when test_recipe would report no problem.", RECIPE),
     _tool(
         "give_up",
@@ -478,27 +479,37 @@ async def _has_unmapped_attachment(url: str, known: set[str], hashes: set[str], 
 
 async def _document_page_hint(
     recipe: Recipe, tenders: list[dict], fetcher: Fetcher, *, notice_hashes: set[str] | None = None,
-    retry_mapping: bool = False,
+    retry_mapping: bool = False, detail_pages: dict[str, tuple[BeautifulSoup, str]] | None = None,
 ) -> tuple[str | None, bool]:
     mapped_page = recipe.documents_page or recipe.documents_by_host
-    if recipe.documents_url or (mapped_page and not retry_mapping):
+    if recipe.documents_url or (mapped_page and not retry_mapping and not detail_pages):
         return None, False
     if not recipe.detail or recipe.detail.kind != "html":
         return None, False
-    mapped = {url for tender in tenders for url in tender["_documentUrls"]}
+    mapped = {url for tender in tenders for url in (tender.get("_documentUrls") or [])}
+    mapped_hosts = set(recipe.documents_by_host)
     candidates = [t for t in tenders if t.get("url")]
     first_hint = file_hint = None
-    for tender in candidates[:3 if notice_hashes or retry_mapping else 1]:
-        try:
-            resp = await fetcher.get(tender["url"])
-        except (Blocked, httpx.HTTPError, ValueError, OSError):
-            continue
-        known = mapped | {tender["url"], str(resp.url)}
-        page = BeautifulSoup(resp.text, "html.parser")
-        content_links = ({href for _, href in _document_navigation(page, str(resp.url), content_only=True)}
+    limit = 10 if notice_hashes or retry_mapping or detail_pages else 1
+    for tender in candidates[:limit]:
+        cached = detail_pages.get(str(tender["id"])) if detail_pages is not None else None
+        if cached:
+            page, base = cached
+        else:
+            if detail_pages is not None:
+                continue
+            try:
+                resp = await fetcher.get(tender["url"])
+            except (Blocked, httpx.HTTPError, ValueError, OSError):
+                continue
+            page, base = BeautifulSoup(resp.text, "html.parser"), str(resp.url)
+        known = mapped | {tender["url"], base}
+        if recipe.documents_page:
+            known.update(urljoin(base, url) for url in _values(page, recipe.documents_page, "html"))
+        content_links = ({href for _, href in _document_navigation(page, base, content_only=True)}
                          if notice_hashes else set())
-        for text, href in _document_navigation(page, str(resp.url)):
-            if href not in known:
+        for text, href in _document_navigation(page, base):
+            if href not in known and urlsplit(href).hostname not in mapped_hosts:
                 action = ("Verify that your documents_page or host rule follows this link and selects its files"
                           if mapped_page else "Set documents_page to this link and documents to the file links there")
                 hint = (
@@ -511,8 +522,8 @@ async def _document_page_hint(
                 first_hint = first_hint or hint
                 if href in content_links:
                     break
-        if not tender["_documentUrls"] and not file_hint:
-            for link, target in _public_document_links(page, str(resp.url)):
+        if not (tender.get("_documentUrls") or []) and not file_hint:
+            for link, target in _public_document_links(page, base):
                 href = target.geturl()
                 if href not in known and (FILE_SUFFIX.search(target.path) or link.has_attr("download")):
                     file_hint = f"tender page has a file-link candidate ({href}); test it with the documents selector"
@@ -524,10 +535,14 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     if path := bad_json_path(recipe):
         return {"problem": f"unsupported JSON path {path!r}: use dot paths with [*] and [N],"
                            " e.g. $.items[*].links.href", "warnings": [], "tenderCount": 0, "sample": []}
-    max_pages = 3
+    indexed = recipe.listing.index is not None
+    max_pages = min(recipe.max_pages, 11 if indexed else 3)
+    max_details = 10 if indexed else 3
     pagination_warnings = []
+    detail_pages = {}
     tenders, complete = await apply(
-        recipe, fetcher, max_pages=max_pages, max_details=3, warnings=pagination_warnings
+        recipe, fetcher, max_pages=max_pages, max_details=max_details, warnings=pagination_warnings,
+        detail_pages=detail_pages,
     )
     sample = tenders
     if recipe.detail and (recipe.documents or recipe.documents_by_host):
@@ -543,7 +558,7 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
                        " tender page, or fetch a concrete URL before mapping detail.url")
         hint, attachment_confirmed = await _document_page_hint(
             recipe, sample, fetcher, notice_hashes=hashes if NOTICE_ONLY in document_warnings else None,
-            retry_mapping=problem == NO_DOCUMENT_LINKS,
+            retry_mapping=problem == NO_DOCUMENT_LINKS, detail_pages=detail_pages,
         )
         if hint:
             document_warnings.append(hint)
@@ -554,8 +569,14 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     if tenders and not complete:
-        warnings.append(f"Listing coverage is incomplete in the sample (test budget: {max_pages} pages, "
-                        f"recipe max_pages: {recipe.max_pages}). Check pagination and set max_pages high enough.")
+        if max_pages < recipe.max_pages:
+            sample_cap = "the index and up to 10 categories" if indexed else "3 pages"
+            warnings.append(f"Listing coverage is incomplete in the validation sample (test cap: {sample_cap}; "
+                            f"recipe max_pages: {recipe.max_pages}). This sample cap cannot be raised during "
+                            "validation; increase max_pages only if live runs should scan more pages.")
+        else:
+            warnings.append(f"Listing coverage is incomplete in the sample (test budget: {max_pages} pages, "
+                            f"recipe max_pages: {recipe.max_pages}). Check pagination and set max_pages high enough.")
     warnings.extend(pagination_warnings)
     warnings.extend(document_warnings)
     if recipe.documents_url and not recipe.documents and not problem:
