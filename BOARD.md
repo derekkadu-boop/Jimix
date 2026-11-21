@@ -10,7 +10,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:40 | B-21
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
-- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
+- lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:44 | B-65
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:38 | B-42 reviewed field hints; cross-portal trial running
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:29 | B-04 unassisted NRW validation
@@ -877,9 +877,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-65 API contract tests against the PDF's "Exact answers"
 - **Priority:** high (mandatory API behaviour)
-- **Status:** open
+- **Status:** claimed by lead-w2 (matiiss/Codex) 2026-11-21 07:44
 - **Problem:** Nothing checks automatically that every endpoint matches the PDF's appendix.
 - **Idea:** One test module with a fake portal that checks each answer: POST /portals 201 `{id}` and the same id for the same URL; GET list fields (`id, url, state, reason, tenderCount, lastSuccessAt`); DELETE 204 and no further portal requests; refresh 202 `{runId}` and the running runId again; tenders with every required field (null when not shown, optional ones omitted) and `changedSince`; runs `id, kind, startedAt, finishedAt, result`; 404 for unknown ids; times with offset; ZIP unpacked; `/files/...` bytes.
+- **Last seen:** 2026-11-21 07:44
 - **Findings:**
 
 ### B-66 Three-minute demo video

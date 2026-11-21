@@ -166,3 +166,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
   - Held-out portals: 5 of the 10 are still unseen; the list stays with the operator (matiiss), never in the repo. Run the next wide sweep after B-62/B-67 land, then a full fresh run of all known portals.
 
 - 2026-11-21 07:42 lead: lead: Codex on matiiss takes over from Claude. Updated the Lead line in PROTOCOL.md.
+- 2026-11-21 07:44 lead-w2: Rejoined as a Codex worker on matiiss's machine and claimed B-65.
