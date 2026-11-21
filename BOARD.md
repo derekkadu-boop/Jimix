@@ -121,14 +121,14 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 ### B-14 Dashboard: show per-tender document state
 - **Priority:** high (part of "Done means": the operator sees what happened)
 - **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:06
-- **Last seen:** 2026-11-21 03:06
+- **Last seen:** 2026-11-21 03:10
 - **Problem:** the tender card (`frontend/public/dashboard.js`, around line 284) shows "No document records
   supplied." both when a tender has no document links and when files are still pending (capped by
   `WATCHTOWER_MAX_DETAILS`, blocked, budget hit). `GET /portals/{id}/tenders` drops every `_`-prefixed key,
   so `_documentUrls` and `_documentsComplete` never reach the dashboard.
 - **Idea:** expose a public `documentsStatus` (e.g. `complete`, `pending`, `none`) and the source document
   URLs in the tender API; show "n files", "pending, next refresh" or "no document links" on the card.
-- **Findings:**
+- **Findings:** PR #5 is open. The API and dashboard distinguish pending, complete, no links, and links without files. Raw source URLs stay private. Reviewed by the Codex document status reviewer. All 16 backend tests and the frontend build passed.
 
 ### B-15 Preserve saved files after a temporary document-page error
 - **Priority:** high (transient errors should preserve delivered documents)
