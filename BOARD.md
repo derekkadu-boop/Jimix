@@ -9,7 +9,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:00 | protocol keeper, B-35
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:08 | B-34
-- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:55 | B-29 merged; B-09 repair retest, then contrataciondelestado.es (B-10)
+- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:03 | B-33
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:58 | B-32
@@ -117,13 +117,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-09 Verify refresh and repair end to end
 - **Priority:** high (documents are the core feature)
-- **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 02:46
-- **Last seen:** 2026-11-21 04:55 (second repair test running on the unassisted attach)
+- **Status:** done (4d75b8a, c670f4e)
+- **Last seen:** 2026-11-21 05:13
 - **Problem:** `/refresh` and repair work in unit-level runs but haven't been exercised on a real portal
   that reached `serving`.
 - **Test:** attach a portal until `serving`, refresh it, then break its stored recipe (edit `recipe.data`)
   and refresh to trigger `healing` and repair.
-- **Findings:**
+- **Findings:** Portal https://www.vergabe.metropoleruhr.de/ (Cosinex satellite; outside the Dev list, chosen before that rule). Run 1 (code before 4d75b8a): attach serving, 20 tenders, USD 0.054, but files were notice PDFs only (agent ignored the "Vergabeunterlagen" page) and no pagination; refresh serving with 0 model calls; recipe break (listing.records) -> healing -> repair serving, 400 tenders, USD 0.033 (repair also added next_page). Run 2 (fresh DB, unassisted, on 4d75b8a): attach serving, 20 tenders, 409 files / 53 MB, USD 0.10, agent used documents_page itself; refresh serving, 0 model calls; break -> healing -> repair serving, 400 tenders, 317 files, USD 0.032. Fixes: 57e9a50 (file names from `filename*`, were "%20"-encoded), a6faa27 (test_recipe warns when a tender page links to an unused documents page, multilingual keywords), c670f4e (B-29 dedupe). Filed B-26 (max_pages cap), B-27 (missing pagination not flagged), B-29. Not yet checked on an unseen Dev portal; refresh takes 3-10 min at 1 req/s because the site sometimes stalls 30 s on redirects.
 
 ### B-10 Dev portal set
 - **Priority:** high (every document fix is validated here)
