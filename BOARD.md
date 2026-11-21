@@ -264,6 +264,27 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   results that previously exposed Office package internals. Test on NRW 1138704.
 - **Findings:**
 
+### B-26 Listings silently capped at max_pages
+- **Priority:** medium (tenders beyond the cap never get documents)
+- **Status:** open
+- **Problem:** `Recipe.max_pages` defaults to 20 and the agent leaves it. On https://www.vergabe.metropoleruhr.de/
+  (20 rows per page, about 41 pages) a repaired recipe read 400 tenders and stopped; `complete` is false,
+  but no run reason or test warning says the listing was cut.
+- **Idea:** report "listing stopped at max_pages" in test_recipe and the run reason; raise the default or
+  let the agent set it from the page count it sees.
+- **Findings:**
+
+### B-27 test_recipe doesn't flag a listing without pagination
+- **Priority:** medium
+- **Status:** open
+- **Problem:** the first attach of https://www.vergabe.metropoleruhr.de/ submitted a recipe with no
+  next_page/page_param although the list page has a forward link (`a.browseForward`, page links with a
+  numeric parameter): 20 of ~800 tenders. A later repair found the link by itself.
+- **Idea:** generic check in test_recipe: when paging is unset and the first list page has a link whose
+  text or class means next (multilingual keywords) or whose URL differs from the listing URL only by a
+  numeric parameter, warn.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
