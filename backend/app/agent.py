@@ -402,12 +402,14 @@ async def _check_documents(
         elif recipe.documents_by_host:
             warnings.append(f"could not download sampled file from {urlsplit(url).hostname}")
         blocked = blocked or why
-    if downloaded:
-        if not attachment:
-            warnings.append(NOTICE_ONLY)
+    if attachment:
         return None, warnings
+    if downloaded:
+        warnings.append(NOTICE_ONLY)
     if blocked:
         return f"document download blocked ({blocked}); call give_up with blocked=true if that holds for all", warnings
+    if downloaded:
+        return None, warnings
     return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links", warnings
 
 
