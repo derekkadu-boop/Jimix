@@ -546,11 +546,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-41 Preserve tenders when a listing index is truncated
 - **Priority:** high (unvisited categories can lose open status and stop receiving documents)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:50
-- **Last seen:** 2026-11-21 05:50
+- **Status:** in review (PR #13)
 - **Problem:** Recipe.apply caps unique category links at MAX_INDEX_LISTS. If all visited categories finish, it reports complete despite unvisited categories. Synthetic index with MAX_INDEX_LISTS + 1 ordinary category links reproduces the coverage error; no real site was probed.
 - **Idea:** Mark truncated category indexes as incomplete and verify that refreshing preserves the open status and files of a previously saved tender in a skipped category.
-- **Findings:**
+- **Findings:** PR #13 marks an indexed listing incomplete if unique category links exceed the existing cap, preserving saved tenders and their files. Duplicate links still permit closure when all distinct categories finish. Two reviewers, 93 backend tests and Ruff passed with synthetic fixtures.
 
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
