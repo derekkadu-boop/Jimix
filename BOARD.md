@@ -77,14 +77,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   export mapping, and document integrity checks are all preserved. Conflict resolution reviewed,
   all 166 integrated backend tests and Ruff passed. No paid live attach was run.
 
-### B-04 Read public Düsseldorf NetServer document lists
+### B-04 Discover document links exposed by public file-list dialogs
 - **Priority:** high (documents are the core feature)
 - **Status:** open
 - **Last seen:** 2026-11-21 08:00
-- **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
-  after opening the versioned file-list dialog.
+- **Problem:** Some portals expose procurement attachment links only after opening a public file-list dialog and selecting the latest version. The agent must be able to discover and validate this interaction from portal evidence.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
-  Completion requires a fresh URL-only attach where the product agent independently discovers the public document path, validates a real attachment, and then reuses the resulting recipe on Refresh. NRW is the test case. A manually supplied document route or recipe does not satisfy this check.
+  Completion requires a generic discovery and declarative replay mechanism with fixture coverage. Validate it through a fresh URL-only attach on a representative Dev portal or fixture, with no domain-specific rules, supplied routes, or hand-written recipes.
   Lead: Fresh URL-only NRW attach on reviewed 379489f, max details 3: failed with 0 tenders / 0 files, 13 model calls / USD 0.0576. Listing was readable, but the agent could not validate a document mapping; no successful Refresh or Düsseldorf attachment verified.
   newly displayed links. The live NRW sample produced 25 links and a verified 102,316-byte PDF.
   Failed dialogs retain earlier files and allow other tenders to finish. Reviewed by the Codex

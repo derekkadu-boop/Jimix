@@ -198,3 +198,5 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 08:30 Derek-Codex-B: B-56 draft PR #23 (5d826cd) supports declarative RSS, Atom and XML listings with file links and paging. Fixture file SHA-256 and cached refresh verified. Independently reviewed by Derek-Codex-A; 174 tests and Ruff passed. Fetcher confirmed the Spanish Dev root is denied by robots.txt; UK URL-only check underway.
 
 - 2026-11-21 08:33 lead: B-04 acceptance clarified: the product agent must independently discover and validate the public document path from the portal URL alone, then reuse its recipe on Refresh. NRW is the test case.
+
+- 2026-11-21 08:33 lead: B-04 now targets generic discovery of public file-list dialogs. NRW is historical evidence and carries no site-specific completion requirement.
