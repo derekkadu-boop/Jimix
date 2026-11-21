@@ -180,11 +180,51 @@ def _fill(template: str, raw: dict) -> str | None:
     return urljoin(raw["_base"], url)
 
 
+JSON_PATH = re.compile(r"(?:\.?[^.\[\]]+)?(?:\[(?:\*|\d+)\])*(?:\.[^.\[\]]+(?:\[(?:\*|\d+)\])*)*")
+
+
+def _path_ok(path: str) -> bool:
+    rest = path.removeprefix("$")
+    return bool(JSON_PATH.fullmatch("" if rest == "." else rest))
+
+
 def _json_path(value, path: str):
-    path = path.removeprefix("$").removeprefix(".")
-    for part in path.split(".") if path else []:
-        if isinstance(value, dict):
-            value = value.get(part)
+    if not _path_ok(path):
+        return None
+    rest = path.removeprefix("$")
+    return _walk(value, [part for part in re.sub(r"\[(\*|\d+)\]", r".\1", rest).split(".") if part])
+
+
+def bad_json_path(recipe: "Recipe") -> str | None:
+    listing, detail = recipe.listing, recipe.detail
+    documents_kind = "html" if recipe.documents_page else (detail or listing).kind
+    if recipe.documents_url:
+        documents_kind = recipe.documents_url.kind
+    groups = [(listing.kind, [Selector(path=listing.records), *listing.fields.values(), listing.next_page,
+                              listing.index]),
+              (detail.kind if detail else "html", list(detail.fields.values()) if detail else []),
+              (documents_kind, [recipe.documents])]
+    for kind, selectors in groups:
+        for selector in selectors if kind == "json" else []:
+            for path in (selector.path, selector.attribute) if selector else ():
+                if path and not _path_ok(path):
+                    return path
+    return None
+
+
+def _walk(value, parts: list[str]):
+    for i, part in enumerate(parts):
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        elif part == "*":
+            items = list(value.values()) if isinstance(value, dict) else value
+            if not isinstance(items, list):
+                return None
+            found = []
+            for item in items:
+                result = _walk(item, parts[i + 1:]) if parts[i + 1:] else item
+                found.extend(result if isinstance(result, list) and parts[i + 1:] else [result])
+            return [v for v in found if v is not None]
         elif isinstance(value, list) and part.isdigit():
             value = value[int(part)] if int(part) < len(value) else None
         else:
@@ -197,7 +237,11 @@ def _values(node, selector: Selector, kind: Kind) -> list[str]:
         found = _json_path(node, selector.path)
         items = found if isinstance(found, list) else [found]
         if selector.attribute:
-            items = [_json_path(item, selector.attribute) if isinstance(item, dict) else None for item in items]
+            picked = []
+            for item in items:
+                result = _json_path(item, selector.attribute) if isinstance(item, (dict, list)) else item
+                picked.extend(result if isinstance(result, list) else [result])
+            items = picked
         values = [str(i) for i in items if isinstance(i, (str, int, float)) and not isinstance(i, bool)]
     else:
         elements = [node] if selector.path == "$" else node.select(selector.path)

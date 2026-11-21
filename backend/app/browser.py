@@ -171,9 +171,10 @@ async def render(
         if request.resource_type in SKIPPED:
             await route.abort()
             return
+        parts = urlsplit(request.url)
+        same_origin = (parts.scheme, parts.netloc) == (origin.scheme, origin.netloc)
         if netserver_files:
-            parts = urlsplit(request.url)
-            if (parts.scheme, parts.netloc) != (origin.scheme, origin.netloc):
+            if not same_origin:
                 await route.abort()
                 return
             if request.method not in ("GET", "HEAD"):
@@ -181,13 +182,15 @@ async def render(
                     await route.abort()
                     return
                 file_tree_requested = True
-            if not await fetcher.allowed(request.url):
-                if request.method == "POST":
-                    file_tree_denied = True
-                    await route.fulfill(status=403)
-                else:
-                    await route.abort()
-                return
+        if (netserver_files or (same_origin and request.resource_type in {"fetch", "xhr"})) and not await (
+            fetcher.allowed(request.url)
+        ):
+            if netserver_files and request.method == "POST":
+                file_tree_denied = True
+                await route.fulfill(status=403)
+            else:
+                await route.abort()
+            return
         if request.method == "GET" and (cached := fetcher.assets.get(request.url)):
             await route.fulfill(status=cached[0], headers=cached[1], body=cached[2])
             return

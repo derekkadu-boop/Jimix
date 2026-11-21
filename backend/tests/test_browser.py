@@ -233,3 +233,63 @@ def test_browser_waits_for_delayed_files_within_the_render_budget(monkeypatch, s
     else:
         assert '<a href="/specification.pdf">Specification</a>' in html
         assert calls == [{"url": base + "/files.json", "method": "GET", "sample": '{"file": "/specification.pdf"}'}]
+
+
+def test_browser_respects_robots_for_same_origin_data_requests(monkeypatch):
+    requests = []
+
+    class Site(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            if self.path == "/robots.txt":
+                body, content_type = "User-agent: *\nDisallow: /forbidden.json", "text/plain"
+            elif self.path == "/allowed.json":
+                body, content_type = '{"file": "/specification.pdf"}', "application/json"
+            else:
+                body, content_type = """
+                <main>Public listing</main>
+                <script>
+                  fetch("/forbidden.json").catch(() => {});
+                  fetch("/allowed.json").then(r => r.json()).then(({file}) => {
+                    const link = document.createElement("a");
+                    link.href = file;
+                    link.textContent = "Specification";
+                    document.querySelector("main").append(link);
+                  });
+                </script>
+                """, "text/html"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.end_headers()
+            self.wfile.write(body.encode())
+
+        def log_message(self, *_args):
+            pass
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Site) as site:
+        base = f"http://127.0.0.1:{site.server_port}"
+
+        async def allow_fixture(url):
+            assert url.startswith(base + "/")
+
+        monkeypatch.setattr(browser, "check_public", allow_fixture)
+        monkeypatch.setattr(fetch, "INTERVAL", 0)
+        monkeypatch.setattr(browser, "QUIET_SECONDS", 0.1)
+        worker = Thread(target=site.serve_forever, daemon=True)
+        worker.start()
+
+        async def read():
+            fetcher = Fetcher(transport=httpx.AsyncHTTPTransport())
+            try:
+                return await browser.render(f"{base}/list", fetcher, require_stable=True)
+            finally:
+                await fetcher.close()
+
+        try:
+            html, calls, _ = asyncio.run(read())
+        finally:
+            site.shutdown()
+            worker.join()
+    assert "/specification.pdf" in html
+    assert [call["url"] for call in calls] == [f"{base}/allowed.json"]
+    assert requests == ["/robots.txt", "/list", "/allowed.json"]

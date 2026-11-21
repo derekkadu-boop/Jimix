@@ -15,7 +15,7 @@ from app import agent, db, documents, fetch, watchtower
 from app import recipe as recipes
 from app.documents import fetch_documents
 from app.fetch import Blocked, Fetcher
-from app.recipe import Recipe, apply
+from app.recipe import Recipe, Selector, apply
 
 LIST_1 = """<html><body><table>
 <tr class="t"><td class="ref">A-1</td><td><a href="/t/1">Road works</a></td>
@@ -596,6 +596,32 @@ def test_url_templates_read_detail_and_document_list():
     assert first["submissionDeadline"].startswith("2099-02-15T09:00")
     assert first["cpvCodes"] == ["45232420"]
     assert first["_documentUrls"] == [f"https://api.example/api/pub/7/docs/{i}/content" for i in (1, 2)]
+    assert len(docs) == 2
+
+
+def test_jsonpath_wildcards_and_indexes():
+    data = {"content": [{"a": {"b": [{"h": "x"}, {"h": "y"}]}}, {"a": {"b": [{"h": "z"}]}}], "m": {"k": {"h": "w"}}}
+    assert recipes._json_path(data, "$.content[*].a.b[*].h") == ["x", "y", "z"]
+    assert recipes._json_path(data, "content[1].a.b[0].h") == "z"
+    assert recipes._json_path(data, "$.content[*]") == data["content"]
+    assert recipes._json_path(data, "$.m.*.h") == ["w"]
+    assert recipes._json_path(data, "$.missing[*].h") is None
+    assert recipes._json_path({"a": [{"$id": 1}, None, {"$id": 2}]}, "a[*].$id") == [1, 2]
+    assert recipes._json_path({"a": [None, {"b": 1}]}, "$.a[*]") == [{"b": 1}]
+    assert recipes._json_path({"*": 3}, "*") == 3
+    for bad in ("$..href", "$.a['k']", "$.a[?(@.x)]", "$.a[-1]"):
+        assert recipes._json_path(data, bad) is None
+        assert recipes.bad_json_path(Recipe.model_validate(API_RECIPE | {"documents": {"path": bad}})) == bad
+    assert recipes.bad_json_path(Recipe.model_validate(API_RECIPE)) is None
+    assert recipes._json_path({"k": "a" * 5000 + "'"}, "a" * 5000 + "'") is None
+    files = Selector(path="$.docs", attribute="links[*].href")
+    assert recipes._values({"docs": [{"links": [{"href": "/a"}, {"href": "/b"}]}]}, files, "json") == ["/a", "/b"]
+    redundant = Selector(path="$.docs[*].links[*].href", attribute="href")
+    assert recipes._values({"docs": [{"links": [{"href": "/a"}]}]}, redundant, "json") == ["/a"]
+    recipe = API_RECIPE | {"documents": {"path": "$.documenten[*].links.download.href"},
+                           "listing": API_RECIPE["listing"] | {"records": "$.content[*]"}}
+    tenders, _, docs = _apply(recipe, api)
+    assert tenders[0]["_documentUrls"] == [f"https://api.example/api/pub/7/docs/{i}/content" for i in (1, 2)]
     assert len(docs) == 2
 
 
@@ -1474,3 +1500,51 @@ def test_post_paging_stops_cleanly_on_a_later_client_error():
     tenders, complete = asyncio.run(run())
     assert [t["id"] for t in tenders] == ["P1", "P2"]
     assert not complete
+
+
+@pytest.mark.parametrize(
+    ("html", "expected"),
+    [
+        ('<a href="/documents" aria-label="Tender documents"><i></i></a>', "https://portal.example/documents"),
+        ('<a href="/documents" title="Documents"><i></i></a>', "https://portal.example/documents"),
+        ('<a href="/specification.pdf">File</a>', "https://portal.example/specification.pdf"),
+        ('<a href="/attachment?id=1" download>File</a>', "https://portal.example/attachment?id=1"),
+        ('<a href="javascript:void(0)" aria-label="Documents">Files</a>', None),
+        ('<template><a href="/documents">Documents</a></template>', None),
+        ('<div hidden><a href="/documents">Documents</a></div>', None),
+    ],
+)
+def test_document_hints_find_ordinary_accessible_links(html, expected):
+    requests = []
+
+    def response(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        requests.append(request.url.path)
+        return httpx.Response(200, html=html)
+
+    recipe = Recipe.model_validate(RECIPE)
+    tender = {"url": "https://portal.example/t/1", "_documentUrls": []}
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._document_page_hint(recipe, [tender], fetcher)
+        finally:
+            await fetcher.close()
+
+    hint, confirmed = asyncio.run(run())
+    assert not confirmed
+    if expected:
+        assert expected in hint
+    else:
+        assert hint is None
+    assert requests == ["/t/1"]
+
+
+def test_page_content_hints_keep_accessible_labels_and_skip_hidden_links():
+    page = ('<a href="/hidden" hidden>Documents</a>'
+            '<a href="/download" download aria-label="Documents"></a>'
+            '<a href="/tender-files" aria-label="Tender documents"></a>')
+    hints = agent.simplify(page, "https://portal.example/t/1")[2]
+    assert hints == ["Possible document-page link: 'tender documents' -> 'https://portal.example/tender-files'"]

@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit
 from weakref import WeakKeyDictionary
 
 import httpx
@@ -14,7 +14,16 @@ from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .discovery import discover, scan_scripts
 from .documents import fetch_documents
 from .fetch import Blocked, Fetcher
-from .recipe import KEYWORDS, SENSITIVE_KEY, TENDER_FIELDS, Recipe, apply, check, pagination_handler
+from .recipe import (
+    KEYWORDS,
+    SENSITIVE_KEY,
+    TENDER_FIELDS,
+    Recipe,
+    apply,
+    bad_json_path,
+    check,
+    pagination_handler,
+)
 
 log = logging.getLogger("watchtower.agent")
 MODEL = os.environ.get("WATCHTOWER_MODEL", "gpt-5.4-mini")
@@ -129,7 +138,9 @@ A recipe is JSON:
 Documents are read from the documents page, else the detail page when detail is set, else the row.
 With documents_url, documents is read from that URL; without documents, the URL itself is the one file.
 Placeholders are mapped field names ({{id}}, {{referenceNumber}}...), filled per tender.
-"attribute" may be a dot path inside each item, e.g. "links.download.href".
+"attribute" may be a dot path inside each item, e.g. "links.download.href". Dot paths accept [*] to map
+over a list and [0] to index, e.g. "$.files[*].links.download.href". A field keeps its first value
+(cpvCodes keeps all); documents keeps every value.
 Map status to a field naming the notice's state or type when there is one (award notices are closed).
 Set detail to {{}} when visiting details only to find files or links. Setting documents_page also
 requires documents or documents_by_host to select file links.
@@ -245,12 +256,12 @@ def _category_hint(soup: BeautifulSoup, base: str) -> str | None:
     return hint
 
 
-def _document_navigation(soup: BeautifulSoup, base: str, *, content_only: bool = False):
+def _public_document_links(soup: BeautifulSoup, base: str, *, content_only: bool = False):
     for link in soup.select("a[href]"):
-        if content_only and link.find_parent(["nav", "header", "footer", "aside"]):
+        if (link.has_attr("hidden") or link.find_parent(["template", "noscript"])
+                or link.find_parent(attrs={"hidden": True})):
             continue
-        label = " ".join(link.get_text(" ").split()).casefold()
-        if not 0 < len(label) <= 60 or not DOCUMENT_PAGE.search(label):
+        if content_only and link.find_parent(["nav", "header", "footer", "aside"]):
             continue
         href = link["href"].strip()
         if not href or len(href) > 300 or href.startswith("#"):
@@ -259,13 +270,22 @@ def _document_navigation(soup: BeautifulSoup, base: str, *, content_only: bool =
             target = urlsplit(urljoin(base, href))
         except ValueError:
             continue
-        if target.scheme not in ("http", "https") or not target.netloc or target.username is not None:
+        if target.scheme not in ("http", "https") or not target.hostname or target.username is not None:
             continue
         if any(SENSITIVE_KEY.search(key) for key, _ in parse_qsl(target.query, keep_blank_values=True)):
             continue
-        path = SESSION_PATH.sub("", target.path)
-        if not FILE_SUFFIX.search(path):
-            yield label, urlunsplit((target.scheme, target.netloc, path, target.query, ""))
+        yield link, target._replace(path=SESSION_PATH.sub("", target.path), fragment="")
+
+
+def _document_navigation(soup: BeautifulSoup, base: str, *, content_only: bool = False):
+    for link, target in _public_document_links(soup, base, content_only=content_only):
+        if FILE_SUFFIX.search(target.path) or link.has_attr("download"):
+            continue
+        for label in (link.get_text(" "), link.get("aria-label", ""), link.get("title", "")):
+            label = " ".join(label.split()).casefold()
+            if 0 < len(label) <= 60 and DOCUMENT_PAGE.search(label):
+                yield label, target.geturl()
+                break
 
 
 def simplify(html: str, base: str | None = None) -> tuple[str, str | None, list[str]]:
@@ -282,6 +302,7 @@ def simplify(html: str, base: str | None = None) -> tuple[str, str | None, list[
             tag.decompose()
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
+    navigation = list(_document_navigation(soup, base)) if base else []
     for tag in soup.find_all(True):
         pagination = pagination_handler(tag)
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
@@ -297,7 +318,7 @@ def simplify(html: str, base: str | None = None) -> tuple[str, str | None, list[
         )
     if base:
         seen = set()
-        for label, url in _document_navigation(soup, base):
+        for label, url in navigation:
             if url not in seen:
                 hints.append(f"Possible document-page link: {label!r} -> {url!r}")
                 seen.add(url)
@@ -436,17 +457,12 @@ async def _has_unmapped_attachment(url: str, known: set[str], hashes: set[str], 
     blocks = len(fetcher.blocks)
     try:
         response = await fetcher.get(url)
-        for tag in BeautifulSoup(response.text, "html.parser").select("a[href]"):
-            if tag.find_parent(["nav", "header", "footer", "aside"]):
+        page = BeautifulSoup(response.text, "html.parser")
+        for tag, target in _public_document_links(page, str(response.url), content_only=True):
+            file_url = target.geturl()
+            if file_url in known or NOTICE_PDF.search(target.path.rsplit("/", 1)[-1]):
                 continue
-            file_url = urljoin(str(response.url), tag["href"])
-            target = urlsplit(file_url)
-            if target.scheme not in ("http", "https") or not target.netloc or target.username is not None:
-                continue
-            if any(SENSITIVE_KEY.search(key) for key, _ in parse_qsl(target.query, keep_blank_values=True)):
-                continue
-            path = target.path
-            if file_url in known or not FILE_SUFFIX.search(path) or NOTICE_PDF.search(path.rsplit("/", 1)[-1]):
+            if not (FILE_SUFFIX.search(target.path) or tag.has_attr("download")):
                 continue
             docs, _, _ = await fetch_documents([file_url], fetcher)
             return any(doc["sha256"] not in hashes and not NOTICE_PDF.search(doc["fileName"]) for doc in docs)
@@ -468,7 +484,7 @@ async def _document_page_hint(
         return None, False
     mapped = {url for tender in tenders for url in tender["_documentUrls"]}
     candidates = [t for t in tenders if t.get("url")]
-    first_hint = None
+    first_hint = file_hint = None
     for tender in candidates[:3 if notice_hashes or retry_mapping else 1]:
         try:
             resp = await fetcher.get(tender["url"])
@@ -492,10 +508,19 @@ async def _document_page_hint(
                 first_hint = first_hint or hint
                 if href in content_links:
                     break
-    return first_hint, False
+        if not tender["_documentUrls"] and not file_hint:
+            for link, target in _public_document_links(page, str(resp.url)):
+                href = target.geturl()
+                if href not in known and (FILE_SUFFIX.search(target.path) or link.has_attr("download")):
+                    file_hint = f"tender page has a file-link candidate ({href}); test it with the documents selector"
+                    break
+    return first_hint or file_hint, False
 
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
+    if path := bad_json_path(recipe):
+        return {"problem": f"unsupported JSON path {path!r}: use dot paths with [*] and [N],"
+                           " e.g. $.items[*].links.href", "warnings": [], "tenderCount": 0, "sample": []}
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
     sample = tenders
     if recipe.detail and (recipe.documents or recipe.documents_by_host):
