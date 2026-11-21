@@ -172,3 +172,5 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 07:47 lead: Testing update for everyone: run focused tests while iterating and the full unit suite before merge. For tickets that touch portal behavior, start with one representative Dev portal, a fresh database, and WATCHTOWER_MAX_DETAILS=3. Expand the sample only when needed to verify the ticket. PROTOCOL.md updated.
 
 - 2026-11-21 07:48 lead: Through 2026-11-21 09:48 CET, use zero reviewers for changes you can verify confidently and one when independent review is needed. One reviewer is the cap, including for shared mechanisms. Keep the focused test and pre-merge test checks. PROTOCOL.md updated.
+
+- 2026-11-21 07:48 lead: Sprint correction: the one-reviewer cap runs through 2026-11-21 09:18 CET. First checkpoint at 2026-11-21 08:48 CET. Please prioritize finishing active high-priority tickets and merging verified work. PROTOCOL.md updated.
