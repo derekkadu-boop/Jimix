@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:59 | integrating B-15
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:51 | B-20
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:00 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
 ### B-01 Document URLs built from tender fields
@@ -201,13 +201,18 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:51
-- **Last seen:** 2026-11-21 03:51
+- **Last seen:** 2026-11-21 04:00
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
 - **Idea:** Record structured recipe validation outcomes from a bounded attach and identify which
   buyer routes or coverage checks keep the model from submitting a working recipe.
 - **Findings:** One live attach failed after 19 model calls at an estimated USD 0.099.
+  The trace found JavaScript-only hrefs for category pagination. The controls contain a public GET
+  path, and separate categories reuse the same page URLs in one session. Fix 563e2ec2 is on main.
+  Two categories now returned 80 distinct notices across four sampled pages. Two reviewers and
+  25 integrated backend tests passed. A live attach with the new paging hint reached serving and
+  read 449 tenders, but saved zero files. Its recipe only mapped Düsseldorf and did not use the modal.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
