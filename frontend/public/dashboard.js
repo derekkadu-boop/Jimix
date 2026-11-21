@@ -17,6 +17,7 @@
   }
   const deadlineTime = value => dateOnly(value) ? time(value) + day - 1 : zoned(value) ? time(value) : NaN
   const count = value => value.toLocaleString('en-GB')
+  const usd = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:8 })
   const labels = { serving:'Serving', integrating:'Integrating', healing:'Healing', failed:'Failed', unknown:'Unchecked' }
   const stateOf = p => p.state === 'error' ? 'failed' : p.state === 'ok' ? 'serving' : Object.hasOwn(labels,p.state) ? p.state : 'unknown'
   const badge = (state, label) => `<span class="pill ${escape(state)}">${escape(label)}</span>`
@@ -36,6 +37,12 @@
   const outcome = run => ({ ok:'Succeeded', failed:'Failed', error:'Failed' })[run.result] ?? (run.finishedAt ? 'Outcome unknown' : 'In progress')
   const runStamp = run => time(run.finishedAt ?? run.startedAt)
   const runBadge = run => badge(({ Succeeded:'ok', Failed:'failed', 'In progress':'active' })[outcome(run)] ?? '', `${runKind(run)} · ${outcome(run)}`)
+  const runUsage = run => ({
+    llmCalls: run.llmCalls ?? run.usage?.llmCalls,
+    inputTokens: run.inputTokens ?? run.usage?.inputTokens,
+    outputTokens: run.outputTokens ?? run.usage?.outputTokens,
+    costUsd: run.costUsd ?? run.usage?.estimatedCostUsd,
+  })
   const startOfDay = value => Math.floor(value / day) * day
   const key = (...parts) => escape(JSON.stringify(parts))
 
@@ -282,7 +289,11 @@
   }
   function renderRun(run, portalName = '') {
     const duration = time(run.finishedAt) - time(run.startedAt)
-    return `<li class="entry" data-key="${key(run.id,portalName)}"><h3>${portalName ? `${escape(portalName)} · ` : ''}${runBadge(run)}</h3><small>Started ${escape(date(run.startedAt))}${run.finishedAt ? ` · Finished ${escape(date(run.finishedAt))}` : ''}${Number.isFinite(duration) && duration >= 0 ? ` · ${count(duration)} ms` : ''}</small>${run.detail ? `<p>${escape(run.detail)}</p>` : ''}</li>`
+    const reason = run.reason || run.detail
+    const { llmCalls, costUsd } = runUsage(run)
+    const calls = Number.isFinite(llmCalls) ? ` · Model calls ${count(llmCalls)}` : ''
+    const cost = Number.isFinite(costUsd) ? ` · Estimated cost ${usd.format(costUsd)}` : ''
+    return `<li class="entry" data-key="${key(run.id,portalName)}"><h3>${portalName ? `${escape(portalName)} · ` : ''}${runBadge(run)}</h3><small>Started ${escape(date(run.startedAt))}${run.finishedAt ? ` · Finished ${escape(date(run.finishedAt))}` : ''}${Number.isFinite(duration) && duration >= 0 ? ` · ${count(duration)} ms` : ''}${calls}${cost}</small>${reason ? `<p>${escape(reason)}</p>` : ''}</li>`
   }
   function renderDetail() {
     const p = portals.find(item => String(item.id) === selected)
@@ -319,9 +330,12 @@
     if (tab === 'runs' && history?.items) {
       const latestRepair = runs.find(run => run.kind === 'repair')
       markup('repair-lifecycle',`<h3>Repair activity</h3><p>${latestRepair ? `${runBadge(latestRepair)} · ${escape(date(runStamp(latestRepair)))}` : p.state === 'healing' ? 'Healing reported; no repair run logged yet.' : 'No repair recorded.'}</p>`)
-      const totals = [['llmCalls','Model calls'],['inputTokens','Input tokens'],['outputTokens','Output tokens'],['estimatedCostUsd','Estimated cost (USD)']].flatMap(([field,label]) => {
-        const values = runs.map(run => run.usage?.[field]).filter(Number.isFinite)
-        return values.length ? [`${label} · ${count(values.reduce((sum,value) => sum+value,0))}`] : []
+      const reported = runs.map(runUsage)
+      const totals = [['llmCalls','Model calls'],['inputTokens','Input tokens'],['outputTokens','Output tokens'],['costUsd','Estimated cost (USD)']].flatMap(([field,label]) => {
+        const values = reported.map(run => run[field]).filter(Number.isFinite)
+        if (!values.length) return []
+        const total = values.reduce((sum,value) => sum+value,0)
+        return [`${label} · ${field === 'costUsd' ? usd.format(total) : count(total)}`]
       })
       usageAvailable = totals.length > 0
       if (usageAvailable) markup('portal-usage',`<h3>Reported AI usage</h3><p>${totals.join(' · ')}</p>`)
