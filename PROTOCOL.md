@@ -1,5 +1,13 @@
 # Protocol
 
+> **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 06:04: one reviewer is enough for follow-up commits to an already reviewed design; new shared
+>   mechanisms still get two.
+> - 05:48: target is >=90% of sweep portals in the correct state (serving with files, or a true block).
+> - 05:13: re-read AGENTS.md and docs/testing.md when they change; Python only via uv.
+> - 04:55: fresh empty JIMIX_DB per retest; develop only on the Dev list (B-10); held-out set exists.
+> - 04:25: build the system, not the answers (no portal-specific code or hints).
+
 This branch (`coord`) is how everyone working on Jimix coordinates: humans and agents, on any machine.
 It holds only three files:
 
@@ -122,8 +130,9 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - **0 reviewers:** only for trivial changes you're confident in (a typo, a doc line, a one-line fix
      with a test). Say "no review: <reason>" in the item's Findings.
    - **1 reviewer:** the normal case.
-   - **2 or more:** for anything touching shared behavior, such as `fetch.py` rate limiting,
-     `watchtower.py` states, the recipe format, or the database schema.
+   - **2 or more:** for new mechanisms touching shared behavior, such as `fetch.py` rate limiting,
+     `watchtower.py` states, the recipe format, or the database schema. Follow-up commits to a design that
+     was already reviewed this way need only 1.
 
    **Default reviewer:** a review subagent you start yourself on your local diff (`git diff`, plus new
    files). It reads the change and runs the tests, and doesn't block anyone.
