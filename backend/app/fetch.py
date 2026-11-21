@@ -8,7 +8,7 @@ import time
 import uuid
 from email.message import Message
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import quote, unquote, urldefrag, urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -24,6 +24,9 @@ MAX_FILE_BYTES = int(os.environ.get("WATCHTOWER_MAX_FILE_MB", "250")) * MB
 MAX_RUN_DOWNLOAD_BYTES = int(os.environ.get("WATCHTOWER_MAX_RUN_DOWNLOAD_MB", "1000")) * MB
 OVERSIZE_SKIP = "over size limit"
 DOCUMENT_HTML_PROBE_BYTES = 64 * 1024
+MAX_META_REFRESH_HOPS = 3
+MAX_META_REFRESH_DELAY = 3
+HTML_REFRESH = re.compile(r"\s*(\d+(?:\.\d+)?)\s*;\s*url\s*=\s*(.+?)\s*", re.IGNORECASE)
 TIMEOUT = httpx.Timeout(float(os.environ.get("WATCHTOWER_HTTP_TIMEOUT", "120")), connect=30)
 RETRY_DELAYS = (2.0, 5.0)
 RETRY_STATUS = {429, 502, 503, 504}
@@ -201,6 +204,36 @@ def robots_allows(rules: list[tuple[str, bool]], url: str) -> bool:
     return best is None or best[1]
 
 
+def _html_refresh(html: str, current: str) -> tuple[str, float] | None:
+    head = html[:65_536]
+    if "<meta" not in head.lower():
+        return None
+    soup = BeautifulSoup(head, "html.parser")
+    for tag in soup.find_all("meta"):
+        if tag.find_parent(("template", "noscript")) or tag.get("http-equiv", "").strip().lower() != "refresh":
+            continue
+        match = HTML_REFRESH.fullmatch(tag.get("content", ""))
+        if not match:
+            continue
+        delay, target = match.groups()
+        delay = float(delay)
+        if delay > MAX_META_REFRESH_DELAY:
+            continue
+        if target.startswith(("'", '"')) and target.endswith(target[0]):
+            target = target[1:-1].strip()
+        if not target or any(char in target for char in ("\r", "\n", "\t", "\\")):
+            continue
+        try:
+            target = urldefrag(urljoin(current, target))[0]
+            parts = urlsplit(target)
+            if parts.scheme not in ("http", "https") or not parts.hostname or parts.username is not None:
+                continue
+        except ValueError:
+            continue
+        return target, delay
+    return None
+
+
 def _file_name(resp: httpx.Response) -> str:
     disposition = resp.headers.get("content-disposition", "")
     if extended := re.search(r"filename\*\s*=\s*([\w-]+)'[^']*'([^;\s]+)", disposition, re.IGNORECASE):
@@ -279,6 +312,28 @@ class Fetcher:
         return True
 
     async def get(self, url: str) -> httpx.Response:
+        seen = {urldefrag(url)[0]}
+        for hop in range(MAX_META_REFRESH_HOPS + 1):
+            resp = await self._get(url)
+            current = str(resp.url)
+            if hop == MAX_META_REFRESH_HOPS or "html" not in resp.headers.get("content-type", "").lower():
+                return resp
+            refresh = _html_refresh(resp.text, current)
+            if refresh is None:
+                return resp
+            target, delay = refresh
+            seen.add(urldefrag(current)[0])
+            if target in seen:
+                return resp
+            if reason := block_reason(200, {}, current, target, None):
+                raise self.blocked(reason, target)
+            seen.add(target)
+            if delay:
+                await asyncio.sleep(delay)
+            url = target
+        return resp
+
+    async def _get(self, url: str) -> httpx.Response:
         if not await self.allowed(url):
             raise Blocked(f"robots.txt disallows {url}")
         for delay in (*RETRY_DELAYS, None):
@@ -295,7 +350,7 @@ class Fetcher:
                     delay = retry_after(resp, delay)
                 log.info("retrying %s in %.0fs after HTTP %s", url, delay, resp.status_code)
             pause(url, delay)
-        html = resp.text if "html" in resp.headers.get("content-type", "") else None
+        html = resp.text if "html" in resp.headers.get("content-type", "").lower() else None
         if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
             raise self.blocked(reason, url)
         resp.raise_for_status()
