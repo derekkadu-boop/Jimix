@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from app.fetch import _file_name
+from app.fetch import _file_name, block_reason, parse_robots, robots_allows
 
 
 @pytest.mark.parametrize(
@@ -20,3 +20,87 @@ from app.fetch import _file_name
 def test_file_name_prefers_extended_parameter_and_decodes(disposition, url, expected):
     resp = httpx.Response(200, headers={"content-disposition": disposition}, request=httpx.Request("GET", url))
     assert _file_name(resp) == expected
+
+
+APP_SHELL = """<html><body><div id="app"></div><script>window.CONFIG = {RECAPTCHA_PUBLIC_KEY: 'x'};
+var t = {"You entered a wrong captcha.": "", tpl: '<input type="password">'};</script></body></html>"""
+
+
+@pytest.mark.parametrize(
+    ("html", "expected"),
+    [
+        (APP_SHELL, None),
+        ('<div class="g-recaptcha"></div>', "captcha (div g-recaptcha)"),
+        ('<iframe src="https://challenges.example/turnstile/v0"></iframe>', "captcha (iframe)"),
+        ("<p>Please solve the CAPTCHA to continue</p>", "captcha (page text)"),
+        ('<form><input name="user"><input type="password"></form>', "login required (login form)"),
+        (('<div class="grecaptcha-badge"><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>'
+          "<p>Tender list</p>"), None),
+        ('<div class="g-recaptcha" data-size="invisible"></div><p>Tenders</p>', None),
+        ("<p>Tenders</p><footer>This site is protected by reCAPTCHA and the Google Privacy Policy.</footer>", None),
+        ('<div class="h-captcha" data-sitekey="k"></div>', "captcha (div h-captcha)"),
+        ('<div id="cf-challenge-running"></div>', "captcha (div cf-challenge-running)"),
+        ('<script src="https://ct.captcha-delivery.com/c.js"></script>', "captcha (script)"),
+        ("<p>Please verify you are human</p>", "captcha (page text)"),
+        (None, None),
+    ],
+)
+def test_block_reason_needs_a_real_captcha_or_login_form(html, expected):
+    assert block_reason(200, {}, "https://p.example/a", "https://p.example/a", html) == expected
+
+
+def test_aws_waf_challenge_header_is_a_block():
+    headers = httpx.Headers({"x-amzn-waf-action": "captcha"})
+    assert block_reason(405, headers, "https://p.example/a", "https://p.example/a", None) == (
+        "bot challenge (AWS WAF captcha)")
+
+
+ROBOTS = """User-agent: Otherbot
+Disallow:
+
+User-agent: *
+Disallow: /
+Allow: /public
+Disallow: /public/private
+Disallow: /*/download
+Disallow: /*/*.pdf$
+"""
+
+
+@pytest.mark.parametrize(
+    ("path", "allowed"),
+    [
+        ("/", False),
+        ("/search", False),
+        ("/public/list?page=2", True),
+        ("/public/private/x", False),
+        ("/public/a/download", False),
+        ("/public/a.pdf", False),
+        ("/public/a.pdf?v=1", True),
+    ],
+)
+def test_robots_longest_match_and_wildcards(path, allowed):
+    assert robots_allows(parse_robots(ROBOTS), f"https://p.example{path}") is allowed
+
+
+def test_robots_own_group_wins_and_ties_allow():
+    rules = parse_robots("User-agent: *\nDisallow: /\n\nUser-agent: JimixWatchtower\nDisallow: /x\nAllow: /x\n")
+    assert robots_allows(rules, "https://p.example/anything")
+    assert robots_allows(rules, "https://p.example/x")
+    assert not robots_allows(parse_robots("User-agent: *\nDisallow: /\n"), "https://p.example/a")
+
+
+def test_robots_parsing_edge_cases():
+    assert not robots_allows(parse_robots("﻿User-agent: *\r\nDisallow: /a\r\n"), "https://p.example/a")
+    loose = "User-agent: watch\nUser-agent:\nDisallow: /\n\nUser-agent: *\nDisallow: /b\n"
+    assert robots_allows(parse_robots(loose), "https://p.example/a")
+    grouped = "User-agent: Other\nSitemap: https://p.example/s.xml\nUser-agent: *\nDisallow: /c\n"
+    assert not robots_allows(parse_robots(grouped), "https://p.example/c")
+    assert not robots_allows(parse_robots("User-agent: *\nDisallow: /q?a%20b\n"), "https://p.example/q?a%20b")
+    assert not robots_allows(parse_robots("User-agent: *\nDisallow: /%7euser\n"), "https://p.example/~user/x")
+    assert robots_allows(parse_robots("User-agent: *\nDisallow: /a%2Ab\n"), "https://p.example/axxb")
+
+
+def test_robots_wildcards_stay_linear():
+    rules = parse_robots("User-agent: *\nDisallow: /" + "*a" * 30 + "b\n")
+    assert robots_allows(rules, "https://p.example/" + "a" * 5000)
