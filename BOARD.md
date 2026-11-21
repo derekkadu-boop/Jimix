@@ -4,7 +4,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-01 Document URLs built from tender fields
 - **Priority:** high (documents are the core feature)
-- **Status:** open
+- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 03:15
 - **Problem:** TenderNed (https://www.tenderned.nl/) attaches through its own JSON API
   (`/papi/tenderned-rs-tns/v2/publicaties?page=0&size=50`, 150 tenders in a test), but documents are
   at `/papi/tenderned-rs-tns/v2/publicaties/{publicatieId}/pdf` and a recipe can't build that URL.
