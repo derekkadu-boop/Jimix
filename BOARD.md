@@ -557,8 +557,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:05 (public HTML hint slice)
-- **Last seen:** 2026-11-21 06:05
+- **Status:** open (HTML hint slice in PR #15; broad validation and JS discovery open)
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
@@ -578,7 +577,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
      links (documents_page), including links to external buyer platforms (B-02).
   4. Extend B-01's per-tender JSON probe to POST endpoints observed on detail pages.
   - Validate with fresh, unassisted attaches on the Dev portals above. Count tenders with real files.
-- **Findings:**
+- **Findings:** PR #15 broadens existing HTML hints to accessible names and direct file links without fetching candidate URLs. Seven local fixtures, 105 backend tests, Ruff and pre-commit review passed. No fresh live trial; broader JS-dependent discovery and delivery remain open.
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
