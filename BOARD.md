@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:57 | idle
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-30 NetServer detail navigation
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:57 | B-03 in review, PR #8
@@ -413,7 +413,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-30 Discover detail destinations for NetServer clickable tender rows
 - **Priority:** high (blocks tender documents from public NetServer listings)
-- **Status:** open
+- **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 06:58
+- **Last seen:** 2026-11-21 06:58
 - **Problem:** Fresh URL-only attaches of the public Bremen and Baden-Württemberg NetServer portals found open tender rows but saved zero files. Bremen supplies tender IDs and categories in row attributes, with no detail href. Its own handler sends a read-only lookup for the detail URL before navigating. The existing script scan did not expose that navigation.
 - **Idea:** Detect the reusable NetServer markup and resolve public detail destinations through a narrowly scoped read-only mechanism. This complements B-04 file-dialog support, which takes effect only after the detail destination has been resolved.
 - **Findings:**
