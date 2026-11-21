@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:08 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:14 | B-04
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:18 | idle
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:16 | idle
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 in review (PR #7)
 
@@ -62,8 +62,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:14
-- **Last seen:** 2026-11-21 04:14
+- **Status:** open (unassisted validation depends on B-20 or B-30)
+- **Last seen:** 2026-11-21 04:18
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
@@ -76,6 +76,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   NRW attachment is B-20.
   Code is on main at 4665b28a. Reopened under the revised protocol for an unassisted attach
   that saves real files on a previously untested NetServer portal.
+  Fresh URL-only attaches from Bremen and Baden-Wuerttemberg, started before the Dev-list update, reached public listings but saved no files. Bremen had no detail hrefs and exposes them through its own read-only row lookup (B-30). NRW remains the applicable Dev portal and is blocked on mixed-platform discovery (B-20).
 
 ### B-05 Prompt-injection hardening
 - **Status:** open
@@ -290,7 +291,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   synthetic DOCX also reproduces this via documents._save.
 - **Idea:** Keep Office packages intact, still unpack ordinary ZIP bundles, and recheck cached
   results that previously exposed Office package internals. Test on NRW 1138704.
-- **Findings:** Recognizes Office ZIP packages by their internal entries and stores them intact. Ordinary ZIP bundles still unpack, and existing cache records with Office internals are rechecked. Two Codex reviewers approved. All 45 backend tests and Ruff passed after integrating current main. Live NRW notice 1138704 recovered from 51 old entries to five files, including an intact 11,749,325-byte DOCX verified via the file API. Fresh unassisted attach from the previously unused Niedersachsen public listings page (https://vergabe.niedersachsen.de/Satellite/company/welcome.do) reached serving, read 400 tenders, and delivered 10 open-tender files for - **Findings:**.0777. That sample contained no Office files. The bare-domain redirect failure is tracked in B-28.
+- **Findings:** Recognizes Office ZIP packages by their internal entries and stores them intact. Ordinary ZIP bundles still unpack, and existing cache records with Office internals are rechecked. Two Codex reviewers approved. All 45 backend tests and Ruff passed after integrating current main. Live NRW notice 1138704 recovered from 51 old entries to five files, including an intact 11,749,325-byte DOCX verified via the file API. Fresh unassisted attach from the previously unused Niedersachsen public listings page (https://vergabe.niedersachsen.de/Satellite/company/welcome.do) reached serving, read 400 tenders, and delivered 10 open-tender files for USD 0.0777. A following zero-model-call Refresh also served 10 files. That sample contained no Office files. The bare-domain redirect failure is tracked in B-28.
 
 ### B-26 Listings silently capped at max_pages
 - **Priority:** medium (tenders beyond the cap never get documents)
