@@ -330,6 +330,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** dedupe a tender's documents by sha256 in `fetch_documents`.
 - **Findings:**
 
+### B-30 Discover detail destinations for NetServer clickable tender rows
+- **Priority:** high (blocks tender documents from public NetServer listings)
+- **Status:** open
+- **Problem:** Fresh URL-only attaches of the public Bremen and Baden-Württemberg NetServer portals found open tender rows but saved zero files. Bremen supplies tender IDs and categories in row attributes, with no detail href. Its own handler sends a read-only lookup for the detail URL before navigating. The existing script scan did not expose that navigation.
+- **Idea:** Detect the reusable NetServer markup and resolve public detail destinations through a narrowly scoped read-only mechanism. This complements B-04 file-dialog support, which takes effect only after the detail destination has been resolved.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
