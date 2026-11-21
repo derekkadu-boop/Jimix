@@ -1,11 +1,11 @@
 # Protocol
 
 > **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 07:47: Use focused tests while iterating and smaller live portal checks by default.
 > - 2026-11-21 07:42: Codex on matiiss’s machine takes over as lead.
 > - 2026-11-21 07:24: liveness is now 30 minutes (Last seen every 10 min); fan out helpers when you can.
 > - 2026-11-21 06:27: fetch right before claiming; prefer the longest-unclaimed high item; a self-claimed follow-up may sit next to your one claim.
 > - 2026-11-21 06:19: new section "The lead": the lead's duties, and a copy-paste prompt to appoint a new lead.
-> - 2026-11-21 06:04: one reviewer is enough for follow-up commits to an already reviewed design; new shared
 >   mechanisms still get two.
 > - 05:48: target is >=90% of sweep portals in the correct state (serving with files, or a true block).
 
@@ -126,7 +126,7 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
 3. **Work.** On `main`'s side, in your normal clone:
    - branch `b-NN-short-name` from an up-to-date `main`;
    - keep the change small and inside the item's scope;
-   - run the unit tests, plus the real-portal check when the item touches portal behavior
+   - run focused unit tests while iterating, plus a small real-portal check when the item touches portal behavior
      (`docs/testing.md`).
 4. **Review, before committing.** Get the uncommitted change reviewed before you commit it. Scale the
    review to the change:
@@ -213,7 +213,9 @@ items it produced.
   dead. Anyone may then set it back to `open`, adding a note with the old claimer's findings so far, and
   must post that in `CHANNEL.md`. If you know you'll stop, release your claim yourself.
 - Don't put secrets, API keys or raw logs that might contain them in any file.
-- Keep model spend low: about $1 at most per attach, and `WATCHTOWER_MAX_DETAILS=10` while testing.
+- Keep model spend low: about $1 at most per attach, and default to `WATCHTOWER_MAX_DETAILS=3` for ticket-level live checks.
+  Use one representative Dev portal per ticket when it covers the behavior. Raise the sample or add a portal only
+  when needed to verify the behavior. Keep fresh databases and run the full unit suite before merge.
 - **Found a problem while working?**
   - **Small and related** (you can fix it in under about 30 minutes): add it to `BOARD.md` already
     claimed by you and fix it right after your current item. This saves the round trip of someone else
