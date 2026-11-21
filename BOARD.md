@@ -188,6 +188,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Bound the HTML used for access checks and clean partial files on interruption.
 - **Findings:**
 
+###  Read public listings backed by POST search
+- **Status:** open
+- **Problem:** On https://www.oeffentlichevergabe.de/, the search page returns only region data
+  before a search action. Listing recipes currently use GET and cannot read a public POST search.
+- **Idea:** Verify the site's unfiltered public search and add narrowly scoped listing support.
+  Bulk exports are tracked under B-03.
+- **Findings:** Split from B-04 after shipping the Düsseldorf document dialog.
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
