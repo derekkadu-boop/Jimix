@@ -90,6 +90,13 @@ class Detail(BaseModel):
     kind: Kind = "html"
     url: str | None = None
     fields: dict[str, Selector] = {}
+    click: str | None = Field(None, min_length=2, max_length=60)
+
+    @model_validator(mode="after")
+    def check_click(self):
+        if self.click and self.kind != "browser":
+            raise ValueError("detail.click needs detail.kind browser")
+        return self
 
 
 class DocumentsUrl(BaseModel):
@@ -321,12 +328,13 @@ def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
     return out
 
 
-async def _load(kind: Kind, url: str, fetcher: Fetcher, body: dict | None = None):
+async def _load(kind: Kind, url: str, fetcher: Fetcher, body: dict | None = None, click: str | None = None):
     if body is not None:
         resp = await fetcher.post_json(url, body)
         return resp.json(), str(resp.url)
     if kind == "browser":
-        html, _, final = await render(url, fetcher, require_stable=True)
+        pattern = re.compile(re.escape(" ".join(click.split()).casefold())) if click else None
+        html, _, final = await render(url, fetcher, require_stable=True, click=pattern)
         return BeautifulSoup(html, "html.parser"), final
     resp = await fetcher.get(url)
     if kind == "json":
@@ -336,12 +344,12 @@ async def _load(kind: Kind, url: str, fetcher: Fetcher, body: dict | None = None
 
 async def _load_detail(detail: Detail, url: str, listing_url: str | None, fetcher: Fetcher):
     try:
-        return await _load(detail.kind, url, fetcher)
+        return await _load(detail.kind, url, fetcher, click=detail.click)
     except httpx.HTTPStatusError as exc:
         if (detail.kind != "html" or not detail.url or not listing_url or listing_url == url
                 or exc.response.status_code not in (404, 410)):
             raise
-    return await _load(detail.kind, listing_url, fetcher)
+    return await _load(detail.kind, listing_url, fetcher, click=detail.click)
 
 
 def _with_body_param(body: dict, path: str, step: int) -> dict:
