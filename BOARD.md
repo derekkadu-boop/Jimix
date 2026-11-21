@@ -368,6 +368,19 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Detect the reusable NetServer markup and resolve public detail destinations through a narrowly scoped read-only mechanism. This complements B-04 file-dialog support, which takes effect only after the detail destination has been resolved.
 - **Findings:**
 
+### B-31 Experiment: more agent reasoning, less special-case code
+- **Priority:** high (generalization)
+- **Status:** open
+- **Problem:** Most successes so far come from code mechanisms built for one software family (NetServer,
+  Cosinex), and the prompt now carries software-specific instructions. That may not generalize to unseen
+  portals.
+- **Idea:** On a branch, try an agent that gets a wider, longer prompt (general strategies for finding
+  listings, detail pages and document files, worked examples in the abstract) and more turns, but no new
+  site- or software-specific code. Compare it with `main` on the same Dev portals with fresh databases:
+  portals reaching `serving` with files, files per portal, and model cost per attach. Report the numbers
+  and keep whichever generalizes better.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
