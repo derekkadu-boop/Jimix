@@ -3,7 +3,8 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urljoin, urlsplit, urlunsplit
+from weakref import WeakKeyDictionary
 
 import httpx
 from bs4 import BeautifulSoup, Comment
@@ -34,6 +35,8 @@ REFUSE_BLOCKED = (
     " Keep looking (e.g. the broadest HTML list available) or give_up with blocked=false."
 )
 PAGING_PARAMS = {"page", "p", "offset", "start", "size", "limit", "rows", "pagesize", "method"}
+PROBED: WeakKeyDictionary = WeakKeyDictionary()
+DOCUMENT_LISTS = ("documents", "attachments", "files", "dokumente", "documenten", "documentos", "documenti")
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
 DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
 FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
@@ -70,7 +73,8 @@ a page's scripts call, then try the promising ones with fetch_json.
 Long results are cut into chunks: pass offset to read further.
 Links in notices often lead to a summary page rather than the tender list. Find the actual list.
 The listing must cover every open tender the portal has: no category, region, CPV or search filter.
-Prefer the broadest list (all current notices) and paginate through it. If the portal only offers lists
+Prefer the broadest list (all current notices) and paginate through it, with the largest page size the
+API accepts (keep e.g. size=50 in listing.url). If the portal only offers lists
 split by category, set listing.url to the page linking to all of them and index to those links:
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
 If a next-page control has a placeholder href and a root-relative pagination path in onclick, test
@@ -85,8 +89,12 @@ If you find no list of open tenders, keep searching before giving up:
   listing and reach the files with detail/documents_page on that platform, even if it is another site.
 Documents are required. Find the actual files (PDF, ZIP, DOCX...) for each tender. If they sit on a
 separate page linked from the tender page (e.g. "Vergabeunterlagen", "Documents", "DCE", "pliegos"),
-use documents_page. If listing tenders or downloading documents needs a login or a captcha,
-call give_up with blocked=true.
+use documents_page. If a tender's documents or details sit at a URL built from its id (common for JSON
+APIs, e.g. /tenders/{{id}}/documents), use documents_url or detail.url templates. Prefer the full list of
+tender documents over a single notice PDF: render_page one tender's own page to see which JSON calls load
+its documents (e.g. .../{{id}}/documents or /attachments, in the portal's language); the list may only load
+after opening a documents tab, so also try such sibling URLs with fetch_json.
+If listing tenders or downloading documents needs a login or a captcha, call give_up with blocked=true.
 
 A recipe is JSON:
 {{
@@ -101,10 +109,13 @@ A recipe is JSON:
     "page_param": "query parameter to increment instead of next_page" or null,
     "index": {{"path": "selector of links on url to the actual list pages", "attribute": "href"}} or null
   }},
-  "detail": {{"kind": "html" | "json" | "browser", "fields": {{...read from the page at the listing's url field...}}}} or null,
+  "detail": {{"kind": "html" | "json" | "browser", "url": "optional URL template, e.g. https://host/api/tenders/{{id}}",
+              "fields": {{...read from detail.url, else from the page at the listing's url field...}}}} or null,
   "documents": {{"path": "selector or dot path matching every document file link", "attribute": "href"}} or null,
   "documents_page": {{"path": "selector of the link from the tender page to its documents page",
                      "attribute": "href"}} or null,
+  "documents_url": {{"template": "URL with {{field}} placeholders, e.g. https://host/api/tenders/{{id}}/files",
+                    "kind": "html" | "json" | "browser"}} or null,
   "documents_by_host": {{"host.example": {{"files": {{"path": "selector of file links"}},
                         "page": {{"path": "optional selector of a public documents-page link"}},
                         "modal": "netserver_file_tree" or null}}}},
@@ -113,6 +124,10 @@ A recipe is JSON:
 }}
 "attribute" reads an HTML attribute, or a key of each item when the dot path gives a list.
 Documents are read from the documents page, else the detail page when detail is set, else the row.
+With documents_url, documents is read from that URL; without documents, the URL itself is the one file.
+Placeholders are mapped field names ({{id}}, {{referenceNumber}}...), filled per tender.
+"attribute" may be a dot path inside each item, e.g. "links.download.href".
+Map status to a field naming the notice's state or type when there is one (award notices are closed).
 Set detail to {{}} when visiting details only to find files or links. Setting documents_page also
 requires documents or documents_by_host to select file links.
 One recipe can handle different document platforms using documents_by_host with exact lowercase hostnames.
@@ -307,7 +322,7 @@ NO_DOCUMENT_LINKS = (
 
 
 async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
-    if not (recipe.documents or recipe.documents_by_host):
+    if not (recipe.documents or recipe.documents_by_host or recipe.documents_url):
         return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
     urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
     warnings = []
@@ -350,8 +365,55 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
     return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links", warnings
 
 
+def _list_parents(recipe: Recipe, tenders: list[dict]) -> list[tuple[str, str]]:
+    tender = next((t for t in tenders if t.get("id")), None)
+    if not tender:
+        return []
+    tid, parents = quote(str(tender["id"]), safe=""), []
+    if recipe.listing.kind == "json":
+        parents.append(f"{recipe.listing.url.split('?')[0].rstrip('/')}/{tid}")
+    if recipe.detail and recipe.detail.kind == "json" and recipe.detail.url:
+        parents.append(recipe.detail.url.replace("{id}", tid).split("?")[0].rstrip("/"))
+    if recipe.documents_url and not recipe.documents and tender["_documentUrls"]:
+        parents.append(tender["_documentUrls"][0].split("?")[0].rsplit("/", 1)[0])
+    return [(parent, tid) for parent in dict.fromkeys(parents) if tid in parent][:2]
+
+
+async def _document_lists(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> list[str]:
+    probed = PROBED.setdefault(fetcher, {})
+    hints = []
+    for parent, tid in _list_parents(recipe, tenders):
+        if parent not in probed:
+            probed[parent] = await _probe(parent, tid, fetcher)
+        hints += probed[parent]
+    return hints[:1]
+
+
+async def _probe(parent: str, tid: str, fetcher: Fetcher) -> list[str]:
+    blocks = len(fetcher.blocks)
+    for name in DOCUMENT_LISTS:
+        url = f"{parent}/{name}"
+        try:
+            resp = await fetcher.get(url)
+            body = resp.json() if "json" in resp.headers.get("content-type", "") else None
+        except Blocked:
+            del fetcher.blocks[blocks:]
+            return []
+        except Exception:  # noqa: BLE001, S112
+            continue
+        if body:
+            shape = f"keys {list(body)[:10]}" if isinstance(body, dict) else f"a list of {len(body)} items"
+            template = url.replace(tid, "{id}")
+            return [(f"{url} returns JSON with {shape}. If it lists this tender's files, fetch_json it and set"
+                     f' documents_url {{"template": "{template}", "kind": "json"}} with documents selecting'
+                     " the file links (attribute may be a dot path)")]
+    return []
+
+
 async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> str | None:
-    if not recipe.detail or recipe.detail.kind != "html" or recipe.documents_page or recipe.documents_by_host:
+    if recipe.documents_page or recipe.documents_by_host or recipe.documents_url:
+        return None
+    if not recipe.detail or recipe.detail.kind != "html":
         return None
     tender = next((t for t in tenders if t.get("url")), None)
     if not tender:
@@ -382,9 +444,14 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
         problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
         if hint := await _document_page_hint(recipe, sample, fetcher):
             document_warnings.append(hint)
+        if problem or (recipe.documents_url and not recipe.documents):
+            document_warnings += await _document_lists(recipe, tenders, fetcher)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     warnings.extend(document_warnings)
+    if recipe.documents_url and not recipe.documents and not problem:
+        warnings.append("documents_url gives one file per tender: if it is only the notice, render one tender's"
+                        " page and use the documents list it loads (documents_url plus documents)")
     return {
         "problem": problem,
         "warnings": warnings,
