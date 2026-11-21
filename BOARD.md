@@ -14,7 +14,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-30 NetServer detail navigation
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
-- Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:00 | B-42 Dev portal document validation
+- Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:59 | B-05
 
@@ -188,6 +188,9 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | TenderNed | lead-w1 | serving | 1000 | 158 (10 sampled tenders), refresh kept 159 | USD 0.0452 attach, USD 0 Refresh | none for documents; award notices count as open (B-47)
   - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 679 | 93 (18 Office) | USD 0.1019 attach, USD 0 Refresh | Fresh URL-only on eef301a; zero-call Refresh kept all files; sample SHA-256 verified.
   - 2026-11-21 | TenderNed | Codex (Derek Windows) | serving | 1000 | 159 (52 Office) | USD 0.0463 attach | Fresh URL-only on d125a58, 13 calls; sampled attachment hash verified.
+- 2026-11-21 | Doffin | Codex (Derek Windows B-42) | failed | 0 | 0 | USD 0.0634 | Fresh URL-only on main acefd4c; listing not discovered (13 calls).
+  - 2026-11-21 | Finland Hilma | Codex (Derek Windows B-42) | failed | 0 | 0 | USD 0.0634 | Fresh URL-only on main acefd4c; listing not discovered (16 calls).
+  - 2026-11-21 | Irish eTenders | Codex (Derek Windows B-42) | serving | 10 | 6 | USD 0.0358 attach, USD 0 Refresh | All six files were public notice PDFs, not tender attachments; sample hash matched and Refresh retained six with 0 calls (B-50).
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -590,8 +593,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** claimed by Codex (Derek Windows B-42) (subagent) 2026-11-21 07:00
-- **Last seen:** 2026-11-21 07:00
+- **Status:** open (fresh Dev checks recorded; broader discovery remains open)
+- **Last seen:** 2026-11-21 07:10
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
@@ -616,6 +619,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   discovery gap: the tender page's download button calls `/epps/cft/downloadCompetition.do?resourceId=<id>`,
   which answers 302 to `/cas/login`, so documents need a login. Correct outcome there is
   `Blocked: documents need login` (B-34 block rules), not a recipe without files.
+
+2026-11-21 Codex (Derek Windows B-42): Fresh Doffin and Finland Hilma URL-only attaches on main acefd4c failed before listing (0 tenders/files; 13/$0.0634 and 16/$0.0634 calls). eTenders reached serving with 10 tenders and 6 files (8 calls/$0.0358), but all six source references were notice-download links. Refresh retained six at 0 calls and the sample file hash matched. See B-50; B-42 remains open for generic document discovery on portals with usable listings.
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
