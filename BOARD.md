@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:48 | B-21 reviewed; implementation push awaits operator authorization, available for independent reviews
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:55 | B-21 reviewed; implementation push awaits operator authorization, available for independent reviews
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -17,7 +17,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:53 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
-- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:51 | B-50 and B-28 in review
+- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:55 | B-60, B-50 and B-28 in review
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
@@ -333,12 +333,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
 - **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 06:58
-- **Last seen:** 2026-11-21 07:48
+- **Last seen:** 2026-11-21 07:55
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
   2026-11-21 07:12 Derek-Codex-B: follow-up review passed (Derek-Codex-A); 184 tests and Ruff green. URL-only TenderNed attached and refreshed with 2000 tenders / 158 files and a verified hash (B-10). Denmark fresh attach in flight. Delivery of the reviewed local implementation is awaiting operator authorization.
   A cold TenderNed render on the reviewed code took 97 s (740122 HTML chars, 2 JSON calls). 90 browser asset responses had ETag and Last-Modified without max-age or Expires; the script scan carried cookies. No cross-run cache hits there. Denmark exposed document links beyond its working public list that the agent could not map (B-42).
+  Final TenderNed run: all 158 stored hashes independently matched. 104 files begin with a PDF signature, 52 are Office Open XML packages (32 DOCX and 20 XLSX), and two are markup files (.nsx/.rsx).
   Derek-Codex-B: integration snapshot 8c13b3a (review/Derek-Codex-B/B-21), 180 tests and Ruff pass. Finland's cold render after a script scan took 8.4 s / 2 static GETs versus 19.5 s / 13 on main with the same DOM length and JSON count. Denmark's fresh-Fetcher repeat scan took 3.5 s / 1 script GET versus its cold 26.6 s / 25 with identical API hints. Public immutable assets that vary on CORS headers reuse only the absent-header variant. Full fresh attach/refresh validation in progress.
   Reviewed feature branch b-21-browser-assets (66e987ba): a bounded process-local cache shares
   explicitly fresh anonymous same-origin scripts and styles across new Fetchers. Two reviewers,
@@ -849,11 +850,11 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-60 Documents split by lot or folder
 - **Priority:** high (reusable declarative scraping capability)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 07:52
-- **Last seen:** 2026-11-21 07:52
+- **Status:** in review (PR #20)
 - **Problem:** Tender documents are often grouped by lot or folder (lot pages, folder trees, "show more" lists), so one documents page shows only part of the files.
 - **Idea:** Allow a documents selector to follow up to N levels of folder or lot links (same site, bounded), deduplicating by sha256.
 - **Findings:**
+  2026-11-21 07:55 Codex (Johanna Mac): PR #20 (ca5580a) adds bounded public same-origin folder navigation and preserves old files on partial coverage. Independent review, 172 offline tests and Ruff passed. Fresh Dev attach pending. When merging with B-28, keep folder GETs exempt from both HTTP and HTML redirects.
 
 ### B-61 Incremental reads
 - **Priority:** low
@@ -938,6 +939,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** An operator reported that attach discovered the public POST search endpoint `/bkmc/searches`. The agent could not validate the candidate recipe, and `submit_recipe` reported the same issue with the source of the tender ID. The run ended without an accepted recipe.
 - **Idea:** Compare the ID field in a captured search result with the candidate mapping in `listing.fields.id`. Trace that mapping through `test_recipe` and `submit_recipe`. A mapping to a stable portal ID should pass both steps. If the mapping is invalid, the error should identify which field or path needs correction.
 - **Findings:** Operator report only. The portal URL, candidate mapping and exact validator error have not been confirmed. Related to B-70 (captured POST replay). This report specifically identifies ID validation at submission.
+  On acefd4c a local Chromium fixture produced a real captured JSON search and retained one attachment. Both test_recipe and submit_recipe passed with a valid tender ID path. Replacing only that path with a nonexistent one made both report "no tenders found"; neither diagnostic identified the absent ID mapping. This reproduces the diagnostic gap on a fixture, not the earlier portal failure.
 
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
