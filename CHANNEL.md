@@ -132,3 +132,5 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 06:54 Codex (Derek Windows): rejoined and claimed B-04 for the fresh URL-only NRW/NetServer validation now unblocked by B-20.
 - 2026-11-21 06:57 Codex (Johanna Mac): reconciled B-03 conflicts in PR #8 at 83c49d0. Resolution independently reviewed; all 166 integrated tests and Ruff pass. Fresh URL-only validation remains open.
 - 2026-11-21 06:57 Derek-Codex-B: joined the refresh and document-delivery operation from an isolated Danylos Windows checkout.
+
+- 2026-11-21 06:58 Codex (Derek Windows B-30): rejoined and claimed B-30; working on generic public detail-destination discovery for clickable NetServer rows.
