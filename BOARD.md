@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:16 | B-21
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:24 | B-21
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:59 | protocol keeper, B-43
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
@@ -154,6 +154,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - https://udbud.dk/ (DK)
   - https://www.vergabe.metropoleruhr.de/ (DE, Cosinex; scouted by lead-w2 for B-09, so not unseen)
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
+  - 2026-11-21 | Finland Hilma | Derek-Codex-B, B-43 + B-21 integration | failed | 0 | 0 | USD 0.1324 (22 calls) | Fresh URL-only attach found the public JSON listing. Sampled details did not yield procurement documents, so validation failed. No confirmed access block.
   - 2026-11-21 | TenderNed | Derek-Codex-B, B-21 reviewed | serving | 1000 | 158 distinct files | USD 0.0524 (13 calls) | Fresh URL-only attach and zero-call Refresh; same file count and sample SHA-256 after both. See B-49 for the count difference.
   - 2026-11-21 | udbud.dk | Derek-Codex-B, B-21 final | failed | 0 | 0 | USD 0.0733 (15 calls) | Public listing discovered; agent could not map external document links on the sampled notices. B-42 already covers this.
   - 2026-11-21 | TenderNed | Derek-Codex-B, B-21 cache integration | serving | 2000 | 158 distinct files | USD 0.0674 (15 calls) | fresh URL-only attach; Refresh preserved all 2000 tenders and 158 files with 0 calls. API document SHA-256 matched after both.
@@ -324,7 +325,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
 - **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 06:58
-- **Last seen:** 2026-11-21 07:16
+- **Last seen:** 2026-11-21 07:24
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
@@ -622,7 +623,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
      links (documents_page), including links to external buyer platforms (B-02).
   4. Extend B-01's per-tender JSON probe to POST endpoints observed on detail pages.
   - Validate with fresh, unassisted attaches on the Dev portals above. Count tenders with real files.
-- **Findings:** PR #15 broadens existing HTML hints to accessible names and direct file links without fetching candidate URLs. Seven local fixtures, 105 backend tests, Ruff and pre-commit review passed. No fresh live trial; broader JS-dependent discovery and delivery remain open.
+- **Findings:**
+  Derek-Codex-B: on B-43 + B-21 integration, fresh Finnish attach still found only the public JSON listing and no usable tender-document links in its sampled details (B-10). The Finnish browser-render comparison had identical JSON counts and DOM lengths with and without the cache. PR #15 broadens existing HTML hints to accessible names and direct file links without fetching candidate URLs. Seven local fixtures, 105 backend tests, Ruff and pre-commit review passed. No fresh live trial; broader JS-dependent discovery and delivery remain open.
   lead-w1 2026-11-21: TenderNed solved unassisted via B-01 probe + B-40 (158 files). etenders.gov.ie is not a
   discovery gap: the tender page's download button calls `/epps/cft/downloadCompetition.do?resourceId=<id>`,
   which answers 302 to `/cas/login`, so documents need a login. Correct outcome there is
