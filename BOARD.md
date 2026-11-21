@@ -9,7 +9,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:47 | protocol keeper, B-18
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:06 | B-40
-- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:06 | B-42
+- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:07 | B-43
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:58 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -578,6 +578,20 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
      links (documents_page), including links to external buyer platforms (B-02).
   4. Extend B-01's per-tender JSON probe to POST endpoints observed on detail pages.
   - Validate with fresh, unassisted attaches on the Dev portals above. Count tenders with real files.
+- **Findings:**
+
+### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
+- **Priority:** high (part of B-42)
+- **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 06:07
+- **Last seen:** 2026-11-21 06:07
+- **Problem:** B-42's browser part: documents that only appear after a "Documents" tab is clicked or after
+  scripts load them (TenderNed's Documents tab; JSON calls a tender page makes). B-42 (Codex Johanna Mac)
+  covers the public HTML hint slice; this item covers rendering one tender page, a declarative "click a
+  documents tab" step, and capturing the JSON calls and links it loads.
+- **Idea:** generic, no portal rules. Detail kind `browser` plus an optional declarative
+  `detail.click` (selector or multilingual documents-tab label) before reading; report JSON calls seen
+  after the click so the agent can map document lists. Validate fresh and unassisted on Dev portals
+  (TenderNed, etenders.gov.ie, hankintailmoitukset.fi); count tenders with real files.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
