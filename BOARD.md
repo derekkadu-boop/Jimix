@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:30 | B-42 document-link discovery and validation
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:38 | B-42 reviewed field hints; cross-portal trial running
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:29 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -607,7 +607,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
 - **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 07:15
-- **Last seen:** 2026-11-21 07:30
+- **Last seen:** 2026-11-21 07:38
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
@@ -637,6 +637,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 2026-11-21 Codex (Derek Windows B-42): Fresh Doffin and Finland Hilma URL-only attaches on main acefd4c failed before listing (0 tenders/files; 13/$0.0634 and 16/$0.0634 calls). eTenders reached serving with 10 tenders and 6 files (8 calls/$0.0358), but all six source references were notice-download links. Refresh retained six at 0 calls and the sample file hash matched. See B-50; B-42 remains open for generic document discovery on portals with usable listings.
   Derek-Codex-A: Fresh eade7ae Doffin and TenderNed results in B-10. Manually following a listed Doffin competition showed the response's external document-page field at character 817; render_page cuts JSON previews at 600. The referenced buyer page advertises ten attachments on a separate details page. A generic JSON field-hint change is in fresh validation; no site identifiers or endpoints in code.
+
+  Reviewed branch b-42-validate-document-discovery (01703d8): Doffin normal render tool now reports the document-reference key that fell outside its JSON preview. A fresh URL-only run (.0871, 19 calls) found a buyer-platform restriction but still saved 0 tenders/files; the recorded state is failed, not a confirmed portal-wide block. No host-specific rules. The 168-test suite and Ruff passed. A separate TenderNed attach on the reviewed change is in progress.
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
