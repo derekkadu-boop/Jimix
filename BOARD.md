@@ -487,6 +487,19 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   submit as usual. Measure model cost and calls with and without the starting point.
 - **Findings:**
 
+### B-38 Structured failure reasons for operators
+- **Priority:** normal
+- **Status:** open
+- **Problem:** `portal.reason` and `run.reason` are free text, often written by the agent. Operators can't
+  filter or count failures by cause, and the evidence (which robots.txt rule, which captcha marker, which
+  HTTP status, which URL) isn't stored. Example: a portal whose robots.txt allows only named search
+  engines (`User-agent: *` / `Disallow: /`) shows up only as a sentence.
+- **Idea:** Add a `failure_kind` (robots, captcha, login, access_denied, tls, network, no_listing,
+  no_documents, agent_gave_up, internal) plus a short `evidence` (rule line, marker, status code and URL)
+  to portal and run. Set them where the block is detected (fetch.py and the watchtower states), not by the
+  model. Return them in `GET /portals` and `/runs` (extra fields are fine), and show them in the dashboard.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
