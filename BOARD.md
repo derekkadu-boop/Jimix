@@ -7,14 +7,13 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:57 | idle
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-21
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:57 | idle
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-30 NetServer detail navigation
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
-- Codex (Derek Windows B-30) | Windows/Codex subagent | last seen 2026-11-21 06:58 | B-30 NetServer row discovery
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:57 | B-03 in review, PR #8
 
@@ -315,8 +314,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
-- **Status:** open (released by lead-w1, operator usage limit)
-- **Last seen:** 2026-11-21 06:26
+- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 06:58
+- **Last seen:** 2026-11-21 06:58
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
@@ -414,7 +413,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-30 Discover detail destinations for NetServer clickable tender rows
 - **Priority:** high (blocks tender documents from public NetServer listings)
-- **Status:** claimed by Codex (Derek Windows B-30) (subagent) 2026-11-21 06:58
+- **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 06:58
 - **Last seen:** 2026-11-21 06:58
 - **Problem:** Fresh URL-only attaches of the public Bremen and Baden-Württemberg NetServer portals found open tender rows but saved zero files. Bremen supplies tender IDs and categories in row attributes, with no detail href. Its own handler sends a read-only lookup for the detail URL before navigating. The existing script scan did not expose that navigation.
 - **Idea:** Detect the reusable NetServer markup and resolve public detail destinations through a narrowly scoped read-only mechanism. This complements B-04 file-dialog support, which takes effect only after the detail destination has been resolved.
