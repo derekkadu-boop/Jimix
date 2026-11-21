@@ -163,13 +163,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:** PR #6 preserves previous files and retries after linked document-page errors. Covered shared and per-host page selectors through mock HTTP 503, recovery, and genuinely empty pages. Two Codex reviewers and 17 backend tests passed. Detail-page failures and skipped details can still produce an empty result before link following; track separately.
 
 ### B-16 Verify the root and backend images build and run
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 03:27
+- **Status:** done (38d8e63)
 - **Last seen:** 2026-11-21 03:27
 - **Problem:** `docker build .` (root) and `docker compose up --build --wait` were never run successfully;
   the build machine couldn't reach Docker Hub. Check: build on linux/amd64 reasonably fast, `docker run -p
   8080:8080 -e OPENAI_API_KEY=... <image>` serves `/` (dashboard), `/portals`, `/health` on 8080, Chromium
   renders inside the container, data persists in `/data`.
-- **Findings:**
+- **Findings:** Windows Docker Desktop verified the linux/amd64 root build and healthy Compose stack. Installed libatomic1 before Playwright, and normalized the executable startup script inside the root image. Chromium opened the dashboard and reached the API on 8080. Health, portal list and a synthetic document download worked, and the database and file persisted through container replacement. 17 backend tests passed. Pre-commit review: Codex B-16 reviewer.
 
 ### B-17 Bound failed document downloads and clear partial files
 - **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:35
