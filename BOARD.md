@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:24 | B-21
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:07 | B-43
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:22 | B-20
@@ -306,8 +306,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 06:24, continuing branch b-21-browser-assets
-- **Last seen:** 2026-11-21 06:24
+- **Status:** open (released by lead-w1, operator usage limit)
+- **Last seen:** 2026-11-21 06:26
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
@@ -322,6 +322,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   agent did not obtain a usable public listing from its API requests. The Irish recipe read a
   30-notice sample and could not map a public document source. The commit remains on its feature
   branch, and B-21 is open for the unassisted file-delivery check and TenderNed cold-start work.
+  lead-w1 2026-11-21 (released, nothing pushed): merging main into b-21-browser-assets conflicts in fetch.py
+  (keep both imports; take main's retry loop in `get` and pass `headers=headers` to `client.get`; keep both
+  `script_text` and `post_json`), browser.py (import `site` too; replace the branch's two
+  `wait_turn` + `route.fetch(max_redirects=0, headers=headers)` with main's `fetch_route(route)`, extended
+  to pass `headers`, so the per-request timeout from B-32 stays) and tests/test_browser.py. The cache only
+  helps a later run in the same process (refresh, repair, re-attach); the first cold render is unchanged,
+  so measure by rendering each portal twice with two Fetchers in one process, main vs branch (no model
+  cost).
 
 ### B-22 Agent can submit a recipe whose documents match nothing
 - **Priority:** high (portals end up serving without files)
