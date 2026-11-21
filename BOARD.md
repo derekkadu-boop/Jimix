@@ -117,9 +117,11 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Dashboard shows API run reasons, calls and estimated USD per run and in the usage summary. Chromium verified the current API shape and legacy fallback. Frontend build and 13 backend tests passed.
 
 ### B-08 Live log stream per run
+- **Priority:** medium (operator request)
 - **Status:** open
 - **Problem:** `watchtower.*` logs show every step but only on the server console.
 - **Idea:** store run-scoped log lines (a `run_log` table or similar) and stream them to the dashboard (SSE).
+- **Scope (operator):** live streaming in the dashboard of every step while a portal is attached (agent tool calls and results), read (pages, documents, counts) and healed/repaired, so an operator can watch the system work. Check the frontend first: the dashboard currently shows run reasons and model usage after a run, but no live stream.
 - **Findings:**
 
 ### B-09 Verify refresh and repair end to end
@@ -626,8 +628,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
-- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 06:59
-- **Last seen:** 2026-11-21 06:59
+- **Status:** done (eade7ae); unassisted validation on Doffin / hankintailmoitukset.fi / TenderNed still welcome
 - **Last seen:** 2026-11-21 06:26
 - **Problem:** B-42's browser part: documents that only appear after a "Documents" tab is clicked or after
   scripts load them (TenderNed's Documents tab; JSON calls a tender page makes). B-42 (Codex Johanna Mac)
@@ -759,6 +760,83 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** A fresh URL-only eTenders attach (Dev URL, empty DB/files, max 10 details) reached `serving` with 10 tenders and six PDFs, but all six source references were `downloadNoticeForAdvSearch.do` publication notices. The B-42 findings record that the actual competition-document download redirects to CAS login. The portal therefore looks healthy while no procurement attachments are available.
 - **Idea:** Generically distinguish a publication notice from tender documents; notice PDFs alone should not satisfy the hard document requirement. When an actual document path is login-blocked, report a true blocked reason. Avoid host, endpoint, or selector special cases.
 - **Findings:** On main `acefd4c`, attach used 8 model calls / USD 0.0358 and saved 6 files for 10 tenders. The `/files/{sha256}` sample matched, and Refresh retained all six files with 0 model calls. The six sources were all notice-download links. See B-42 for the broader portal runs.
+### B-51 Live cost and usage during a run
+- **Priority:** normal
+- **Status:** open
+- **Problem:** A run's llm_calls, tokens and cost_usd are written only when the run finishes, so the dashboard shows $0 for a running attach or repair.
+- **Idea:** Update the run row after each model call (or every few seconds) and show it live in the dashboard next to the B-08 log stream.
+- **Findings:**
+
+### B-52 Multi-step document downloads
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Some portals don't link files directly: you request a ZIP of all documents (often POST), wait while it's prepared, poll a status URL, then download; or a link leads to a short-lived token URL.
+- **Idea:** Declarative steps on documents: `prepare` (request, possibly POST the site itself made), `poll` (URL plus JSON path until ready, bounded), `download` (URL from the poll response). Respect the rate limit and download budget.
+- **Findings:**
+
+### B-53 Fixed interaction sequences for listings and searches
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Some listings only appear after a fixed sequence: accept a cookie banner, choose "all" in a filter, press Search, open a tab. As long as it's the same steps every time it can be replayed.
+- **Idea:** Declarative `actions` for browser listings and details: click (literal label or selector), select option, type a fixed value, press Enter, wait for settle. Same safety guards as B-43 (no submits of personal data, no downloads, robots per navigation), a small step cap, and the agent may only use actions it ran in render_page.
+- **Findings:**
+
+### B-54 Session tokens and CSRF fields in requests
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Search APIs and form posts often need a token from the page (CSRF field, anti-forgery header, session id in the body), which changes every visit; a stored POST body with an old token fails.
+- **Idea:** Recipe placeholders filled at read time from the start page: `{{token: <selector or JSON path on the listing page>}}` in body or headers; the page is fetched first in the same session (cookies kept). Never store the token in the recipe.
+- **Findings:**
+
+### B-55 Cursor and token pagination
+- **Priority:** normal
+- **Status:** open
+- **Problem:** APIs often page with a cursor from the previous response (`nextPageToken`, `cursor`, `after`, a `Link: rel=next` header) rather than page numbers or next links.
+- **Idea:** Listing `next_from`: JSON path (or header name) of the next cursor in the response, and where to put it (query parameter or body path). Stop when absent.
+- **Findings:**
+
+### B-56 RSS, Atom and XML listings
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Many portals publish notices as RSS/Atom feeds or XML (sitemaps, OCDS/eForms XML). Recipes can only read HTML and JSON.
+- **Idea:** A `kind: xml` listing with XPath-like paths (or convert XML to the JSON shape and reuse dot paths). Feeds often carry title, link, date and id; documents come from the linked page.
+- **Findings:**
+
+### B-57 ASP.NET WebForms postback paging
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Older portals page and search with `__doPostBack`: each page is a POST of the whole form with `__VIEWSTATE` and `__EVENTTARGET`; there are no next links or page numbers in URLs.
+- **Idea:** Either a browser `actions` click on the pager (see the fixed-interaction item), or a declarative postback: take the form fields from the current page and set `__EVENTTARGET`/`__EVENTARGUMENT` from the pager link. Same-site only.
+- **Findings:**
+
+### B-58 Listings and documents inside iframes
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Some portals embed the tender list or the document list in an iframe from another host (often the procurement software vendor). Selectors on the outer page find nothing.
+- **Idea:** render_page reports iframes with their src; the agent can use the iframe URL as the listing or detail URL (same robots and rate rules per host).
+- **Findings:**
+
+### B-59 Localised dates and month names
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Dates such as "21. November 2026", "21 novembre 2026" or "21 listopada 2026" fail parsing, so publicationDate and submissionDeadline end up null.
+- **Idea:** Multilingual month names (keywords.json) mapped before parsing; tests in many languages; keep "wrong is worse than missing".
+- **Findings:**
+
+### B-60 Documents split by lot or folder
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Tender documents are often grouped by lot or folder (lot pages, folder trees, "show more" lists), so one documents page shows only part of the files.
+- **Idea:** Allow a documents selector to follow up to N levels of folder or lot links (same site, bounded), deduplicating by sha256.
+- **Findings:**
+
+### B-61 Incremental reads
+- **Priority:** low
+- **Status:** open
+- **Problem:** Every refresh re-reads the whole listing and every detail page, which is slow at one request per second.
+- **Idea:** Skip unchanged tenders: use ETag/Last-Modified, list-level change dates, or only open detail pages for new or changed rows; still mark disappeared tenders closed only when the listing was read completely.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
