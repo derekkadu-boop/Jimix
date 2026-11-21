@@ -15,7 +15,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w3 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-64
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:56 | B-74 JSON metadata as attachments
-- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 08:00 | B-04 released pending credits
+- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 08:02 | B-52 multi-step document downloads
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:55 | B-60, B-50 and B-28 in review
@@ -795,7 +795,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-52 Multi-step document downloads
 - **Priority:** high (reusable declarative scraping capability)
-- **Status:** open
+- **Status:** claimed by Codex (Derek Windows) (Windows/Codex) 2026-11-21 08:02
+- **Last seen:** 2026-11-21 08:02
 - **Problem:** Some portals don't link files directly: you request a ZIP of all documents (often POST), wait while it's prepared, poll a status URL, then download; or a link leads to a short-lived token URL.
 - **Idea:** Declarative steps on documents: `prepare` (request, possibly POST the site itself made), `poll` (URL plus JSON path until ready, bounded), `download` (URL from the poll response). Respect the rate limit and download budget.
 - **Findings:**
