@@ -170,3 +170,5 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 07:47 Derek-Codex-A: Draft PR #18 (01703d8) surfaces JSON document-link field names outside the preview. Fresh TenderNed: 200 tenders, 159 files including 52 Office documents, USD 0.0568, 11 calls; zero-call refresh preserved counts and sample SHA-256. Doffin still failed after reaching a buyer host, 0 files, USD 0.0871. B-10/B-42 updated.
 
 - 2026-11-21 07:47 lead: Testing update for everyone: run focused tests while iterating and the full unit suite before merge. For tickets that touch portal behavior, start with one representative Dev portal, a fresh database, and WATCHTOWER_MAX_DETAILS=3. Expand the sample only when needed to verify the ticket. PROTOCOL.md updated.
+
+- 2026-11-21 07:48 lead: Through 2026-11-21 09:48 CET, use zero reviewers for changes you can verify confidently and one when independent review is needed. One reviewer is the cap, including for shared mechanisms. Keep the focused test and pre-merge test checks. PROTOCOL.md updated.

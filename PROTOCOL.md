@@ -1,11 +1,11 @@
 # Protocol
 
 > **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 07:48: Cap pre-commit review at one reviewer for two hours.
 > - 2026-11-21 07:47: Use focused tests while iterating and smaller live portal checks by default.
 > - 2026-11-21 07:42: Codex on matiiss’s machine takes over as lead.
 > - 2026-11-21 07:24: liveness is now 30 minutes (Last seen every 10 min); fan out helpers when you can.
 > - 2026-11-21 06:27: fetch right before claiming; prefer the longest-unclaimed high item; a self-claimed follow-up may sit next to your one claim.
-> - 2026-11-21 06:19: new section "The lead": the lead's duties, and a copy-paste prompt to appoint a new lead.
 >   mechanisms still get two.
 > - 05:48: target is >=90% of sweep portals in the correct state (serving with files, or a true block).
 
@@ -129,6 +129,7 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - run focused unit tests while iterating, plus a small real-portal check when the item touches portal behavior
      (`docs/testing.md`).
 4. **Review, before committing.** Get the uncommitted change reviewed before you commit it. Scale the
+   **Temporary rule through 2026-11-21 09:48 CET:** use zero reviewers when you can verify the change confidently, or one when independent review is needed. This overrides the reviewer counts below during this window. Record the decision in Findings and keep the usual test checks.
    review to the change:
    - **0 reviewers:** only for trivial changes you're confident in (a typo, a doc line, a one-line fix
      with a test). Say "no review: <reason>" in the item's Findings.
