@@ -172,6 +172,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | boamp.fr | lead-w1 | failed | 0 | 0 | USD 0.0427 | captcha false positive fixed (B-34); API correctly disallowed by robots.txt on www.boamp.fr and its open-data host
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.1284 | Fresh B-33 branch on current main: readable list, 23 calls, agent could not validate public buyer-platform file modal.
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0883 | Fresh combined B-20/B-33 trial: readable list, 16 calls, still declined document mapping on public NetServer modal.
+  - 2026-11-21 | Find a Tender (UK) | lead-w2 | failed | 0 | 0 | USD 0.0199 | Site answered very slowly (curl: 36 s to first byte, 79 s for the results page, 40 s even for a 404 robots.txt); our fixed 30 s read timeout plus one retry turned every listing fetch into ReadTimeout, plus 2 DNS failures. Agent gave up after 11 calls. Taken up in B-23.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
