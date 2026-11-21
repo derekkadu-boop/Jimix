@@ -15,7 +15,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-02 Documents on a different external platform per tender
 - **Priority:** high (documents are the core feature)
-- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 02:47
+- **Status:** done (9a25ba81)
 - **Last seen:** 2026-11-21 03:04
 - **Problem:** evergabe.nrw.de (https://www.evergabe.nrw.de/VMPCenter/, cosinex software) lists tenders
   fine (id via pattern `pid=(\d+)`, unfiltered "welcome" list), but each tender's files live on an
@@ -23,6 +23,11 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   selector can't cover them.
 - **Idea:** sub-recipes per document platform (keyed by host or software), reusable across portals.
 - **Findings:**
+  Recipes select files by exact buyer hostname after a notice link or redirect. A blocked buyer leaves
+  other buyers available and preserves its own previous files. The NRW sample found five Westfalen
+  download links and saved a verified 44,729-byte PDF. Düsseldorf reaches the documents page
+  and needs its public JavaScript modal to list files (B-04).
+  Reviewed by the Codex recipe and coverage reviewers. Fifteen backend tests and Ruff passed.
 
 ### B-03 Bulk-export sources
 - **Status:** open
@@ -40,6 +45,8 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Idea:** declarative POST bodies for JSON listings; maybe a short declarative list of browser
   actions (click a selector, wait).
 - **Findings:**
+  B-02 live observation: NRW notice 1138705 links to Düsseldorf NetServer. Its public download
+  control opens a modal, and the document listing has no ordinary file links until that step.
 
 ### B-05 Prompt-injection hardening
 - **Status:** open
@@ -121,6 +128,16 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   so `_documentUrls` and `_documentsComplete` never reach the dashboard.
 - **Idea:** expose a public `documentsStatus` (e.g. `complete`, `pending`, `none`) and the source document
   URLs in the tender API; show "n files", "pending, next refresh" or "no document links" on the card.
+- **Findings:**
+
+### B-15 Preserve saved files after a temporary document-page error
+- **Priority:** high (transient errors should preserve delivered documents)
+- **Status:** open
+- **Problem:** When an NRW-style tender follows a link to a document page and that page returns a
+  temporary HTTP error, the recipe treats it as an empty result. A refresh can replace previously
+  downloaded files with an empty list. This affects shared and host-specific linked pages.
+- **Idea:** Distinguish failed page loads from a successful page with no file links. Keep last-known
+  files on failure and retry on a later refresh. Test with a mock transport.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
