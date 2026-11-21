@@ -212,6 +212,7 @@ class Fetcher:
         self.playwright = None
         self.browser = None
         self.blocks: list[str] = []
+        self.observed_posts: dict[str, list[dict]] = {}
         self.downloaded = 0
         self.assets: dict[str, tuple] = {}
 
@@ -272,6 +273,22 @@ class Fetcher:
         if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
             raise self.blocked(reason, url)
         resp.raise_for_status()
+        return resp
+
+    async def post_json(self, url: str, body: dict) -> httpx.Response:
+        if not await self.allowed(url):
+            raise Blocked(f"robots.txt disallows {url}")
+        headers = {"Accept": "application/json"}
+        try:
+            resp = await self.client.post(url, json=body, headers=headers)
+        except httpx.TransportError:
+            resp = await self.client.post(url, json=body, headers=headers)
+        html = resp.text if "html" in resp.headers.get("content-type", "") else None
+        if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
+            raise self.blocked(reason, url)
+        resp.raise_for_status()
+        if "json" not in resp.headers.get("content-type", "").lower():
+            raise ValueError(f"POST {url} did not return JSON")
         return resp
 
     async def download(self, url: str, folder: Path) -> tuple[Path, str]:
