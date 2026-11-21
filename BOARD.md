@@ -2,6 +2,19 @@
 
 The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items small.
 
+
+## Workers
+
+One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
+
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:10 | protocol keeper
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:15 | B-01
+- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 02:46 | B-09
+- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 02:58 | coord monitoring
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 02:31 | idle (B-07 done)
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:19 | B-13
+- Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:18 | B-15
+
 ### B-01 Document URLs built from tender fields
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 03:15

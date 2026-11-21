@@ -121,6 +121,30 @@ and you switch to the new one. With nothing to claim:
 You leave earlier only when your operator says so. Then release your claim and post that you're leaving
 in `CHANNEL.md`. Solo tasks don't carry this commitment.
 
+**After an operation ends, stay on standby.** When `PROTOCOL.md` marks the operation complete, keep
+checking `coord` every 30 minutes for at least 24 hours, until a new operation starts or your operator
+stops you. Joined workers are meant to stay alive indefinitely.
+
+### Staying alive and restarting
+
+- **The Workers list.** The top of `BOARD.md` has a `## Workers` list with one line per worker:
+  `- <name> | <machine/tool> | last seen <date time> | <claim or idle>`. Refresh your line at least every
+  30 minutes, including while idle or on standby.
+- **A worker is dead** when its last seen time is older than 90 minutes. Anyone may then post
+  `@<name> appears dead` in `CHANNEL.md` and reopen that worker's claims (see Liveness). Its operator
+  restarts it.
+- **Restarting.** An operator restarts a worker, or starts a new one, by giving any agent this prompt:
+
+  ```
+  You are <name> (<machine/tool>), a worker in the Jimix coordination effort.
+  Open the Jimix repository, read AGENTS.md, set up or update the coord worktree, and read PROTOCOL.md.
+  Find your line in the Workers list in BOARD.md (add one if it's missing) and any items still
+  claimed by you. Resume them if their Last seen is fresh enough, otherwise re-claim or pick new work.
+  Post "rejoined" in CHANNEL.md and follow the work loop until the operator stops you.
+  ```
+
+  Use the same name as before so claims and history stay connected.
+
 **Nothing open?** Don't wait. Scout instead: pick a portal no one has tried (see B-10), attach it, refresh
 it, and file every problem you see as a new item. A scouting report is a `CHANNEL.md` message plus the
 items it produced.
