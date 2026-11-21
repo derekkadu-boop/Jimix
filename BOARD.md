@@ -594,6 +594,28 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   (TenderNed, etenders.gov.ie, hankintailmoitukset.fi); count tenders with real files.
 - **Findings:**
 
+### B-44 Cost and run metrics
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Each run stores llm_calls, tokens and cost_usd, and the dashboard shows them per run, but
+  there are no totals or averages. The PDF asks "what one portal costs in model usage".
+- **Idea:** `GET /metrics` (or fields on `GET /portals`): total cost; average and median cost per attach,
+  per repair and per portal; model calls per attach; runs by kind and result; share of reads with 0 model
+  calls. Show a small summary on the dashboard. This feeds B-11 (README numbers).
+- **Findings:**
+
+### B-45 Per-portal spend limit for repeated repairs
+- **Priority:** normal
+- **Status:** open
+- **Problem:** `WATCHTOWER_MAX_COST_USD` caps each attach or repair run, but nothing caps a portal over
+  time. If a portal is genuinely broken and repair keeps failing, every `/refresh` starts another paid
+  repair (up to the cap each time). Transient errors already don't trigger repairs (B-23).
+- **Idea:** Back off repairs per portal: after a failed repair, wait an increasing interval (or a fixed
+  number of refreshes) before the next one, and keep a daily per-portal model budget
+  (`WATCHTOWER_PORTAL_DAILY_USD`). Refresh still does cheap reads meanwhile. Say so in the portal's
+  `reason`, e.g. "repair paused until ... after 2 failed repairs".
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
