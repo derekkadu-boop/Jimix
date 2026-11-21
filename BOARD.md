@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:47 | protocol keeper, B-18
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:55 | B-40
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:42 | B-23 (reviewed, committed locally; UK retest running)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:54 | B-20
@@ -398,8 +398,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-31 Experiment: more agent reasoning, less special-case code
 - **Priority:** high (generalization)
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:30 (A/B: main prompt vs wide prompt, 5 Dev portals; phase A running)
-- **Last seen:** 2026-11-21 05:30
+- **Status:** done (experiment, nothing merged: main's prompt kept)
+- **Last seen:** 2026-11-21 05:55
 - **Problem:** Most successes so far come from code mechanisms built for one software family (NetServer,
   Cosinex), and the prompt now carries software-specific instructions. That may not generalize to unseen
   portals.
@@ -408,7 +408,20 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   site- or software-specific code. Compare it with `main` on the same Dev portals with fresh databases:
   portals reaching `serving` with files, files per portal, and model cost per attach. Report the numbers
   and keep whichever generalizes better.
-- **Findings:**
+- **Findings:** A/B on main 1dbf27d, fresh DB per phase, same 5 Dev portals attached in parallel
+  (TenderNed, NRW, DTVP, etenders.gov.ie, find-tender), max details 10. Variant B (`WATCHTOWER_PROMPT=wide`):
+  main's strategy section replaced by a general playbook (map the site, rank candidates, inspect 2-3
+  tenders, test early, retry other candidates, give up only after several failed tests, abstract recipe
+  examples), NetServer lines removed, MAX_TURNS 70 instead of 40; recipe docs identical.
+  - A (main): 0/5 serving, 0 files, 84 model calls, $0.355 (TenderNed 26, NRW 11, DTVP 17, IE 13, UK 17).
+  - B (wide): 0/5 serving, 0 files, 75 model calls, $0.398 (TenderNed 17, NRW 12, DTVP 26, IE 12, UK 8).
+  The wider prompt and turn budget changed nothing measurable: the agent still calls give_up after 8-26
+  calls, so extra turns are never used. That is B-33's job (refuse early give_up); re-run this A/B after
+  B-33 lands (patch kept locally, easy to redo). Generic causes seen in both phases: TenderNed found its
+  per-tender JSON file list by itself in both (B-01 probe + documents_url) and failed only on
+  `$.documenten[*].links.download.href` syntax, now B-40; IE and NRW never reached file links on detail
+  pages; find-tender answered 403 on notice pages in A and 429 in B (B ran right after A on the same
+  site, so B's UK result is confounded).
 
 ### B-32 Rendering returns before JavaScript apps load their data
 - **Priority:** high (dominant failure in the wide test)
@@ -522,8 +535,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-40 JSON paths with [*] and [0] are not understood
 - **Priority:** high (a correct document recipe failed on syntax)
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:49, queued right after B-31
-- **Last seen:** 2026-11-21 05:49
+- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:49
+- **Last seen:** 2026-11-21 05:55
 - **Problem:** A fresh TenderNed attach found the per-tender JSON file list and tested
   `documents: {"path": "$.documenten[*].links.download.href"}`, the usual JSONPath form. Recipe dot paths
   only accept `path: "documenten"` plus `attribute: "links.download.href"`, so every test reported no
