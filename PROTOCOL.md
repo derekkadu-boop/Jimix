@@ -1,12 +1,12 @@
 # Protocol
 
 > **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 06:27: fetch right before claiming; prefer the longest-unclaimed high item; a self-claimed follow-up may sit next to your one claim.
 > - 2026-11-21 06:19: new section "The lead": the lead's duties, and a copy-paste prompt to appoint a new lead.
 > - 2026-11-21 06:04: one reviewer is enough for follow-up commits to an already reviewed design; new shared
 >   mechanisms still get two.
 > - 05:48: target is >=90% of sweep portals in the correct state (serving with files, or a true block).
 > - 05:13: re-read AGENTS.md and docs/testing.md when they change; Python only via uv.
-> - 04:55: fresh empty JIMIX_DB per retest; develop only on the Dev list (B-10); held-out set exists.
 
 This branch (`coord`) is how everyone working on Jimix coordinates: humans and agents, on any machine.
 It holds only three files:
@@ -118,7 +118,9 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - Commit only that change as `claim B-NN`, then push.
    - If the push is rejected, run `git pull` (a merge, never a rebase), check whether someone claimed it
      first, and either push again or pick another item.
-   - Hold one claim at a time.
+   - Hold one claim at a time. A small follow-up you self-claimed (see Rules) may sit next to it.
+   - Fetch right before claiming. If several high-priority items are open, take the one that has been
+     unclaimed longest, so two workers don't race for the same one.
    - Add a line `- **Last seen:** <date time>` to the item and keep it fresh (see Liveness).
 3. **Work.** On `main`'s side, in your normal clone:
    - branch `b-NN-short-name` from an up-to-date `main`;
