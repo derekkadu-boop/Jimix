@@ -400,6 +400,92 @@ def test_captcha_is_reported_as_blocked():
         asyncio.run(run())
 
 
+@pytest.mark.parametrize("unchecked", ["capped", "no-url", "503", "blocked"])
+def test_unchecked_tender_detail_keeps_documents_pending(monkeypatch, tmp_path, unchecked):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    monkeypatch.setattr(fetch, "MAX_FILE_BYTES", 1024)
+    db.init()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('files', 'https://portal.example/list', ?)",
+                     (db.now(),))
+
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {
+            "records": "article",
+            "fields": {
+                "id": {"path": "$", "attribute": "data-id"},
+                "title": {"path": "span"},
+                "url": {"path": "a", "attribute": "href"},
+            },
+            "next_page": None,
+        },
+        "detail": {},
+    })
+
+    def refresh(detail):
+        monkeypatch.setattr(watchtower, "MAX_DETAILS", 1 if detail == "capped" else None)
+
+        def response(request):
+            path = request.url.path
+            if path == "/list":
+                link = "" if detail == "no-url" else '<a href="/t/2">Open</a>'
+                return httpx.Response(200, html=(
+                    '<article data-id="1"><span>Tender 1</span><a href="/t/1">Open</a></article>'
+                    f'<article data-id="2"><span>Tender 2</span>{link}</article>'
+                ))
+            if path == "/t/2":
+                if detail in {"capped", "no-url"}:
+                    pytest.fail("unchecked detail was requested")
+                if detail == "503":
+                    return httpx.Response(503)
+                if detail == "blocked":
+                    return httpx.Response(403)
+                if detail == "files":
+                    return httpx.Response(200, html=(
+                        '<a class="doc" href="/bid.pdf">Bid</a><a class="doc" href="/large.pdf">Large file</a>'
+                    ))
+            if path == "/bid.pdf":
+                return httpx.Response(200, content=b"%PDF-1.4 fixture")
+            if path == "/large.pdf":
+                return httpx.Response(200, content=b"x" * 1025)
+            return httpx.Response(404 if path == "/robots.txt" else 200, html="<p>No file links</p>")
+
+        async def deliver():
+            fetcher = Fetcher(transport=httpx.MockTransport(response))
+            try:
+                return await watchtower._deliver("files", recipe, fetcher)
+            finally:
+                await fetcher.close()
+
+        result = asyncio.run(deliver())
+        with db.connect() as conn:
+            record = json.loads(conn.execute("SELECT data FROM tender WHERE id = '2'").fetchone()["data"])
+        return result, record
+
+    result, fresh = refresh(unchecked)
+    assert result == (2, None, "No document links found for 1 of 2 tenders")
+    assert fresh["documents"] == fresh["_documentUrls"] == []
+    assert not fresh["_documentsComplete"]
+
+    _, complete = refresh("files")
+    assert complete["_documentsComplete"]
+    assert [doc["fileName"] for doc in complete["documents"]] == ["bid.pdf"]
+    assert complete["_documentSkips"] == {"https://portal.example/large.pdf": fetch.OVERSIZE_SKIP}
+
+    result, pending = refresh(unchecked)
+    assert result == (2, None, "No document links found for 1 of 2 tenders")
+    assert not pending["_documentsComplete"]
+    assert "_documentDetailPending" not in pending
+    for key in ("documents", "_documentUrls", "_documentSkips"):
+        assert pending[key] == complete[key]
+
+    result, empty = refresh("empty")
+    assert result == (2, None, "No document links found for 2 of 2 tenders")
+    assert empty["_documentsComplete"]
+    assert empty["documents"] == empty["_documentUrls"] == []
+    assert "_documentSkips" not in empty
+
+
 def test_index_reads_every_linked_list():
     def categories(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/cats":

@@ -162,14 +162,17 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     for tender in tenders:
         old = known.get(tender["id"])
         tender.pop("_documentChecked", None)
-        if tender.pop("_documentPageError", False):
+        page_error = tender.pop("_documentPageError", False)
+        detail_pending = tender.pop("_documentDetailPending", False)
+        if page_error or detail_pending:
             if old:
                 tender["documents"] = old.get("documents", [])
                 tender["_documentUrls"] = old.get("_documentUrls", [])
                 if "_documentSkips" in old:
                     tender["_documentSkips"] = old["_documentSkips"]
             tender["_documentsComplete"] = False
-            failed_pages += 1
+            failed_pages += page_error
+            pending += detail_pending
             continue
         if why := tender.pop("_documentBlock", None):
             tender["documents"] = old.get("documents", []) if old else []

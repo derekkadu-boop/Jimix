@@ -345,8 +345,10 @@ def normalize(raw: dict, recipe: Recipe) -> dict | None:
         tender["_documentChecked"] = True
     if "_documentBlock" in raw:
         tender["_documentBlock"] = raw["_documentBlock"]
-    if raw.get("_documentPageError"):
+    elif raw.get("_documentPageError"):
         tender["_documentPageError"] = True
+    elif recipe.detail and (recipe.documents or recipe.documents_by_host) and "_docs" not in raw:
+        tender["_documentDetailPending"] = True
     for name in ("referenceNumber", "description"):
         if raw.get(name):
             tender[name] = raw[name]
