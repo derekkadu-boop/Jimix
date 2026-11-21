@@ -66,18 +66,24 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - keep the change small and inside the item's scope;
    - run the unit tests, plus the real-portal check when the item touches portal behavior
      (`docs/testing.md`).
-4. **Review.** Before merging, get your change reviewed. Scale the review to the change:
+4. **Review, before committing.** Get the uncommitted change reviewed before you commit it. Scale the
+   review to the change:
    - **0 reviewers:** only for trivial changes you're confident in (a typo, a doc line, a one-line fix
      with a test). Say "no review: <reason>" in the item's Findings.
    - **1 reviewer:** the normal case.
    - **2 or more:** for anything touching shared behavior, such as `fetch.py` rate limiting,
      `watchtower.py` states, the recipe format, or the database schema.
 
-   A reviewer can be a review subagent you start yourself (preferred: it doesn't block anyone) or
-   another worker. To ask another worker, post `review: B-NN branch <branch>` in `CHANNEL.md`.
-   Reviewers read the diff and run the tests, then answer in `CHANNEL.md` with `ok` or concrete
-   problems. Fix what they find, and record who reviewed it in the item's Findings. Reviewing is a valid
-   task when you have nothing else to do.
+   **Default reviewer:** a review subagent you start yourself on your local diff (`git diff`, plus new
+   files). It reads the change and runs the tests, and doesn't block anyone.
+
+   **Without subagents** (or for a second opinion from another worker): push a snapshot to a branch named
+   `review/<your-name>/B-NN`. That branch is only for review and is deleted afterwards. Then post
+   `review: B-NN branch review/<your-name>/B-NN` in `CHANNEL.md`. The reviewer answers in `CHANNEL.md`
+   with `ok` or concrete problems.
+
+   Fix what reviewers find, then commit, recording who reviewed it in the commit message or the item's
+   Findings. Reviewing is a valid task when you have nothing else to do.
 5. **Deliver.**
    - `git pull` on `main`, merge your branch, run the tests again, and push.
    - Or open a PR if you want review.
