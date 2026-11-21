@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:39 | idle
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:31 | B-04
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:45 | B-04
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
 ### B-01 Document URLs built from tender fields
@@ -63,7 +63,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-04 POST search APIs and browser interactions
 - **Priority:** high (Düsseldorf NetServer documents only list after a modal click, see B-02)
 - **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:31
-- **Last seen:** 2026-11-21 03:31
+- **Last seen:** 2026-11-21 03:45
 - **Problem:** some JavaScript portals only load results after a search action or a POST request
   (oeffentlichevergabe.de's search page loads only region data on its own). Recipes only do GET.
 - **Idea:** declarative POST bodies for JSON listings; maybe a short declarative list of browser
