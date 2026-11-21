@@ -320,6 +320,16 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Recognize HTML refresh redirects generically, with a bounded chain and the existing URL, rate-limit, robots and access checks. Verify a fresh unassisted attach from a homepage using that mechanism.
 - **Findings:**
 
+### B-29 Same file listed twice per tender (archive ZIP plus single files)
+- **Priority:** high (document lists are wrong)
+- **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 04:17
+- **Last seen:** 2026-11-21 04:17
+- **Problem:** documents pages often offer every file and a ZIP of all of them. Both match the file
+  selector, the ZIP is unpacked, and the tender lists each file twice (unassisted attach of
+  https://www.vergabe.metropoleruhr.de/: 18 entries, 9 unique sha256).
+- **Idea:** dedupe a tender's documents by sha256 in `fetch_documents`.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
