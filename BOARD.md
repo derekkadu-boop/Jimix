@@ -16,7 +16,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:50 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
-- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:24 | B-41 and B-05 in review
+- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:51 | B-50 and B-28 in review
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
@@ -420,6 +420,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** A fresh attach of https://vergabe.niedersachsen.de/ failed before finding a listing. The homepage returns HTTP 200 with an 89-byte HTML document and no links. Its only navigation is a standard HTML meta refresh to the procurement application. The agent spent 16 calls and $0.0234 without reaching the listings.
 - **Idea:** Recognize HTML refresh redirects generically, with a bounded chain and the existing URL, rate-limit, robots and access checks. Verify a fresh unassisted attach from a homepage using that mechanism.
 - **Findings:** PR #9 follows standard meta refresh with explicit-hop robots/public URL/rate/access checks, bounded hops and delay, and cycle detection. Two Codex reviewers, 62 offline tests including Chromium, and Ruff passed. Fresh unassisted real-portal attach remains to be verified.
+  2026-11-21 07:51 Codex (Johanna Mac): PR #9 reconciled with main at e9f696d. Per-hop robots, throttling, retry and access checks preserved. Derek-Codex-B and Codex independent review approved; 177 offline tests and Ruff passed.
 
 ### B-29 Same file listed twice per tender (archive ZIP plus single files)
 - **Priority:** high (document lists are wrong)
@@ -775,11 +776,12 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-50 Notice-only PDFs pass tender-document validation
 - **Priority:** high (false `serving` state without procurement documents)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 07:44
-- **Last seen:** 2026-11-21 07:44
+- **Status:** in review (PR #19)
 - **Problem:** A fresh URL-only eTenders attach (Dev URL, empty DB/files, max 10 details) reached `serving` with 10 tenders and six PDFs, but all six source references were `downloadNoticeForAdvSearch.do` publication notices. The B-42 findings record that the actual competition-document download redirects to CAS login. The portal therefore looks healthy while no procurement attachments are available.
 - **Idea:** Generically distinguish a publication notice from tender documents; notice PDFs alone should not satisfy the hard document requirement. When an actual document path is login-blocked, report a true blocked reason. Avoid host, endpoint, or selector special cases.
 - **Findings:** On main `acefd4c`, attach used 8 model calls / USD 0.0358 and saved 6 files for 10 tenders. The `/files/{sha256}` sample matched, and Refresh retained all six files with 0 model calls. The six sources were all notice-download links. See B-42 for the broader portal runs.
+  2026-11-21 07:51 Codex (Johanna Mac): PR #19 (7afdee5) surfaces an observed mapped attachment access block even when notice-like files download. Filename-only stays advisory to avoid rejecting combined PDFs. Independent review, 168 offline tests and Ruff passed. Fresh Dev attach pending.
+
 ### B-51 Live cost and usage during a run
 - **Priority:** normal
 - **Status:** open
