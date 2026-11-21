@@ -780,11 +780,13 @@ NOTICE_ONLY = """<html><body><nav><a href="/help">Help</a></nav>
 
 @pytest.mark.parametrize(("attachment_page", "file_content", "global_link"), [
     (None, b"", False), (404, b"", False), (200, b"%PDF-1.4", False),
-    (200, b"%PDF-1.4 spec", False), (200, b"%PDF-1.4 spec", True),
+    (200, b"%PDF-1.4 spec", False), (200, b"%PDF-1.4 spec", True), (403, b"", False),
 ])
 def test_notice_only_validation_requires_a_distinct_tender_attachment(attachment_page, file_content, global_link):
     detail = '<a class="doc" href="/Bekanntmachung.pdf">Download</a>'
-    if attachment_page:
+    if attachment_page == 403:
+        detail += '<a class="doc" href="/private">Specification</a>'
+    elif attachment_page:
         link = '<a href="/documents">Tender documents</a>'
         detail += f"<nav>{link}</nav>" if global_link else link
 
@@ -793,6 +795,8 @@ def test_notice_only_validation_requires_a_distinct_tender_attachment(attachment
             return httpx.Response(200, html=detail)
         if request.url.path == "/Bekanntmachung.pdf":
             return httpx.Response(200, content=b"%PDF-1.4", headers={"content-type": "application/pdf"})
+        if request.url.path == "/private":
+            return httpx.Response(403)
         if request.url.path == "/documents":
             return httpx.Response(attachment_page, html='<a href="/Specification.pdf">Specification</a>')
         if request.url.path == "/Specification.pdf":
@@ -810,6 +814,9 @@ def test_notice_only_validation_requires_a_distinct_tender_attachment(attachment
     if file_content == b"%PDF-1.4 spec" and not global_link:
         assert "separate documents page" in report["problem"]
         assert any("/documents" in warning for warning in report["warnings"])
+    elif attachment_page == 403:
+        assert "document download blocked" in report["problem"]
+        assert agent.NOTICE_ONLY in report["warnings"]
     else:
         assert report["problem"] is None
 
