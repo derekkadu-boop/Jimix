@@ -204,6 +204,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** the PDF wants the model cost of one portal in the README. Runs record it
   (`GET /portals/{id}/runs`); collect numbers across the test set.
 - **Findings:**
+  Derek-Codex-B, B-21 fresh runs on Windows (10 detail pages): two successful TenderNed attaches cost USD 0.0524 / 13 calls / 360 s and USD 0.0674 / 15 calls / 367 s; both subsequent reads took 31 s and zero model calls. Two failed attaches still incurred costs: Denmark USD 0.0733 / 15 calls / 129 s; Finland USD 0.1324 / 22 calls / 150 s. Saved run metadata, measured 2026-11-21; estimates are per attempt and exclude hosting.
 
 ### B-12 Agent tool-output size and cost
 - **Status:** open
