@@ -1048,3 +1048,50 @@ def test_refresh_does_not_repair_after_a_temporary_failure(monkeypatch, tmp_path
         assert "temporary error" in portal_row["reason"]
     assert [tuple(r) for r in runs] == [("read", "failed")]
     assert repairs == 0
+
+
+
+@pytest.mark.parametrize("distinct_categories", [False, True])
+def test_refresh_preserves_tenders_when_listing_index_is_truncated(monkeypatch, tmp_path, distinct_categories):
+    from app import recipe as recipes
+
+    monkeypatch.setattr(recipes, "MAX_INDEX_LISTS", 1)
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    previous = '{"status":"open","documents":[{"fileName":"saved.pdf"}]}'
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('test', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute(
+            "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('test', 'old', ?, ?)",
+            (previous, db.now()),
+        )
+
+    requests = []
+
+    def response(request):
+        path = request.url.path
+        if path == "/robots.txt":
+            return httpx.Response(404)
+        requests.append(path)
+        if path == "/list":
+            second = "/category/2" if distinct_categories else "/category/1"
+            return httpx.Response(200, html=f'<a class="category" href="/category/1">One</a>'
+                                            f'<a class="category" href="{second}">Two</a>')
+        return httpx.Response(200, html=LIST_2)
+
+    listing = RECIPE["listing"] | {"index": {"path": "a.category", "attribute": "href"}}
+    recipe = Recipe.model_validate(RECIPE | {"listing": listing, "detail": None, "documents": None})
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await watchtower._deliver("test", recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    assert asyncio.run(run())[0] == 1
+    assert requests == ["/list", "/category/1"]
+    with db.connect() as conn:
+        stored = conn.execute("SELECT data FROM tender WHERE id='old'").fetchone()[0]
+    assert stored == (previous if distinct_categories else previous.replace('"open"', '"closed"'))

@@ -217,10 +217,10 @@ async def apply(
     if listing.index:
         page, base = await _load(listing.kind, listing.url, fetcher)
         links = [urljoin(base, u) for u in _values(page, listing.index, listing.kind)]
-        starts = list(dict.fromkeys(links))[:MAX_INDEX_LISTS]
+        starts = list(dict.fromkeys(links))
         budget -= 1
-    complete = bool(starts)
-    for start in starts:
+    complete = 0 < len(starts) <= MAX_INDEX_LISTS
+    for start in starts[:MAX_INDEX_LISTS]:
         seen: set[str] = set()
         url, finished = start, False
         for page_number in range(min(recipe.max_pages, budget)):
