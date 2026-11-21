@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import zipfile
 
 import httpx
@@ -195,6 +196,135 @@ def test_recipe_validation_samples_each_document_host(monkeypatch):
     assert not problem
     assert tried == ["https://buyer-one.example/0.pdf", "https://buyer-two.example/file.pdf"]
     assert warnings == ["tender 3: no file links", "could not download sampled file from buyer-two.example"]
+
+
+def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    monkeypatch.setattr(fetch, "MAX_FILE_BYTES", 1024)
+    monkeypatch.setattr(watchtower, "MAX_DETAILS", None)
+    db.init()
+    urls = ["https://portal.example/files/" + name for name in ("archive.zip", "landing.pdf", "large.pdf")]
+    old_files = [
+        {"sha256": str(i), "fileName": f"cached-{i}.pdf"}
+        for i in range(3)
+    ]
+    legacy = {"status": "open", "documents": old_files, "_documentUrls": urls, "_documentsComplete": True}
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('files', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute(
+            "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('files', '1', ?, ?)",
+            (json.dumps(legacy), db.now()),
+        )
+    downloads = []
+
+    def response(request):
+        path = request.url.path
+        if path == "/t/1":
+            return httpx.Response(200, html="".join(f'<a class="doc" href="{url}">File</a>' for url in urls))
+        if not path.startswith("/files/"):
+            return portal(request)
+        downloads.append(path)
+        if path == "/files/large.pdf":
+            return httpx.Response(200, content=b"x" * 1025)
+        if path == "/files/archive.zip":
+            if downloads.count(path) == 1:
+                return httpx.Response(503)
+            return httpx.Response(200, content=_zip())
+        if downloads.count(path) == 1:
+            return httpx.Response(200, html="<p>Open the landing page to download</p>")
+        return httpx.Response(200, content=b"%PDF-1.4 fixture",
+                              headers={"content-disposition": 'attachment; filename="spec.pdf"'})
+
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"records": "tr.t:first-child", "next_page": None},
+    })
+
+    async def refresh():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            run_id = watchtower._new_run("files", "read")
+            count, blocked, note = await watchtower._deliver("files", recipe, fetcher)
+            watchtower._finish_delivery("files", run_id, watchtower.Usage(), count, blocked, note)
+        finally:
+            await fetcher.close()
+        with db.connect() as conn:
+            record = json.loads(conn.execute("SELECT data FROM tender WHERE id = '1'").fetchone()["data"])
+            reason = conn.execute("SELECT reason FROM run WHERE id = ?", (run_id,)).fetchone()["reason"]
+        return record, reason
+
+    record, reason = asyncio.run(refresh())
+    assert reason == "read 1 tenders. Skipped documents: HTML response (1), over size limit (1)"
+    assert not record["_documentsComplete"]
+    assert record["documents"] == old_files
+
+    record, reason = asyncio.run(refresh())
+    assert reason == "read 1 tenders. Skipped documents: over size limit (1)"
+    assert record["_documentsComplete"]
+    assert [doc["fileName"] for doc in record["documents"]] == ["notice.pdf", "terms.txt", "spec.pdf"]
+    assert asyncio.run(refresh()) == (record, reason)
+    assert downloads == [
+        "/files/archive.zip", "/files/landing.pdf", "/files/large.pdf",
+        "/files/archive.zip", "/files/landing.pdf",
+    ]
+    assert not list(tmp_path.glob(".part-*"))
+
+
+def test_skipped_legacy_recheck_leaves_last_documents_visible(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    monkeypatch.setattr(watchtower, "MAX_DETAILS", 1)
+    db.init()
+    with db.connect() as conn:
+        stamp = db.now()
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('files', 'https://portal.example/list', ?)",
+                     (stamp,))
+        for tender_id in ("1", "2"):
+            data = {
+                "status": "open",
+                "documents": [{"sha256": tender_id, "fileName": "previous.pdf"}],
+                "_documentUrls": [f"https://portal.example/files/{tender_id}.pdf"],
+                "_documentsComplete": True,
+            }
+            conn.execute(
+                "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('files', ?, ?, ?)",
+                (tender_id, json.dumps(data), stamp),
+            )
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"records": ".t", "next_page": None},
+        "detail": None,
+    })
+    requested = []
+
+    def response(request):
+        path = request.url.path
+        if path == "/list":
+            rows = [
+                f'<p class="t"><a href="/t/{i}">Tender {i}</a><a class="doc" href="/files/{i}.pdf">File</a></p>'
+                for i in (1, 2)
+            ]
+            return httpx.Response(200, html="".join(rows))
+        if path.startswith("/files/"):
+            requested.append(path)
+            return httpx.Response(200, content=b"%PDF-1.4 fixture")
+        return httpx.Response(404)
+
+    async def refresh():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            await watchtower._deliver("files", recipe, fetcher)
+        finally:
+            await fetcher.close()
+        with db.connect() as conn:
+            return json.loads(conn.execute("SELECT data FROM tender WHERE id = '2'").fetchone()["data"])
+
+    deferred = asyncio.run(refresh())
+    assert not deferred["_documentsComplete"]
+    assert deferred["documents"][0]["fileName"] == "previous.pdf"
+    assert requested == ["/files/1.pdf"]
+    checked = asyncio.run(refresh())
+    assert checked["_documentsComplete"]
+    assert checked["documents"][0]["fileName"] == "2.pdf"
+    assert requested == ["/files/1.pdf", "/files/2.pdf"]
 
 
 def test_captcha_is_reported_as_blocked():

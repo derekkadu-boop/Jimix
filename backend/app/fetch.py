@@ -22,6 +22,7 @@ INTERVAL = 1.0
 MB = 1024 * 1024
 MAX_FILE_BYTES = int(os.environ.get("WATCHTOWER_MAX_FILE_MB", "250")) * MB
 MAX_RUN_DOWNLOAD_BYTES = int(os.environ.get("WATCHTOWER_MAX_RUN_DOWNLOAD_MB", "1000")) * MB
+OVERSIZE_SKIP = "over size limit"
 CAPTCHA_MARKERS = ("g-recaptcha", "h-captcha", "cf-turnstile", "captcha")
 LOGIN_PATH = re.compile(r"/(login|signin|sign-in|anmelden|sso|oauth|auth)(\b|/)", re.IGNORECASE)
 
@@ -36,6 +37,12 @@ class Deleted(BaseException):
 
 class BudgetExceeded(Exception):
     pass
+
+
+class DocumentSkipped(Exception):
+    def __init__(self, reason: str, *, retryable: bool):
+        super().__init__(reason)
+        self.retryable = retryable
 
 
 class _Gate:
@@ -179,7 +186,7 @@ class Fetcher:
         resp.raise_for_status()
         return resp
 
-    async def download(self, url: str, folder: Path) -> tuple[Path, str] | None:
+    async def download(self, url: str, folder: Path) -> tuple[Path, str]:
         limit = min(MAX_FILE_BYTES, MAX_RUN_DOWNLOAD_BYTES - self.downloaded)
         if limit <= 0:
             raise BudgetExceeded
@@ -189,13 +196,13 @@ class Fetcher:
         size = 0
         async with self.client.stream("GET", url) as resp:
             html = None
-            if "html" in resp.headers.get("content-type", ""):
+            if "html" in resp.headers.get("content-type", "").lower():
                 html = (await resp.aread()).decode(errors="replace")
             if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
                 raise self.blocked(reason)
             resp.raise_for_status()
             if html is not None:
-                return None
+                raise DocumentSkipped("HTML response", retryable=True)
             with part.open("wb") as file:
                 async for chunk in resp.aiter_bytes():
                     size += len(chunk)
@@ -207,5 +214,5 @@ class Fetcher:
             part.unlink()
             if limit < MAX_FILE_BYTES:
                 raise BudgetExceeded
-            return None
+            raise DocumentSkipped(OVERSIZE_SKIP, retryable=False)
         return part, _file_name(resp)

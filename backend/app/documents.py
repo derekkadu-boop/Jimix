@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-from .fetch import MAX_FILE_BYTES, MAX_RUN_DOWNLOAD_BYTES, Blocked, BudgetExceeded, Fetcher
+from .fetch import MAX_FILE_BYTES, MAX_RUN_DOWNLOAD_BYTES, Blocked, BudgetExceeded, DocumentSkipped, Fetcher
 
 log = logging.getLogger("watchtower.documents")
 FILES_DIR = Path(os.environ.get("JIMIX_FILES", "data/files"))
@@ -57,18 +57,28 @@ def _save(part: Path, name: str, budget: int) -> tuple[list[dict], int]:
     return _unzip(part, budget) if zipfile.is_zipfile(part) else ([_store(part, name)], 0)
 
 
-async def fetch_documents(urls: list[str], fetcher: Fetcher) -> tuple[list[dict], bool, str | None]:
+async def fetch_documents(
+    urls: list[str], fetcher: Fetcher, *, skipped: dict[str, str] | None = None
+) -> tuple[list[dict], bool, str | None]:
     FILES_DIR.mkdir(parents=True, exist_ok=True)
     documents, complete, blocked = [], True, None
     for url in urls[:MAX_DOCUMENTS]:
+        if skipped is not None and url in skipped:
+            continue
         try:
-            if downloaded := await fetcher.download(url, FILES_DIR):
-                budget = MAX_RUN_DOWNLOAD_BYTES - fetcher.downloaded
-                saved, unpacked = await asyncio.to_thread(_save, *downloaded, budget)
-                documents.extend(saved)
-                fetcher.downloaded += unpacked
+            downloaded = await fetcher.download(url, FILES_DIR)
+            budget = MAX_RUN_DOWNLOAD_BYTES - fetcher.downloaded
+            saved, unpacked = await asyncio.to_thread(_save, *downloaded, budget)
+            documents.extend(saved)
+            fetcher.downloaded += unpacked
         except BudgetExceeded:
             return documents, False, None
+        except DocumentSkipped as exc:
+            reason = str(exc)
+            log.info("document skipped: %s", reason)
+            if skipped is not None:
+                skipped[url] = reason
+            complete = complete and not exc.retryable
         except Blocked as exc:
             complete, blocked = False, str(exc)
         except (httpx.HTTPError, ValueError, OSError, zipfile.BadZipFile):

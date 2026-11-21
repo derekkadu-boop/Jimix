@@ -5,13 +5,14 @@ import os
 import re
 import sqlite3
 import uuid
+from collections import Counter
 
 import httpx
 
 from . import db
 from .agent import Failed, Usage, explore
 from .documents import fetch_documents
-from .fetch import Blocked, Deleted, Fetcher
+from .fetch import OVERSIZE_SKIP, Blocked, Deleted, Fetcher
 from .recipe import Recipe, apply, check
 
 RUN_TIMEOUT = float(os.environ.get("WATCHTOWER_RUN_TIMEOUT", "3600"))
@@ -156,6 +157,7 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     if problem := check(tenders, sum(t["status"] == "open" for t in known.values())):
         raise Broken(problem)
     fetched = cached = blocked = blocked_pages = pending = 0
+    skips: Counter[str] = Counter()
     reason = None
     for tender in tenders:
         old = known.get(tender["id"])
@@ -168,27 +170,48 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
             blocked_pages += 1
             reason = why
             continue
-        if old and old.get("_documentsComplete") and old.get("_documentUrls") == tender["_documentUrls"]:
+        urls = tender["_documentUrls"]
+        same_urls = old and old.get("_documentUrls") == urls
+        if same_urls and old.get("_documentsComplete") and (not urls or "_documentSkips" in old):
             tender["documents"], tender["_documentsComplete"] = old["documents"], True
+            if "_documentSkips" in old:
+                tender["_documentSkips"] = old["_documentSkips"]
+                skips.update(old["_documentSkips"].values())
             cached += bool(old["documents"])
             continue
-        if not recipe.documents_by_host and blocked >= 5 and blocked == fetched:
+        all_blocked = not recipe.documents_by_host and blocked >= 5 and blocked == fetched
+        if all_blocked or (MAX_DETAILS is not None and fetched >= MAX_DETAILS):
+            if same_urls:
+                tender["documents"] = old["documents"]
+                if "_documentSkips" in old:
+                    tender["_documentSkips"] = old["_documentSkips"]
             tender["_documentsComplete"] = False
             continue
-        if MAX_DETAILS is not None and fetched >= MAX_DETAILS:
-            tender["_documentsComplete"] = False
-            continue
-        docs, done, why = await fetch_documents(tender["_documentUrls"], fetcher)
+        previous_skips = old.get("_documentSkips", {}) if old else {}
+        tender_skips = {url: OVERSIZE_SKIP for url in urls if previous_skips.get(url) == OVERSIZE_SKIP}
+        docs, done, why = await fetch_documents(urls, fetcher, skipped=tender_skips)
+        if not done and same_urls:
+            kept = {
+                (doc["sha256"], doc["fileName"]): doc
+                for doc in [*old.get("documents", []), *docs]
+            }
+            docs = list(kept.values())
         tender["documents"], tender["_documentsComplete"] = docs, done
+        if urls:
+            tender["_documentSkips"] = tender_skips
+            skips.update(tender_skips.values())
         pending += not done
-        fetched += bool(tender["_documentUrls"])
+        fetched += bool(urls)
         if why:
             blocked, reason = blocked + 1, why
     _save_tenders(portal_id, tenders, close_missing=complete)
     attempted = fetched + cached if recipe.documents_by_host else fetched
-    if blocked and blocked * 2 >= attempted:
-        return len(tenders), f"documents: {reason} ({blocked} of {attempted} tenders)", ""
     notes = []
+    if skips:
+        notes.append("Skipped documents: " + ", ".join(f"{reason} ({n})" for reason, n in sorted(skips.items())))
+    if blocked and blocked * 2 >= attempted:
+        failure = f"documents: {reason} ({blocked} of {attempted} tenders)"
+        return len(tenders), ". ".join([failure, *notes]), ""
     if blocked_pages:
         notes.append(f"Document pages blocked for {blocked_pages} of {len(tenders)} tenders")
     if missing := sum(not t["_documentUrls"] for t in tenders) - blocked_pages:
@@ -220,7 +243,8 @@ def _finish_delivery(portal_id: str, run_id: str, usage: Usage, count: int, doc_
         _finish(run_id, "failed", doc_block, usage)
         _set_state(portal_id, "failed", f"Blocked: {doc_block}")
     else:
-        _finish(run_id, "ok", f"read {count} tenders", usage)
+        summary = f"read {count} tenders"
+        _finish(run_id, "ok", f"{summary}. {note}" if note else summary, usage)
         _set_state(portal_id, "serving", note)
 
 
