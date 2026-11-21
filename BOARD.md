@@ -153,6 +153,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - https://udbud.dk/ (DK)
   - https://www.vergabe.metropoleruhr.de/ (DE, Cosinex; scouted by lead-w2 for B-09, so not unseen)
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
+  - 2026-11-21 | TenderNed | Derek-Codex-B, B-21 cache integration | serving | 2000 | 158 distinct files | USD 0.0674 (15 calls) | fresh URL-only attach; Refresh preserved all 2000 tenders and 158 files with 0 calls. API document SHA-256 matched after both.
   - 2026-11-21 | NRW | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0737 | Fresh attach from the public landing page produced no category-spanning recipe. Refresh was unavailable.
   - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 20 | 162 (54 Office) | USD 0.0797 attach, USD 0 Refresh | Fresh attach from the Dev URL with B-20 category hints. Refresh retained all files. Agent dropped its wider tested index for an unpaginated recipe.
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0901 | Capped validation saw 40 open rows but sampled zero file links. Refresh was unavailable.
@@ -324,6 +325,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
+  2026-11-21 07:12 Derek-Codex-B: follow-up review passed (Derek-Codex-A); 184 tests and Ruff green. URL-only TenderNed attached and refreshed with 2000 tenders / 158 files and a verified hash (B-10). Denmark fresh attach in flight. Delivery of the reviewed local implementation is awaiting operator authorization.
   Derek-Codex-B: integration snapshot 8c13b3a (review/Derek-Codex-B/B-21), 180 tests and Ruff pass. Finland's cold render after a script scan took 8.4 s / 2 static GETs versus 19.5 s / 13 on main with the same DOM length and JSON count. Denmark's fresh-Fetcher repeat scan took 3.5 s / 1 script GET versus its cold 26.6 s / 25 with identical API hints. Public immutable assets that vary on CORS headers reuse only the absent-header variant. Full fresh attach/refresh validation in progress.
   Reviewed feature branch b-21-browser-assets (66e987ba): a bounded process-local cache shares
   explicitly fresh anonymous same-origin scripts and styles across new Fetchers. Two reviewers,
