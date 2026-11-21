@@ -358,7 +358,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-27 test_recipe doesn't flag a listing without pagination
 - **Priority:** medium
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:40
+- **Last seen:** 2026-11-21 05:40
 - **Problem:** the first attach of https://www.vergabe.metropoleruhr.de/ submitted a recipe with no
   next_page/page_param although the list page has a forward link (`a.browseForward`, page links with a
   numeric parameter): 20 of ~800 tenders. A later repair found the link by itself.
