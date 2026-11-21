@@ -196,7 +196,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Bulk exports are tracked under B-03.
 - **Findings:** Split from B-04 after shipping the Düsseldorf document dialog.
 
-###  Attach NRW automatically across buyer platforms
+### B-19 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** open
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
