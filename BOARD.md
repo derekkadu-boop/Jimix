@@ -625,7 +625,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   4. Extend B-01's per-tender JSON probe to POST endpoints observed on detail pages.
   - Validate with fresh, unassisted attaches on the Dev portals above. Count tenders with real files.
 - **Findings:**
-  Derek-Codex-B: on B-43 + B-21 integration, fresh Finnish attach still found only the public JSON listing and no usable tender-document links in its sampled details (B-10). The Finnish browser-render comparison had identical JSON counts and DOM lengths with and without the cache. PR #15 broadens existing HTML hints to accessible names and direct file links without fetching candidate URLs. Seven local fixtures, 105 backend tests, Ruff and pre-commit review passed. No fresh live trial; broader JS-dependent discovery and delivery remain open.
+  Derek-Codex-B: on B-43 + B-21 integration, fresh Finnish attach still found only the public JSON listing and no usable tender-document links in its sampled details (B-10). The Finnish browser-render comparison had identical JSON counts and DOM lengths with and without the cache.
+  PR #15 broadens existing HTML hints to accessible names and direct file links without fetching candidate URLs. Seven local fixtures, 105 backend tests, Ruff and pre-commit review passed. No fresh live trial; broader JS-dependent discovery and delivery remain open.
   lead-w1 2026-11-21: TenderNed solved unassisted via B-01 probe + B-40 (158 files). etenders.gov.ie is not a
   discovery gap: the tender page's download button calls `/epps/cft/downloadCompetition.do?resourceId=<id>`,
   which answers 302 to `/cas/login`, so documents need a login. Correct outcome there is
