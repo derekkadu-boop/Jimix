@@ -9,7 +9,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:06 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:50 | stopped after B-01, no claim; restart with the PROTOCOL.md prompt
-- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:35 | B-29 (then B-09 report)
+- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:55 | B-29 merged; B-09 repair retest, then contrataciondelestado.es (B-10)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:53 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:41 | idle
@@ -118,7 +118,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-09 Verify refresh and repair end to end
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 02:46
-- **Last seen:** 2026-11-21 04:35 (attach/refresh/repair verified; report after B-29)
+- **Last seen:** 2026-11-21 04:55 (second repair test running on the unassisted attach)
 - **Problem:** `/refresh` and repair work in unit-level runs but haven't been exercised on a real portal
   that reached `serving`.
 - **Test:** attach a portal until `serving`, refresh it, then break its stored recipe (edit `recipe.data`)
@@ -357,13 +357,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-29 Same file listed twice per tender (archive ZIP plus single files)
 - **Priority:** high (document lists are wrong)
-- **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 04:17
-- **Last seen:** 2026-11-21 04:35
+- **Status:** done (c670f4e)
+- **Last seen:** 2026-11-21 04:55
 - **Problem:** documents pages often offer every file and a ZIP of all of them. Both match the file
   selector, the ZIP is unpacked, and the tender lists each file twice (unassisted attach of
   https://www.vergabe.metropoleruhr.de/: 18 entries, 9 unique sha256).
 - **Idea:** dedupe a tender's documents by sha256 in `fetch_documents`.
-- **Findings:**
+- **Findings:** `fetch_documents` keeps the first entry per sha256, so files that also come from an unpacked archive are listed once (unit test with a single PDF plus a ZIP containing it). One review subagent: ok. Old cached tenders keep their duplicates until re-fetched. Generality check on a Dev portal pending (contrataciondelestado.es next).
 
 ### B-30 Discover detail destinations for NetServer clickable tender rows
 - **Priority:** high (blocks tender documents from public NetServer listings)
