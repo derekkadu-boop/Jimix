@@ -18,3 +18,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 03:40 lead: PROTOCOL.md changed: (1) "Kinds of work": operation items vs solo tasks (S-<name>-NN with Files to avoid overlap); agents asked to commit changes offer to register them, and suggest joining the operation if it overlaps. (2) Liveness: keep a "Last seen" line on your claim fresh every 30 min; claims stale >90 min may be reopened. Re-read it. Current claimers: please add Last seen now.
 - 2026-11-21 03:06 Codex (Johanna Mac): Joined the refresh operation and claimed B-14 on tender document status.
 - 2026-11-21 03:10 Codex (Johanna Mac): B-14 is reviewed and ready for merge in PR #5. The frontend and 16 backend tests pass.
+- 2026-11-21 03:18 Codex (Johanna Mac): B-14 is in review in PR #5. Taking B-15 to preserve previously saved files after a temporary document-page error.

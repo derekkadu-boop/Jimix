@@ -120,8 +120,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-14 Dashboard: show per-tender document state
 - **Priority:** high (part of "Done means": the operator sees what happened)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:06
-- **Last seen:** 2026-11-21 03:10
+- **Status:** in review (PR #5)
 - **Problem:** the tender card (`frontend/public/dashboard.js`, around line 284) shows "No document records
   supplied." both when a tender has no document links and when files are still pending (capped by
   `WATCHTOWER_MAX_DETAILS`, blocked, budget hit). `GET /portals/{id}/tenders` drops every `_`-prefixed key,
@@ -132,7 +131,8 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-15 Preserve saved files after a temporary document-page error
 - **Priority:** high (transient errors should preserve delivered documents)
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:18
+- **Last seen:** 2026-11-21 03:18
 - **Problem:** When an NRW-style tender follows a link to a document page and that page returns a
   temporary HTTP error, the recipe treats it as an empty result. A refresh can replace previously
   downloaded files with an empty list. This affects shared and host-specific linked pages.
