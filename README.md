@@ -6,12 +6,11 @@ tenders, portal state, and run history.
 
 ## Run with Docker
 
-From the repository root, build the Linux AMD64 image and start it with your model API key exported
-in the shell.
+From the repository root, put `OPENAI_API_KEY=...` in `.env`, then build and start the Linux AMD64 image.
 
 ```sh
 docker build --platform linux/amd64 -t jimix .
-docker run --rm -p 127.0.0.1:8080:8080 -e OPENAI_API_KEY -v jimix-data:/data jimix
+docker run --rm -p 127.0.0.1:8080:8080 --env-file .env -v jimix-data:/data jimix
 ```
 
 The dashboard and API are both available at `http://127.0.0.1:8080`. Use `/health` to check the API
