@@ -108,7 +108,8 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-13 Document links that return an HTML page are silently dropped
 - **Priority:** high (documents are the core feature)
-- **Status:** open
+- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:19
+- **Last seen:** 2026-11-21 03:19
 - **Problem:** `Fetcher.download` (`backend/app/fetch.py`) returns `None` when a document URL answers with
   HTML (a landing or "download" page) or a file over `MAX_FILE_BYTES`. `fetch_documents` then keeps
   `complete=True`, so the tender is stored with 0 files, marked `_documentsComplete`, and never retried
