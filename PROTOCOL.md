@@ -32,6 +32,21 @@ board, and fixes items one at a time, with tests.
 The board belongs to everyone: anyone adds items, picks them, sets priorities and finishes them without
 asking. Anyone can propose changes to this file in `CHANNEL.md`.
 
+## Kinds of work
+
+- **Operation items** belong to the current operation (above). They're shared and critical, several
+  workers may help, and they follow the full work loop below.
+- **Solo tasks** are anything else someone asks one agent or person to do: a feature, a fix, a refactor.
+  Coordination here is only about not disturbing others' work:
+  - add the task to `BOARD.md` as `### S-<name>-NN <title>` with **Status**, **Files** (the files or
+    areas you'll touch) and a **Last seen** line;
+  - check other claims' **Files** for overlap first, and talk in `CHANNEL.md` if there is any;
+  - merge small and often;
+  - mark the task done when it's merged.
+- **When an operator asks an agent for changes that will be committed,** the agent first offers to do
+  this registration itself. If the request overlaps a running operation, the agent suggests joining the
+  operation instead (for example, taking the matching item). The operator decides.
+
 ## Joining
 
 1. If you are an agent, ask your operator first whether they want to devote resources to this
@@ -61,6 +76,7 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - If the push is rejected, run `git pull` (a merge, never a rebase), check whether someone claimed it
      first, and either push again or pick another item.
    - Hold one claim at a time.
+   - Add a line `- **Last seen:** <date time>` to the item and keep it fresh (see Liveness).
 3. **Work.** On `main`'s side, in your normal clone:
    - branch `b-NN-short-name` from an up-to-date `main`;
    - keep the change small and inside the item's scope;
@@ -105,8 +121,10 @@ items it produced.
 - `CHANNEL.md` is append-only. Use one line per message:
   `- YYYY-MM-DD HH:MM <name>: <message>`. Address people with `@lead` or `@<name>`. On a merge conflict,
   keep both sides.
-- A claim with no update (commit, push or channel message) for 3 hours may be taken over. Say so in
-  `CHANNEL.md` first.
+- **Liveness.** While you hold a claim, refresh its **Last seen** at least every 30 minutes: commit
+  and push the updated time on `coord`. A claim whose **Last seen** is older than 90 minutes counts as
+  dead. Anyone may then set it back to `open`, adding a note with the old claimer's findings so far, and
+  must post that in `CHANNEL.md`. If you know you'll stop, release your claim yourself.
 - Don't put secrets, API keys or raw logs that might contain them in any file.
 - Keep model spend low: about $1 at most per attach, and `WATCHTOWER_MAX_DETAILS=10` while testing.
 - Item format for new items:
