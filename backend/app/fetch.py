@@ -26,7 +26,8 @@ OVERSIZE_SKIP = "over size limit"
 DOCUMENT_HTML_PROBE_BYTES = 64 * 1024
 TIMEOUT = httpx.Timeout(float(os.environ.get("WATCHTOWER_HTTP_TIMEOUT", "120")), connect=30)
 RETRY_DELAYS = (2.0, 5.0)
-RETRY_STATUS = {502, 503, 504}
+RETRY_STATUS = {429, 502, 503, 504}
+MIN_RETRY_AFTER, MAX_RETRY_AFTER = 15.0, 60.0
 CAPTCHA_WIDGETS = (
     ".g-recaptcha:not([data-size=invisible]), .h-captcha:not([data-size=invisible]), .cf-turnstile,"
     " #challenge-form, #challenge-running, #cf-challenge-running, .cf-browser-verification,"
@@ -81,6 +82,18 @@ async def wait_turn(url: str) -> None:
         if delay > 0:
             await asyncio.sleep(delay)
         gate.last = time.monotonic()
+
+
+def pause(url: str, seconds: float) -> None:
+    gate = _gates.setdefault(site(url), _Gate())
+    gate.last = max(gate.last, time.monotonic() + seconds)
+
+
+def retry_after(resp: httpx.Response, default: float) -> float:
+    value = resp.headers.get("retry-after", "").strip()
+    if value.isascii() and value.isdigit():
+        return min(float(value), MAX_RETRY_AFTER)
+    return max(default, MIN_RETRY_AFTER)
 
 
 async def resolve_public(host: str, port: int) -> str:
@@ -277,8 +290,10 @@ class Fetcher:
             else:
                 if resp.status_code not in RETRY_STATUS or delay is None:
                     break
+                if resp.status_code == 429:
+                    delay = retry_after(resp, delay)
                 log.info("retrying %s in %.0fs after HTTP %s", url, delay, resp.status_code)
-            await asyncio.sleep(delay)
+            pause(url, delay)
         html = resp.text if "html" in resp.headers.get("content-type", "") else None
         if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
             raise self.blocked(reason, url)

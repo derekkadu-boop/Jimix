@@ -1042,7 +1042,7 @@ def test_refresh_does_not_repair_after_a_temporary_failure(monkeypatch, tmp_path
         repairs = conn.execute("SELECT count(*) FROM run WHERE kind = 'repair'").fetchone()[0]
     if earlier:
         assert portal_row["state"] == "failed"
-        assert portal_row["reason"].startswith("Unreachable for 3 reads in a row")
+        assert portal_row["reason"].startswith("Failing on temporary errors for 3 reads in a row")
     else:
         assert portal_row["state"] == "serving"
         assert "temporary error" in portal_row["reason"]
