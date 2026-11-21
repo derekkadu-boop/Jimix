@@ -351,7 +351,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-26 Listings silently capped at max_pages
 - **Priority:** medium (tenders beyond the cap never get documents)
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:46
+- **Last seen:** 2026-11-21 05:46
 - **Problem:** `Recipe.max_pages` defaults to 20 and the agent leaves it. On https://www.vergabe.metropoleruhr.de/
   (20 rows per page, about 41 pages) a repaired recipe read 400 tenders and stopped; `complete` is false,
   but no run reason or test warning says the listing was cut.
