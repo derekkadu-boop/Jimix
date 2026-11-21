@@ -102,8 +102,10 @@ separate page linked from the tender page (e.g. "Vergabeunterlagen", "Documents"
 use documents_page. If a tender's documents or details sit at a URL built from its id (common for JSON
 APIs, e.g. /tenders/{{id}}/documents), use documents_url or detail.url templates. Prefer the full list of
 tender documents over a single notice PDF: render_page one tender's own page to see which JSON calls load
-its documents (e.g. .../{{id}}/documents or /attachments, in the portal's language); the list may only load
-after opening a documents tab, so also try such sibling URLs with fetch_json.
+its documents (e.g. .../{{id}}/documents or /attachments, in the portal's language). render_page also clicks
+a documents tab or button when it finds one and lists the JSON loaded after the click first: map a document
+JSON call with documents_url (kind json). If the files only appear in the rendered page after that click, use
+detail kind browser with detail.click set to the tab's label (matched as literal text, case-insensitive). Also try sibling URLs with fetch_json.
 If listing tenders or downloading documents needs a login or a captcha, call give_up with blocked=true.
 
 A recipe is JSON:
@@ -122,7 +124,8 @@ A recipe is JSON:
     "index": {{"path": "selector of links on url to the actual list pages", "attribute": "href"}} or null
   }},
   "detail": {{"kind": "html" | "json" | "browser", "url": "optional URL template, e.g. https://host/api/tenders/{{id}}",
-              "fields": {{...read from detail.url, else from the page at the listing's url field...}}}} or null,
+              "fields": {{...read from detail.url, else from the page at the listing's url field...}},
+              "click": "browser only: label of a tab or button to click before reading, e.g. Documents"}} or null,
   "documents": {{"path": "selector or dot path matching every document file link", "attribute": "href"}} or null,
   "documents_page": {{"path": "selector of the link from the tender page to its documents page",
                      "attribute": "href"}} or null,
@@ -588,10 +591,15 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
             base = str(resp.url)
             return f"URL: {base}\n{_page_content(resp.text, args.get('offset', 0), base=base)}", None
         if name == "render_page":
-            html, calls, final = await render(args["url"], fetcher)
-            calls = sorted(calls, key=lambda c: c["method"] != "POST")
+            html, calls, final = await render(args["url"], fetcher, click=DOCUMENT_PAGE)
+            clicked = next((c["clicked"] for c in calls if "clicked" in c), None)
+            note = (f"After loading, clicked {clicked!r}: the page below is the page AFTER that click, and the JSON"
+                    " responses it loaded come first.\n") if clicked else ""
+            calls = sorted((c for c in calls if "url" in c),
+                           key=lambda c: ("afterClicking" not in c, c["method"] != "POST"))
             calls = [{k: v for k, v in c.items() if k != "sample"} | {"sample": c["sample"][:600]} for c in calls]
-            return f"URL: {final}\n{_page_content(html, base=final)}\nJSON responses: {json.dumps(calls)[:5000]}", None
+            content = _page_content(html, base=final)
+            return f"URL: {final}\n{note}{content}\nJSON responses: {json.dumps(calls)[:5000]}", None
         if name == "fetch_json":
             return _chunk(resp.text, args.get("offset", 0)), None
         if name == "scan_scripts":
