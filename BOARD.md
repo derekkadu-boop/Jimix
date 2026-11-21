@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:15 | B-42 unassisted B-43 validation on Doffin
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:30 | B-42 document-link discovery and validation
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -196,6 +196,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - 2026-11-21 | Doffin | Codex (Derek Windows B-42) | failed | 0 | 0 | USD 0.0634 | Fresh URL-only on main acefd4c; listing not discovered (13 calls).
   - 2026-11-21 | Finland Hilma | Codex (Derek Windows B-42) | failed | 0 | 0 | USD 0.0634 | Fresh URL-only on main acefd4c; listing not discovered (16 calls).
   - 2026-11-21 | Irish eTenders | Codex (Derek Windows B-42) | serving | 10 | 6 | USD 0.0358 attach, USD 0 Refresh | All six files were public notice PDFs, not tender attachments; sample hash matched and Refresh retained six with 0 calls (B-50).
+  - 2026-11-21 | Doffin | Derek-Codex-A | failed | 0 | 0 | USD 0.0738, 17 calls | Fresh eade7ae attach found the public listing, but six recipe tests could not map any document. No refresh.
+  - 2026-11-21 | TenderNed | Derek-Codex-A | failed | 0 | 0 | USD 0.0583, 14 calls | Fresh eade7ae attach made three submissions. The model reported JSONDecodeError while validating its candidate; no refresh. This is another B-49 variability observation.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -605,7 +607,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
 - **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 07:15
-- **Last seen:** 2026-11-21 07:15
+- **Last seen:** 2026-11-21 07:30
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
@@ -634,6 +636,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   `Blocked: documents need login` (B-34 block rules), not a recipe without files.
 
 2026-11-21 Codex (Derek Windows B-42): Fresh Doffin and Finland Hilma URL-only attaches on main acefd4c failed before listing (0 tenders/files; 13/$0.0634 and 16/$0.0634 calls). eTenders reached serving with 10 tenders and 6 files (8 calls/$0.0358), but all six source references were notice-download links. Refresh retained six at 0 calls and the sample file hash matched. See B-50; B-42 remains open for generic document discovery on portals with usable listings.
+  Derek-Codex-A: Fresh eade7ae Doffin and TenderNed results in B-10. Manually following a listed Doffin competition showed the response's external document-page field at character 817; render_page cuts JSON previews at 600. The referenced buyer page advertises ten attachments on a separate details page. A generic JSON field-hint change is in fresh validation; no site identifiers or endpoints in code.
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
@@ -783,6 +786,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** Some portals don't link files directly: you request a ZIP of all documents (often POST), wait while it's prepared, poll a status URL, then download; or a link leads to a short-lived token URL.
 - **Idea:** Declarative steps on documents: `prepare` (request, possibly POST the site itself made), `poll` (URL plus JSON path until ready, bounded), `download` (URL from the poll response). Respect the rate limit and download budget.
 - **Findings:**
+  Derek-Codex-A: Doffin Dev notice 2026-118085 links to an external buyer page and then a public attachment page. Its rendered DOM offers individual download controls and a ZIP control, but none has an href; the static HTML has no file anchors. This is an observed B-52 case, with no confirmed login block.
 
 ### B-53 Fixed interaction sequences for listings and searches
 - **Priority:** normal
@@ -888,6 +892,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** On national notice portals (Doffin, also TED-style aggregators) each tender's documents live on whatever platform the buyer uses (tendsign, artifik, hyyr, Mercell, EU-Supply...). The notice links to a page on that platform, not to files. B-02/B-20 handle per-host rules the agent writes up front, but the set of hosts is open-ended and unknown at attach time.
 - **Idea:** When sampled document links lead to HTML pages on another host: (1) group them by host; (2) for each host, have the agent learn a small sub-recipe (find the file links or the platform's documents API on that page, using B-43 tab clicks and B-18 POST capture if needed), stored per host and reused for every tender and every portal linking there (see B-37); (3) respect robots.txt and logins per host, record a per-tender reason when a host can't be read (B-62); (4) cap hosts learned per attach by cost. Validate on Doffin unassisted.
 - **Findings:**
+  Derek-Codex-A: Manually traced one current Doffin competition into Artifik. The public tender detail JSON has an explicit buyer-document URL; the target advertises ten attachments on a separate details page. Individual file controls have no href. B-42 work makes the JSON field discoverable; B-52 covers the later download step.
 
 ### B-68 Opt-in generated extraction code as a last resort
 - **Priority:** normal (off by default)
