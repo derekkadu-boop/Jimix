@@ -155,11 +155,18 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     known = {row["id"]: json.loads(row["data"]) for row in rows}
     if problem := check(tenders, sum(t["status"] == "open" for t in known.values())):
         raise Broken(problem)
-    fetched = cached = blocked = blocked_pages = pending = 0
+    fetched = cached = blocked = blocked_pages = failed_pages = missing = pending = 0
     reason = None
     for tender in tenders:
         old = known.get(tender["id"])
         tender.pop("_documentChecked", None)
+        if tender.pop("_documentPageError", False):
+            if old:
+                tender["documents"] = old.get("documents", [])
+                tender["_documentUrls"] = old.get("_documentUrls", [])
+            tender["_documentsComplete"] = False
+            failed_pages += 1
+            continue
         if why := tender.pop("_documentBlock", None):
             tender["documents"] = old.get("documents", []) if old else []
             tender["_documentsComplete"] = False
@@ -168,6 +175,7 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
             blocked_pages += 1
             reason = why
             continue
+        missing += not tender["_documentUrls"]
         if old and old.get("_documentsComplete") and old.get("_documentUrls") == tender["_documentUrls"]:
             tender["documents"], tender["_documentsComplete"] = old["documents"], True
             cached += bool(old["documents"])
@@ -191,7 +199,9 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     notes = []
     if blocked_pages:
         notes.append(f"Document pages blocked for {blocked_pages} of {len(tenders)} tenders")
-    if missing := sum(not t["_documentUrls"] for t in tenders) - blocked_pages:
+    if failed_pages:
+        notes.append(f"Document pages could not be loaded for {failed_pages} of {len(tenders)} tenders")
+    if missing:
         notes.append(f"No document links found for {missing} of {len(tenders)} tenders")
     if pending:
         log.info("portal %s: documents incomplete for %d tenders, %d MB downloaded", portal_id, pending,
@@ -220,7 +230,8 @@ def _finish_delivery(portal_id: str, run_id: str, usage: Usage, count: int, doc_
         _finish(run_id, "failed", doc_block, usage)
         _set_state(portal_id, "failed", f"Blocked: {doc_block}")
     else:
-        _finish(run_id, "ok", f"read {count} tenders", usage)
+        reason = f"read {count} tenders"
+        _finish(run_id, "ok", f"{reason}. {note}" if note else reason, usage)
         _set_state(portal_id, "serving", note)
 
 

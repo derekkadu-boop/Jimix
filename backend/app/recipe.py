@@ -237,6 +237,8 @@ async def apply(
                     raise
                 raw["_docs"] = []
                 raw["_documentBlock"] = str(exc)
+            except (httpx.HTTPError, ValueError, OSError):
+                raw["_documentPageError"] = True
     if attempted and len(blocked) == attempted:
         raise Blocked(f"detail pages: {blocked[0]}")
     tenders = {}
@@ -254,10 +256,7 @@ def _link_values(node, selector: Selector, kind: Kind) -> list[str]:
 
 async def _follow_document_page(selector: Selector, page, base: str, kind: Kind, fetcher: Fetcher):
     if links := _link_values(page, selector, kind):
-        try:
-            return await _load("html", urljoin(base, links[0]), fetcher)
-        except (httpx.HTTPError, ValueError, OSError):
-            pass
+        return await _load("html", urljoin(base, links[0]), fetcher)
     return None
 
 
@@ -337,6 +336,8 @@ def normalize(raw: dict, recipe: Recipe) -> dict | None:
     }
     if recipe.documents_by_host and "_docs" in raw:
         tender["_documentChecked"] = True
+    if raw.get("_documentPageError"):
+        tender["_documentPageError"] = True
     if "_documentBlock" in raw:
         tender["_documentBlock"] = raw["_documentBlock"]
     for name in ("referenceNumber", "description"):
