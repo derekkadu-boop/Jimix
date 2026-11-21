@@ -843,3 +843,22 @@ def test_capped_detail_sample_uses_first_valid_tender_occurrences():
     assert tenders[0]["title"] == "First occurrence"
     assert tenders[0]["_documentDetailPending"]
     assert tenders[2]["_documentUrls"] == ["https://portal.example/files/2.zip"]
+
+
+def test_files_also_in_an_archive_are_listed_once():
+    def site(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/single/notice.pdf":
+            return httpx.Response(200, content=b"%PDF-1.4 notice", headers={"content-type": "application/pdf"})
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(site))
+        try:
+            urls = ["https://portal.example/single/notice.pdf", "https://portal.example/files/all.zip"]
+            return await fetch_documents(urls, fetcher)
+        finally:
+            await fetcher.close()
+
+    docs, complete, _ = asyncio.run(run())
+    assert complete
+    assert [d["fileName"] for d in docs] == ["notice.pdf", "terms.txt"]
