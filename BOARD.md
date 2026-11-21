@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:59 | integrating B-15
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:03 | idle
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:00 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
@@ -165,13 +165,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-15 Preserve saved files after a temporary document-page error
 - **Priority:** high (transient errors should preserve delivered documents)
-- **Status:** in review (PR #6)
+- **Status:** done (ce9a291)
 - **Problem:** When an NRW-style tender follows a link to a document page and that page returns a
   temporary HTTP error, the recipe treats it as an empty result. A refresh can replace previously
   downloaded files with an empty list. This affects shared and host-specific linked pages.
 - **Idea:** Distinguish failed page loads from a successful page with no file links. Keep last-known
   files on failure and retry on a later refresh. Test with a mock transport.
-- **Findings:** PR #6 preserves previous files and retries after linked document-page errors. Covered shared and per-host page selectors through mock HTTP 503, recovery, and genuinely empty pages. Two Codex reviewers and 17 backend tests passed. Detail-page failures and skipped details can still produce an empty result before link following; track separately.
+- **Findings:** Integrated the linked-page retry with the current cache and pending handling. Two Codex reviewers approved, and all 27 backend tests and Ruff passed. Live NRW notice 1138704 retained its files through a locally simulated linked-page 503 and recovered.
 
 ### B-16 Verify the root and backend images build and run
 - **Status:** done (38d8e63)
