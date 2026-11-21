@@ -407,9 +407,9 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
         return {"problem": f"unsupported JSON path {path!r}: use dot paths with [*] and [N],"
                            " e.g. $.items[*].links.href", "warnings": [], "tenderCount": 0, "sample": []}
     max_pages = 3
-    pagination_warnings = []
+    listing_warnings = []
     tenders, complete = await apply(
-        recipe, fetcher, max_pages=max_pages, max_details=3, warnings=pagination_warnings
+        recipe, fetcher, max_pages=max_pages, max_details=3, warnings=listing_warnings
     )
     sample = tenders
     if recipe.detail and (recipe.documents or recipe.documents_by_host):
@@ -427,7 +427,7 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     if tenders and not complete:
         warnings.append(f"Listing coverage is incomplete in the sample (test budget: {max_pages} pages, "
                         f"recipe max_pages: {recipe.max_pages}). Check pagination and set max_pages high enough.")
-    warnings.extend(pagination_warnings)
+    warnings.extend(listing_warnings)
     warnings.extend(document_warnings)
     if recipe.documents_url and not recipe.documents and not problem:
         warnings.append("documents_url gives one file per tender: if it is only the notice, render one tender's"

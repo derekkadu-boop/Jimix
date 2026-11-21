@@ -1277,3 +1277,43 @@ def test_recipe_validation_warns_about_unhandled_pagination(monkeypatch, link, h
     report = asyncio.run(run())
     assert any("likely next-page" in warning for warning in report["warnings"]) == hinted
     assert requests == ["https://portal.example/list"]
+
+
+@pytest.mark.parametrize(
+    ("statuses", "hinted"),
+    [
+        (["Published", "PUBLISHED", "Published"], True),
+        (["Active", "Closed", "Active"], False),
+        (["Published", "Published", ""], False),
+        (["Published", "Published"], False),
+    ],
+)
+def test_recipe_validation_warns_about_uniform_mapped_status(monkeypatch, statuses, hinted):
+    async def covered_documents(*_args):
+        return None, []
+
+    monkeypatch.setattr(agent, "_check_documents", covered_documents)
+    rows = "".join(f'<tr class="t"><td><a href="/t/{i}">Notice {i}</a></td>'
+                   f'<td class="status">{status}</td></tr>' for i, status in enumerate(statuses))
+    listing = RECIPE["listing"] | {
+        "fields": RECIPE["listing"]["fields"] | {"status": {"path": ".status"}},
+        "next_page": None,
+    }
+    recipe = Recipe.model_validate(RECIPE | {"listing": listing, "detail": None, "documents": None})
+
+    def response(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        assert request.url.path == "/list"
+        return httpx.Response(200, html=f"<table>{rows}</table>")
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    report = asyncio.run(run())
+    assert any("one status value" in warning for warning in report["warnings"]) == hinted
+    assert all("_rawStatus" not in tender for tender in report["sample"])

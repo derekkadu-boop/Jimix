@@ -418,11 +418,18 @@ async def apply(
     if attempted and len(blocked) == attempted:
         raise Blocked(f"detail pages: {blocked[0]}")
     tenders = {}
+    sampled_statuses = set()
     for raw in raws:
         if recipe.documents_url and not recipe.documents and (url := _fill(recipe.documents_url.template, raw)):
             raw["_docs"] = [url]
         if (tender := normalize(raw, recipe)) and tender["id"] not in tenders:
             tenders[tender["id"]] = tender
+            if warnings is not None:
+                sampled_statuses.add((raw.get("status") or "").casefold())
+    if (warnings is not None and len(tenders) >= 3 and len(sampled_statuses) == 1
+            and "" not in sampled_statuses):
+        warnings.append("All sampled tenders map to one status value. Check whether the field describes "
+                        "publication rather than procurement, and consider the notice type or stage.")
     return list(tenders.values()), complete
 
 
