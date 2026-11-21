@@ -352,22 +352,33 @@ async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetc
     except (Blocked, httpx.HTTPError, ValueError, OSError):
         return None
     known = set(tender["_documentUrls"]) | {tender["url"], str(resp.url)}
+    file_hint = None
     for link in BeautifulSoup(resp.text, "html.parser").find_all("a", href=True):
-        text = " ".join(link.get_text(" ").split()).casefold()
-        href = urljoin(str(resp.url), link["href"]).split("#")[0]
-        if (
-            0 < len(text) <= 60
-            and DOCUMENT_PAGE.search(text)
-            and href.startswith("http")
-            and href not in known
-            and not FILE_SUFFIX.search(urlsplit(href).path)
-        ):
-            return (
-                f"tender page {tender['url']} links to {text!r} ({href}) but documents_page is not set. If that"
-                " page lists the tender's files (often more than the notice), set documents_page to that link"
-                " and documents to the file links there"
-            )
-    return None
+        if (link.has_attr("hidden") or link.find_parent(["template", "noscript"])
+                or link.find_parent(attrs={"hidden": True})):
+            continue
+        try:
+            href = urljoin(str(resp.url), link["href"]).split("#", 1)[0]
+            parts = urlsplit(href)
+        except ValueError:
+            continue
+        if (parts.scheme not in ("http", "https") or not parts.hostname
+                or parts.username is not None or href in known):
+            continue
+        labels = (link.get_text(" "), link.get("aria-label", ""), link.get("title", ""))
+        if FILE_SUFFIX.search(parts.path) or link.has_attr("download"):
+            if not file_hint:
+                file_hint = f"tender page has a file-link candidate ({href}); test it with the documents selector"
+            continue
+        for label in labels:
+            text = " ".join(label.split()).casefold()
+            if 0 < len(text) <= 60 and DOCUMENT_PAGE.search(text):
+                return (
+                    f"tender page {tender['url']} links to {text!r} ({href}) but documents_page is not set. If that"
+                    " page lists the tender's files (often more than the notice), set documents_page to that link"
+                    " and documents to the file links there"
+                )
+    return file_hint if not tender["_documentUrls"] else None
 
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:

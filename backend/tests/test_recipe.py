@@ -1048,3 +1048,42 @@ def test_refresh_does_not_repair_after_a_temporary_failure(monkeypatch, tmp_path
         assert "temporary error" in portal_row["reason"]
     assert [tuple(r) for r in runs] == [("read", "failed")]
     assert repairs == 0
+
+
+@pytest.mark.parametrize(
+    ("html", "expected"),
+    [
+        ('<a href="/documents" aria-label="Tender documents"><i></i></a>', "https://portal.example/documents"),
+        ('<a href="/documents" title="Documents"><i></i></a>', "https://portal.example/documents"),
+        ('<a href="/specification.pdf">File</a>', "https://portal.example/specification.pdf"),
+        ('<a href="/attachment?id=1" download>File</a>', "https://portal.example/attachment?id=1"),
+        ('<a href="javascript:void(0)" aria-label="Documents">Files</a>', None),
+        ('<template><a href="/documents">Documents</a></template>', None),
+        ('<div hidden><a href="/documents">Documents</a></div>', None),
+    ],
+)
+def test_document_hints_find_ordinary_accessible_links(html, expected):
+    requests = []
+
+    def response(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        requests.append(request.url.path)
+        return httpx.Response(200, html=html)
+
+    recipe = Recipe.model_validate(RECIPE)
+    tender = {"url": "https://portal.example/t/1", "_documentUrls": []}
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._document_page_hint(recipe, [tender], fetcher)
+        finally:
+            await fetcher.close()
+
+    hint = asyncio.run(run())
+    if expected:
+        assert expected in hint
+    else:
+        assert hint is None
+    assert requests == ["/t/1"]
