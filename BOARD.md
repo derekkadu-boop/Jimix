@@ -3,6 +3,7 @@
 The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items small.
 
 ### B-01 Document URLs built from tender fields
+- **Priority:** high (documents are the core feature)
 - **Status:** open
 - **Problem:** TenderNed (https://www.tenderned.nl/) attaches through its own JSON API
   (`/papi/tenderned-rs-tns/v2/publicaties?page=0&size=50`, 150 tenders in a test), but documents are
@@ -13,6 +14,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:**
 
 ### B-02 Documents on a different external platform per tender
+- **Priority:** high (documents are the core feature)
 - **Status:** open
 - **Problem:** evergabe.nrw.de (https://www.evergabe.nrw.de/VMPCenter/, cosinex software) lists tenders
   fine (id via pattern `pid=(\d+)`, unfiltered "welcome" list), but each tender's files live on an
@@ -67,6 +69,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:**
 
 ### B-09 Verify refresh and repair end to end
+- **Priority:** high (documents are the core feature)
 - **Status:** open
 - **Problem:** `/refresh` and repair work in unit-level runs but haven't been exercised on a real portal
   that reached `serving`.

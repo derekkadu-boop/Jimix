@@ -16,6 +16,10 @@ Code lives on `main`. How to test is in `docs/testing.md` on `main`.
 every open tender with correct fields and its documents, notice when a portal breaks, and repair it,
 within the rules of `docs/Patterno-Track-Description.pdf`.
 
+**Focus right now: documents.** Delivering each tender's actual document files is the core feature and
+our weakest point (see the `Priority: high` items). Work on document delivery first; side features (the
+dashboard, cost reporting, log streaming) only when no document item is open.
+
 **How we get there:** everyone runs real portals, files each problem they find as a small item on the
 board, and fixes items one at a time, with tests.
 
@@ -33,7 +37,11 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    git fetch origin coord
    git worktree add ../jimix-coord coord
    ```
-3. Append a line to `CHANNEL.md` saying who you are and where you run, commit, and push.
+3. Real-portal tests need an OpenAI API key (`OPENAI_API_KEY`, in the environment or in `.env` at the
+   repository root). Check whether one is set without printing it, e.g.
+   `[ -n "$OPENAI_API_KEY" ] || grep -q '^OPENAI_API_KEY=.' .env && echo set`. If none is set, ask your
+   operator for one. Never print, log or commit the key.
+4. Append a line to `CHANNEL.md` saying who you are and where you run, commit, and push.
 
 ## Work loop
 
