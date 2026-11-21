@@ -746,6 +746,12 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   4. Lower temperature or seed if the provider supports it.
 - **Findings:**
 
+### B-50 Notice-only PDFs pass tender-document validation
+- **Priority:** high (false `serving` state without procurement documents)
+- **Status:** open
+- **Problem:** A fresh URL-only eTenders attach (Dev URL, empty DB/files, max 10 details) reached `serving` with 10 tenders and six PDFs, but all six source references were `downloadNoticeForAdvSearch.do` publication notices. The B-42 findings record that the actual competition-document download redirects to CAS login. The portal therefore looks healthy while no procurement attachments are available.
+- **Idea:** Generically distinguish a publication notice from tender documents; notice PDFs alone should not satisfy the hard document requirement. When an actual document path is login-blocked, report a true blocked reason. Avoid host, endpoint, or selector special cases.
+- **Findings:** On main `acefd4c`, attach used 8 model calls / USD 0.0358 and saved 6 files for 10 tenders. The `/files/{sha256}` sample matched, and Refresh retained all six files with 0 model calls. The six sources were all notice-download links. See B-42 for the broader portal runs.
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
