@@ -21,7 +21,18 @@ REQUEST_TIMEOUT_MS = 60_000
 QUIET_SECONDS = 3
 EMPTY_SHELL_GRACE_SECONDS = 15
 FILE_TREE_TIMEOUT_MS = 25_000
-CLICKABLE = "[role=tab], [role=button], button, summary, a:not([href]), a[href^='#'], a[href^='javascript:']"
+CLICKABLE = (
+    "[role=tab]",
+    "summary, a:not([href]), a[href^='#'], a[href^='javascript:'], [role=button]",
+    "button",
+)
+SUBMITS = """el => !!el.closest('form') && (
+    (el.tagName === 'BUTTON' && (!el.getAttribute('type') || el.type === 'submit'))
+    || (el.tagName === 'INPUT' && ['submit', 'image'].includes(el.type)))"""
+NOT_CLICKED = re.compile(
+    r"download|upload|herunterladen|hochladen|t[ée]l[ée]charger|descargar|scarica|downloaden|pobierz|ladda|lataa",
+    re.IGNORECASE,
+)
 MAX_CLICK_CANDIDATES = 80
 NETSERVER_DIALOG = "#detailModal"
 NETSERVER_FILE_CONTROL = 'a.zipFileContents[data-oid][data-token]:not([data-oid=""]):not([data-token=""])'
@@ -141,16 +152,22 @@ def _keys(value):
 
 
 async def _click_matching(page: Page, pattern: re.Pattern) -> str | None:
-    controls = page.locator(CLICKABLE)
-    for index in range(min(await controls.count(), MAX_CLICK_CANDIDATES)):
-        control = controls.nth(index)
-        try:
-            text = " ".join((await control.inner_text(timeout=1_000)).split())
-            if 0 < len(text) <= 60 and pattern.search(text.casefold()) and await control.is_visible():
+    seen = 0
+    for selector in CLICKABLE:
+        controls = page.locator(selector)
+        for index in range(min(await controls.count(), MAX_CLICK_CANDIDATES - seen)):
+            seen += 1
+            control = controls.nth(index)
+            try:
+                text = " ".join((await control.inner_text(timeout=1_000)).split())
+                if not (0 < len(text) <= 60 and pattern.search(text.casefold())) or NOT_CLICKED.search(text):
+                    continue
+                if await control.evaluate(SUBMITS) or not await control.is_visible():
+                    continue
                 await control.click(timeout=5_000)
                 return text
-        except PlaywrightError:
-            continue
+            except PlaywrightError:
+                continue
     return None
 
 
@@ -188,6 +205,15 @@ async def render(
         if request.resource_type in SKIPPED:
             await route.abort()
             return
+        if clicked and request.is_navigation_request():
+            if request.method not in ("GET", "HEAD"):
+                log.info("browser blocked a %s navigation after clicking %r", request.method, clicked)
+                await route.abort()
+                return
+            if not await fetcher.allowed(request.url):
+                blocked_navigation.append(request.url)
+                await route.abort()
+                return
         parts = urlsplit(request.url)
         same_origin = (parts.scheme, parts.netloc) == (origin.scheme, origin.netloc)
         if netserver_files:
@@ -264,6 +290,7 @@ async def render(
 
     clicked = None
     call_limit = 10
+    blocked_navigation: list[str] = []
 
     async def read_json(response: Response, after: str | None):
         try:
@@ -285,7 +312,7 @@ async def render(
             activity.readers.add(reader)
             reader.add_done_callback(activity.readers.discard)
 
-    options = {"service_workers": "block", "accept_downloads": False} if netserver_files else {}
+    options = {"service_workers": "block", "accept_downloads": False} if netserver_files else {"accept_downloads": False}
     page = await fetcher.browser.new_page(user_agent=USER_AGENT, **options)
     settle_error = None
     try:
@@ -314,16 +341,18 @@ async def render(
                 settle_error = exc
             if click is not None and settle_error is None:
                 await asyncio.gather(*activity.readers, return_exceptions=True)
-                call_limit = len(calls) + 10
                 clicked = await _click_matching(page, click)
                 if clicked:
                     log.info("render %s clicked %r", origin.hostname, clicked)
                     calls.append({"clicked": clicked})
+                    call_limit = len(calls) + 10
                     try:
                         async with asyncio.timeout_at(deadline):
                             await activity.wait_until_stable(page)
-                    except TimeoutError as exc:
-                        settle_error = exc
+                    except TimeoutError:
+                        log.info("render %s: page still busy after clicking %r", origin.hostname, clicked)
+                    if blocked_navigation:
+                        raise Blocked(f"robots.txt disallows {blocked_navigation[0]}")
             html = await asyncio.wait_for(page.content(), timeout=max(1, deadline - activity.clock()))
         final = page.url
         status = response.status if response else 200
