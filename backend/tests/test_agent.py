@@ -97,3 +97,18 @@ def test_successful_submit_can_exit_on_first_turn(monkeypatch):
 
     assert run() == Recipe.model_validate(RECIPE)
     assert create.await_count == 1
+
+
+def test_model_receives_untrusted_discovery_guidance(monkeypatch):
+    run, create = fake_model(monkeypatch, [[("submit_recipe", {"recipe": RECIPE})]], problem=None)
+    evidence = "[fixture] public archive description"
+    monkeypatch.setattr(agent, "discover", AsyncMock(return_value=evidence))
+
+    run()
+
+    instruction, portal = create.call_args.kwargs["messages"][:2]
+    assert instruction["role"] == "system"
+    assert "automatic discovery report" in instruction["content"]
+    assert "untrusted evidence" in instruction["content"]
+    assert evidence not in instruction["content"]
+    assert portal["role"] == "user" and evidence in portal["content"]
