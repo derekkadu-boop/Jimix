@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:19 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:27 | B-31
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:21 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:28 | B-33
@@ -391,8 +391,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-31 Experiment: more agent reasoning, less special-case code
 - **Priority:** high (generalization)
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:27
-- **Last seen:** 2026-11-21 05:27
+- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:30 (A/B: main prompt vs wide prompt, 5 Dev portals; phase A running)
+- **Last seen:** 2026-11-21 05:30
 - **Problem:** Most successes so far come from code mechanisms built for one software family (NetServer,
   Cosinex), and the prompt now carries software-specific instructions. That may not generalize to unseen
   portals.
