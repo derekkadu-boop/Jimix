@@ -38,9 +38,10 @@ NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
 MAX_INDEX_LISTS = 50
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
+PAGINATION_PATH = r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+"
 PAGINATION_HANDLER = re.compile(
     r"""\s*(?:return\s+)?setTargetAndSubmit\(\s*(?P<quote>['"])"""
-    r"(?P<path>/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+)"
+    rf"(?P<path>{PAGINATION_PATH})"
     r"(?P=quote)\s*(?=[,)])"
 )
 PAGINATION_KEY = re.compile(
@@ -205,16 +206,44 @@ def pagination_handler(tag) -> re.Match[str] | None:
     if placeholder not in PAGINATION_PLACEHOLDERS:
         return None
     match = PAGINATION_HANDLER.match(tag.get("onclick", ""))
-    if match and len(match["path"]) <= 300:
-        params = parse_qsl(urlsplit(match["path"]).query, keep_blank_values=True)
-        if not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
-            PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
-        ):
-            return match
+    if match and _public_pagination_path(match["path"]):
+        return match
     return None
 
 
+def _public_pagination_path(path: str) -> bool:
+    if len(path) > 300 or not re.fullmatch(PAGINATION_PATH, path):
+        return False
+    target = urlsplit(path)
+    if any(part in (".", "..") for part in target.path.split("/")):
+        return False
+    params = parse_qsl(target.query, keep_blank_values=True)
+    return not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
+        PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
+    )
+
+
 def _next_link(page, selector: Selector, kind: Kind) -> tuple[str | None, bool]:
+    if kind != "json" and selector.attribute == "onclick":
+        unresolved = False
+        for tag in [page] if selector.path == "$" else page.select(selector.path):
+            handler = " ".join(tag.get("onclick", "").split())
+            unresolved |= bool(handler)
+            match = pagination_handler(tag)
+            if not match and re.match(r"(?:return\s+)?setTargetAndSubmit\b", handler):
+                continue
+            if selector.pattern:
+                capture = re.search(selector.pattern, handler)
+                if not capture:
+                    continue
+                path = capture.group(1) if capture.re.groups else capture.group(0)
+                if path and _public_pagination_path(path) and (
+                    path == match["path"] if match else f"'{path}'" in handler or f'"{path}"' in handler
+                ):
+                    return path, False
+            elif match:
+                return match["path"], False
+        return None, unresolved
     if kind == "json" or selector.attribute != "href" or selector.pattern:
         return next(iter(_values(page, selector, kind)), None), False
     unresolved = False

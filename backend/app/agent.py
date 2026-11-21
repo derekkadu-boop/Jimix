@@ -74,7 +74,7 @@ split by category, set listing.url to the page linking to all of them and index 
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
 If a next-page control has a placeholder href and a root-relative pagination path in onclick, test
 that path with GET. If it returns the next list page, map next_page to that control with attribute
-onclick and a pattern capturing only the literal URL. Never execute the handler.
+href. The runner extracts the verified literal path and never executes the handler.
 If you find no list of open tenders, keep searching before giving up:
 - a search or "all notices" page (Suche, Bekanntmachungen, recherche, búsqueda, zoeken, wyszukiwarka...),
   tried with an empty query: a GET search URL works as a listing URL;

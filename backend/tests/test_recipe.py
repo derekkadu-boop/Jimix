@@ -842,8 +842,10 @@ def test_refresh_preserves_files_after_document_page_error(monkeypatch, tmp_path
     assert empty["_documentsComplete"] is True
 
 
-@pytest.mark.parametrize("attribute", ["onclick", "href"])
-def test_category_pagination_uses_the_public_get_path(attribute):
+@pytest.mark.parametrize(("attribute", "pattern"), [
+    ("onclick", None), ("onclick", "'(/notices/categories[?]table=list&pageIndex=[0-9]+)'"), ("href", None),
+])
+def test_category_pagination_uses_the_public_get_path(attribute, pattern):
     category = "/notices/categories"
     next_page = category + "?table=list&pageIndex=2"
     control = (
@@ -867,10 +869,8 @@ def test_category_pagination_uses_the_public_get_path(attribute):
     assert double_quoted["onclick"] == f'setTargetAndSubmit("{next_page}")'
     first_chunk = agent._page_content("<p>" + "x" * agent.PAGE_CHARS + "</p>" + control)
     assert first_chunk.splitlines()[0].endswith(next_page)
-    selector = {"path": "a.browseForward", "attribute": attribute}
-    if attribute == "onclick":
-        selector["pattern"] = "'(/notices/categories[?]table=list&pageIndex=[0-9]+)'"
-    else:
+    selector = {"path": "a.browseForward", "attribute": attribute, "pattern": pattern}
+    if attribute == "href":
         extra = '<a class="browseForward" href="javascript:void(0);" onclick="unsupported()">Other</a>'
         listing = LIST_1.replace(original_next, extra + control)
     recipe = Recipe.model_validate(RECIPE | {
@@ -921,6 +921,17 @@ def test_category_pagination_uses_the_public_get_path(attribute):
     assert len([url for url in requested if url.path != "/robots.txt"]) == 3
 
 
+@pytest.mark.parametrize(("handler", "expected"), [
+    ("window.location.href='/list?page=3'", ("/list?page=3", False)),
+    ("setTargetAndSubmit('/list?page=2'); marker('/list?page=3')", (None, True)),
+    ("return setTargetAndSubmit('/list?page=3' + suffix)", (None, True)),
+])
+def test_patterned_pagination_keeps_its_literal_or_leaves_scan_incomplete(handler, expected):
+    page = BeautifulSoup(f'<a class="browseForward" href="#" onclick="{handler}">Next</a>', "html.parser")
+    selector = recipes.Selector(path="a", attribute="onclick", pattern=r"(/list\?page=3)")
+    assert recipes._next_link(page, selector, "html") == expected
+
+
 @pytest.mark.parametrize("handler", [
     "setTargetAndSubmit('//outside.example/list?page=2')",
     "setTargetAndSubmit('/list?pageIndex=2&X-Amz-Signature=private')",
@@ -929,9 +940,10 @@ def test_category_pagination_uses_the_public_get_path(attribute):
     "unrelatedsetTargetAndSubmit('/list?pageIndex=2')",
 ])
 @pytest.mark.parametrize("href", ["#", "javascript:void(0);"])
-def test_href_pagination_skips_unsafe_handlers_and_unselected_controls(handler, href):
+@pytest.mark.parametrize("attribute", ["href", "onclick"])
+def test_pagination_skips_unsafe_handlers_and_unselected_controls(handler, href, attribute):
     recipe = Recipe.model_validate(RECIPE | {
-        "listing": RECIPE["listing"] | {"next_page": {"path": "a.selected"}},
+        "listing": RECIPE["listing"] | {"next_page": {"path": "a.selected", "attribute": attribute}},
         "detail": None,
         "documents": None,
     })
