@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:08 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:14 | B-04
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:13 | B-20
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:16 | idle
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 in review (PR #7)
 
 ### B-01 Document URLs built from tender fields
@@ -135,6 +135,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - https://dtvp.de/ausschreibungen/ (DE)
   - https://udbud.dk/ (DK)
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
+  - 2026-11-21 | NRW | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0737 | Fresh attach from the public landing page produced no category-spanning recipe. Refresh was unavailable.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -215,8 +216,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
-- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:51
-- **Last seen:** 2026-11-21 04:13
+- **Status:** open
+- **Last seen:** 2026-11-21 04:16
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -232,6 +233,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   On NRW it appears at character 21,854, beyond the first 12,000 characters the agent sees.
   Testing early exposure plus upcoming-deadline sample selection. A fresh Brandenburg attach
   was blocked by robots.txt. Fresh NRW and previously untested Rheinland-Pfalz runs are underway.
+  Generic pagination hints and upcoming-deadline sampling shipped in 7bccb54d and bd70ed7f
+  (main 533643e5). Two reviewers, 47 integrated backend tests and Ruff passed. Fresh URL-only
+  checks with the current validator still failed on NRW and unseen Rheinland-Pfalz. Both agents
+  stopped while trying to cover the category groups, before a document recipe passed. The
+  Rheinland-Pfalz trace also showed repeated recipe validation errors. Both runs started before
+  the Dev-list-only update. A reusable category index hint could expose repeated same-site links
+  in the page tool alongside the existing pagination hint.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
