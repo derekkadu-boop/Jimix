@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | available
+- Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
 - Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:55 | B-21 reviewed; implementation push awaits operator authorization, available for independent reviews
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
@@ -963,7 +963,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-73 Keep exploring public paths to tenders and documents before giving up
 - **Priority:** high (discovery reliability, complements B-49)
-- **Status:** open
+- **Status:** claimed by Derek-Codex-Main (Danylos/Windows) 2026-11-21 07:59
+- **Last seen:** 2026-11-21 07:59
 - **Problem:** The model can stop after an unsuccessful recipe or a narrow discovery path while viable public listing and document routes remain untried.
 - **Idea:** Encourage distinct public discovery paths and use feedback from failed candidates to guide the next probe. Separate discovery coverage from final tender/detail/file preview limits. Keep existing cost, request pacing, robots, and download safeguards. Test early give-up and a later successful candidate deterministically.
 - **Findings:**
