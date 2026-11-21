@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:09 | B-74 independent review; B-21 held for implementation-push authorization
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:09 | B-71, B-74 independent review
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -940,7 +940,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-71 Investigate tender ID validation for POST search results
 - **Priority:** medium
-- **Status:** open
+- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 08:09
+- **Last seen:** 2026-11-21 08:09
 - **Problem:** An operator reported that attach discovered the public POST search endpoint `/bkmc/searches`. The agent could not validate the candidate recipe, and `submit_recipe` reported the same issue with the source of the tender ID. The run ended without an accepted recipe.
 - **Idea:** Compare the ID field in a captured search result with the candidate mapping in `listing.fields.id`. Trace that mapping through `test_recipe` and `submit_recipe`. A mapping to a stable portal ID should pass both steps. If the mapping is invalid, the error should identify which field or path needs correction.
 - **Findings:** Operator report only. The portal URL, candidate mapping and exact validator error have not been confirmed. Related to B-70 (captured POST replay). This report specifically identifies ID validation at submission.
