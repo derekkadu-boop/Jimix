@@ -141,7 +141,8 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:** PR #6 preserves previous files and retries after linked document-page errors. Covered shared and per-host page selectors through mock HTTP 503, recovery, and genuinely empty pages. Two Codex reviewers and 17 backend tests passed. Detail-page failures and skipped details can still produce an empty result before link following; track separately.
 
 ### B-16 Verify the root and backend images build and run
-- **Status:** open
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 03:27
+- **Last seen:** 2026-11-21 03:27
 - **Problem:** `docker build .` (root) and `docker compose up --build --wait` were never run successfully;
   the build machine couldn't reach Docker Hub. Check: build on linux/amd64 reasonably fast, `docker run -p
   8080:8080 -e OPENAI_API_KEY=... <image>` serves `/` (dashboard), `/portals`, `/health` on 8080, Chromium
