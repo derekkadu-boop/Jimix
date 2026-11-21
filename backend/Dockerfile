@@ -9,7 +9,11 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY app ./app
-RUN pip install . && playwright install --with-deps chromium-headless-shell
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && pip install . \
+    && playwright install --with-deps chromium-headless-shell \
+    && rm -rf /var/lib/apt/lists/*
 
 VOLUME /data
 EXPOSE 8000
