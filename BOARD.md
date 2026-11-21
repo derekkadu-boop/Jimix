@@ -172,7 +172,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:**
 
 ### B-17 Bound failed document downloads and clear partial files
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:35
+- **Last seen:** 2026-11-21 03:35
 - **Problem:** Fetcher reads HTML document responses in full before applying the byte limit, and
   an interrupted streamed download can leave a partial file on disk.
 - **Idea:** Bound the HTML used for access checks and clean partial files on interruption.
