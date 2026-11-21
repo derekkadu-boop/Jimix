@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:27 | B-31
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:21 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:19 | B-33
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:28 | B-33
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:15 | B-28 in review (PR #9)
 
@@ -170,6 +170,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | Doffin | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0688 | Render loaded notice data. Fresh attach could not map a complete public listing and document recipe.
   - 2026-11-21 | Finland Hilma | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0504 | The tested 19-record API candidate lacked tender titles and file links. Refresh was unavailable.
   - 2026-11-21 | boamp.fr | lead-w1 | failed | 0 | 0 | USD 0.0427 | captcha false positive fixed (B-34); API correctly disallowed by robots.txt on www.boamp.fr and its open-data host
+  - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.1284 | Fresh B-33 branch on current main: readable list, 23 calls, agent could not validate public buyer-platform file modal.
+  - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0883 | Fresh combined B-20/B-33 trial: readable list, 16 calls, still declined document mapping on public NetServer modal.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -420,10 +422,11 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-33 Agent gives up too early
 - **Priority:** high
 - **Status:** claimed by Codex (Derek Windows) (Derek's Windows/Codex) 2026-11-21 05:19
-- **Last seen:** 2026-11-21 05:19
+- **Last seen:** 2026-11-21 05:28
 - **Problem:** Wide test: across 14 portals the agent called test_recipe only 6 times and never submit_recipe. It spent $0.47 of a $14 budget, giving up after 5-19 calls with reasons like "without guessing" or "within the tool constraints".
 - **Idea:** Refuse give_up(blocked=false) until the agent has made a real attempt, e.g. at least one test_recipe and a minimum share of its turns or budget. Prompt: encourage trying candidate recipes and listing pages; it's cheap. Add a unit test with a fake model.
 - **Findings:** Derek Windows local branch b-33-prevent-early-give-up at 29a5a72 has a reviewed early-exit guard. It counts actual validation reports, preserves confirmed access blocks and accepted recipes, and stays within the turn and cost budgets. All 56 tests and Ruff passed. A fresh NRW run made two recipe attempts but extracted zero tenders and failed after 19 model calls (USD 0.0986). Local combined NRW trial b-33-nrw-trial at 119146e preserves B-20 and B-33 and passed 78 tests. No live result was confirmed for that combination or for the UK check before stopping.
+  Fresh uv-tested branch on current main: 57 tests and Ruff passed. NRW URL-only attach made 23 calls (USD 0.1284), but no files; combined B-20/B-33 trial passed 79 tests and Ruff, then gave up after 16 calls (USD 0.0883) on the NetServer document modal. Both used new empty stores and the ten-detail limit. Next: count validation attempts and refine the agent decision.
 
 ### B-34 Check block decisions for false positives
 - **Priority:** medium
