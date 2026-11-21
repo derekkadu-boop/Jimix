@@ -196,6 +196,16 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Bulk exports are tracked under B-03.
 - **Findings:** Split from B-04 after shipping the Düsseldorf document dialog.
 
+###  Attach NRW automatically across buyer platforms
+- **Priority:** high (public document delivery on a mixed-platform portal)
+- **Status:** open
+- **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
+  found the public HTML listing but stopped because it could not validate document handling
+  across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
+- **Idea:** Record structured recipe validation outcomes from a bounded attach and identify which
+  buyer routes or coverage checks keep the model from submitting a working recipe.
+- **Findings:** One live attach failed after 19 model calls at an estimated USD 0.099.
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
