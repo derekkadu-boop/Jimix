@@ -12,7 +12,7 @@ from dateutil import parser as dateparser
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field, model_validator
 
-from .browser import render
+from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .fetch import Blocked, Fetcher
 
 TENDER_FIELDS = (
@@ -38,6 +38,22 @@ NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
 MAX_INDEX_LISTS = 50
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
+PAGINATION_HANDLER = re.compile(
+    r"""\s*(?:return\s+)?setTargetAndSubmit\(\s*(?P<quote>['"])"""
+    r"(?P<path>/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+)"
+    r"(?P=quote)\s*(?=[,)])"
+)
+PAGINATION_KEY = re.compile(
+    r"page(?:index|number|num|no)?|offset|cursor|start|selectedTablePage\w+", re.IGNORECASE
+)
+SENSITIVE_KEY = re.compile(
+    r"token|session|secret|auth|key|password|csrf|signature|credential|^(sid|sig)$", re.IGNORECASE
+)
+PAGINATION_PLACEHOLDERS = {"", "#", "javascript:void(0)"}
+
+
+class _AutomaticModalBlocked(Blocked):
+    pass
 
 
 class Selector(BaseModel):
@@ -182,6 +198,38 @@ def _values(node, selector: Selector, kind: Kind) -> list[str]:
     return values
 
 
+def pagination_handler(tag) -> re.Match[str] | None:
+    if tag.name != "a" or "browseForward" not in tag.get("class", ()):
+        return None
+    placeholder = tag.get("href", "").strip().casefold().rstrip(";")
+    if placeholder not in PAGINATION_PLACEHOLDERS:
+        return None
+    match = PAGINATION_HANDLER.match(tag.get("onclick", ""))
+    if match and len(match["path"]) <= 300:
+        params = parse_qsl(urlsplit(match["path"]).query, keep_blank_values=True)
+        if not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
+            PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
+        ):
+            return match
+    return None
+
+
+def _next_link(page, selector: Selector, kind: Kind) -> tuple[str | None, bool]:
+    if kind == "json" or selector.attribute != "href" or selector.pattern:
+        return next(iter(_values(page, selector, kind)), None), False
+    unresolved = False
+    for tag in [page] if selector.path == "$" else page.select(selector.path):
+        if match := pagination_handler(tag):
+            return match["path"], False
+        href = tag.get("href")
+        href = " ".join(href.split()) if isinstance(href, str) else ""
+        normalized = href.casefold().rstrip(";")
+        if normalized not in PAGINATION_PLACEHOLDERS and not normalized.startswith("javascript:"):
+            return href, False
+        unresolved |= bool(tag.get("onclick")) or normalized not in PAGINATION_PLACEHOLDERS
+    return None, unresolved
+
+
 def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
     out = {}
     for name, selector in fields.items():
@@ -212,6 +260,7 @@ async def apply(
     recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None
 ) -> tuple[list[dict], bool]:
     listing, raws = recipe.listing, []
+    indexed_sample = listing.index is not None and max_pages is not None and max_details is not None
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
     starts = [listing.url]
     if listing.index:
@@ -220,10 +269,11 @@ async def apply(
         starts = list(dict.fromkeys(links))[:MAX_INDEX_LISTS]
         budget -= 1
     complete = bool(starts)
-    for start in starts:
+    for index, start in enumerate(starts):
         seen: set[str] = set()
         url, finished = start, False
-        for page_number in range(min(recipe.max_pages, budget)):
+        reserved = min(len(starts) - index - 1, max(0, budget - 1)) if max_pages is not None else 0
+        for page_number in range(min(recipe.max_pages, budget - reserved)):
             budget -= 1
             seen.add(url)
             page, base = await _load(listing.kind, url, fetcher)
@@ -235,6 +285,8 @@ async def apply(
                 break
             for row in rows:
                 raw = _extract(row, listing.fields, listing.kind) | {"_base": base}
+                if indexed_sample:
+                    raw["_categoryIndex"] = index
                 if raw.get("url"):
                     raw["url"] = urljoin(base, raw["url"])
                 if recipe.documents and not recipe.detail and not recipe.documents_url:
@@ -242,8 +294,12 @@ async def apply(
                 raws.append(raw)
             if listing.page_param:
                 url = _with_param(start, listing.page_param, page_number + 1)
-            elif listing.next_page and (links := _values(page, listing.next_page, listing.kind)):
-                url = urljoin(base, links[0])
+            elif listing.next_page:
+                link, unresolved = _next_link(page, listing.next_page, listing.kind)
+                if not link:
+                    finished = not unresolved
+                    break
+                url = urljoin(base, link)
             else:
                 finished = True
                 break
@@ -253,19 +309,32 @@ async def apply(
         complete = complete and finished
     attempted, blocked = 0, []
     details = raws
-    if recipe.detail and max_details is not None and "submissionDeadline" in listing.fields:
+    if recipe.detail and max_details is not None and (indexed_sample or "submissionDeadline" in listing.fields):
         now, tz = datetime.now(UTC), ZoneInfo(recipe.timezone)
         first_rows = {}
         for raw in raws:
             if tender_id := raw.get("id"):
                 first_rows.setdefault(tender_id, raw)
 
-        def has_upcoming_deadline(raw):
+        def detail_priority(raw):
             deadline = _datetime(raw.get("submissionDeadline"), recipe.dayfirst, tz)
-            return deadline is not None and deadline >= now
+            return deadline is None or deadline < now
 
         candidates = (raw for raw in first_rows.values() if raw.get("url") or recipe.detail.url)
-        details = sorted(candidates, key=has_upcoming_deadline, reverse=True)
+        if indexed_sample:
+            categories = {}
+            for raw in candidates:
+                categories.setdefault(raw["_categoryIndex"], []).append(raw)
+            for category in categories.values():
+                category.sort(key=detail_priority)
+            details = [
+                category[position]
+                for position in range(max(map(len, categories.values()), default=0))
+                for category in categories.values()
+                if position < len(category)
+            ]
+        else:
+            details = sorted(candidates, key=detail_priority)
     for raw in details[:max_details]:
         detail_url = recipe.detail and (_fill(recipe.detail.url, raw) if recipe.detail.url else raw.get("url"))
         if detail_url:
@@ -281,6 +350,8 @@ async def apply(
             if (recipe.documents or recipe.documents_by_host) and not recipe.documents_url:
                 try:
                     raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+                except _AutomaticModalBlocked:
+                    raw["_documentPageError"] = True
                 except Blocked as exc:
                     if not recipe.documents_by_host:
                         raise
@@ -329,11 +400,20 @@ async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> 
             return []
         page, base = result
         kind = "html"
-    if source and source.modal == "netserver_file_tree":
-        html, _, base = await render(base, fetcher, netserver_files=True)
-        page, kind = BeautifulSoup(html, "html.parser"), "html"
     selector = source.files if source else recipe.documents
-    return [urljoin(base, u) for u in _link_values(page, selector, kind)] if selector else []
+    explicit_modal = source is not None and source.modal == "netserver_file_tree"
+    links = _link_values(page, selector, kind) if selector and not explicit_modal else []
+    if explicit_modal or (not links and kind != "json" and page.select_one(NETSERVER_FILE_CONTROL)):
+        try:
+            html, _, base = await render(base, fetcher, netserver_files=True)
+        except Blocked as exc:
+            if explicit_modal:
+                raise
+            raise _AutomaticModalBlocked(str(exc)) from exc
+        if not explicit_modal:
+            selector = Selector(path=NETSERVER_FILE_LINK, attribute="href")
+        links = _link_values(BeautifulSoup(html, "html.parser"), selector, "html")
+    return [urljoin(base, link) for link in links]
 
 
 async def _listed_documents(recipe: Recipe, raw: dict, fetcher: Fetcher) -> None:

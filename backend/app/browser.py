@@ -20,6 +20,7 @@ QUIET_SECONDS = 3
 EMPTY_SHELL_GRACE_SECONDS = 15
 FILE_TREE_TIMEOUT_MS = 25_000
 NETSERVER_DIALOG = "#detailModal"
+NETSERVER_FILE_CONTROL = 'a.zipFileContents[data-oid][data-token]:not([data-oid=""]):not([data-token=""])'
 NETSERVER_FILE_LINK = "a.filenameEllipsis[href]"
 
 DOM_STATE = """() => {

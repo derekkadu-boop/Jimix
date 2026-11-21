@@ -3,18 +3,18 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, quote, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, urljoin, urlsplit, urlunsplit
 from weakref import WeakKeyDictionary
 
 import httpx
 from bs4 import BeautifulSoup, Comment
 from openai import AsyncOpenAI
 
-from .browser import render
+from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .discovery import discover, scan_scripts
 from .documents import fetch_documents
 from .fetch import Blocked, Fetcher
-from .recipe import KEYWORDS, TENDER_FIELDS, Recipe, apply, check
+from .recipe import KEYWORDS, SENSITIVE_KEY, TENDER_FIELDS, Recipe, apply, check, pagination_handler
 
 log = logging.getLogger("watchtower.agent")
 MODEL = os.environ.get("WATCHTOWER_MODEL", "gpt-5.4-mini")
@@ -45,17 +45,8 @@ KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetim
 DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
 FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
 
-PAGINATION_HANDLER = re.compile(
-    r"""setTargetAndSubmit\(\s*(?P<quote>['"])"""
-    r"(?P<path>/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+)"
-    r"(?P=quote)\s*(?=[,)])"
-)
-PAGINATION_KEY = re.compile(
-    r"page(?:index|number|num|no)?|offset|cursor|start|selectedTablePage\w+", re.IGNORECASE
-)
-SENSITIVE_KEY = re.compile(
-    r"token|session|secret|auth|key|password|csrf|^(sid|sig|signature)$", re.IGNORECASE
-)
+CATEGORY_KEY = re.compile(r"(?:categor(?:y|ie)|classification|cpv)(?:id|code)?", re.IGNORECASE)
+SESSION_PATH = re.compile(r";jsessionid=[^/;]*", re.IGNORECASE)
 
 
 INSTRUCTIONS = f"""You connect a public procurement portal so that its open tenders can be read without you.
@@ -132,9 +123,11 @@ With documents_url, documents is read from that URL; without documents, the URL 
 Placeholders are mapped field names ({{id}}, {{referenceNumber}}...), filled per tender.
 "attribute" may be a dot path inside each item, e.g. "links.download.href".
 Map status to a field naming the notice's state or type when there is one (award notices are closed).
-When listings link to different document platforms, use documents_by_host with exact lowercase hostnames.
-If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
-match its destination host. Each matching rule may follow one public page link before reading files.
+Set detail to {{}} when visiting details only to find files or links. Setting documents_page also
+requires documents or documents_by_host to select file links.
+One recipe can handle different document platforms using documents_by_host with exact lowercase hostnames.
+Match rules against the final detail-page host after redirects. If no rule matches, follow documents_page
+when set and match its final host. Each matching rule may follow one public page link before reading files.
 Hosts without a rule use documents.
 When documents_page leads to a buyer's notice, use the host rule's page for a documents tab on that notice.
 File download links can be extensionless, so use the page's actual file controls.
@@ -142,11 +135,12 @@ On a public NetServer documents page with an a.zipFileContents control, the nets
 opens the highest-numbered file list version. The files selector is scoped to the opened dialog, for
 example a.filenameEllipsis[href].
 CSS selectors are BeautifulSoup/soupsieve: use :-soup-contains("text"), not :contains.
+Select ids that start with digits with an attribute selector, for example [id="123"].
 Fields: {", ".join(TENDER_FIELDS)}.
 id is the portal's own stable identifier (often a number in the tender URL, e.g. pattern "pid=(\\d+)").
 It must come from the listing, never from the title. url, title and buyerName matter most.
 Keep the time of day in submissionDeadline (a deadline without a time is dropped).
-Map a field only when the portal shows it: a wrong value is worse than a missing one."""
+Omit a field from fields when the portal does not show it. Each field you include needs a selector object."""
 
 
 def _tool(name: str, description: str, properties: dict, required: list[str] | None = None) -> dict:
@@ -196,8 +190,68 @@ class Usage:
         return round((fresh * rate_in + self.cached_tokens * rate_cached + self.output_tokens * rate_out) / 1e6, 4)
 
 
-def simplify(html: str) -> tuple[str, str | None]:
+def _category_hint(soup: BeautifulSoup, base: str) -> str | None:
+    origin = urlsplit(base)
+    groups: dict[tuple, dict[str, set[str]]] = {}
+    for link in soup.select("a[href]"):
+        href = link["href"].strip()
+        if len(href) > 300 or "?" not in href:
+            continue
+        try:
+            target = urlsplit(urljoin(base, href))
+        except ValueError:
+            continue
+        if (target.scheme, target.netloc) != (origin.scheme, origin.netloc) or ";" in target.path:
+            continue
+        params = parse_qsl(target.query, keep_blank_values=True)
+        if any(SENSITIVE_KEY.search(key) for key, _ in params):
+            continue
+        categories = [(key, value) for key, value in params if value and CATEGORY_KEY.fullmatch(key)]
+        if len(categories) != 1:
+            continue
+        [(key, value)] = categories
+        fixed = tuple(sorted((k, v) for k, v in params if k != key))
+        groups.setdefault((target.path, key, fixed), {}).setdefault(value, set()).add(link["href"])
+    if not groups:
+        return None
+    (path, key, _), links = max(groups.items(), key=lambda item: len(item[1]))
+    if len(links) < 3:
+        return None
+    hint = (
+        f"Possible category index: {len(links)} links share path {path!r} and vary by {key!r}. "
+        "If these are tender lists, use listing.index to select the full group."
+    )
+    selector = f'a[href*="?{key}="], a[href*="&{key}="]'
+    if {tag["href"] for tag in soup.select(selector)} == set().union(*links.values()):
+        hint += f" Selector matching this group: {json.dumps({'path': selector, 'attribute': 'href'})}"
+    return hint
+
+
+def _document_navigation(soup: BeautifulSoup, base: str):
+    for link in soup.select("a[href]"):
+        label = " ".join(link.get_text(" ").split()).casefold()
+        if not 0 < len(label) <= 60 or not DOCUMENT_PAGE.search(label):
+            continue
+        href = link["href"].strip()
+        if not href or len(href) > 300 or href.startswith("#"):
+            continue
+        try:
+            target = urlsplit(urljoin(base, href))
+        except ValueError:
+            continue
+        if target.scheme not in ("http", "https") or not target.netloc or target.username is not None:
+            continue
+        if any(SENSITIVE_KEY.search(key) for key, _ in parse_qsl(target.query, keep_blank_values=True)):
+            continue
+        path = SESSION_PATH.sub("", target.path)
+        if not FILE_SUFFIX.search(path):
+            yield label, urlunsplit((target.scheme, target.netloc, path, target.query, ""))
+
+
+def simplify(html: str, base: str | None = None) -> tuple[str, str | None, list[str]]:
     soup = BeautifulSoup(html, "html.parser")
+    categories = _category_hint(soup, base) if base else None
+    netserver_files = soup.select_one(NETSERVER_FILE_CONTROL) is not None
     next_page = None
     for tag in soup(["head", "style", "svg", "img", "noscript", "iframe", "link", "meta"]):
         tag.decompose()
@@ -209,23 +263,27 @@ def simplify(html: str) -> tuple[str, str | None]:
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in soup.find_all(True):
-        placeholder = tag.get("href", "").strip().casefold().rstrip(";")
-        pagination = (
-            PAGINATION_HANDLER.search(tag.get("onclick", ""))
-            if tag.name == "a" and "browseForward" in tag.get("class", [])
-            and placeholder in ("", "#", "javascript:void(0)")
-            else None
-        )
+        pagination = pagination_handler(tag)
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
-        if pagination and len(path := pagination["path"]) <= 300:
-            params = parse_qsl(urlsplit(path).query, keep_blank_values=True)
-            if not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
-                PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
-            ):
-                quote = pagination["quote"]
-                tag["onclick"] = f"setTargetAndSubmit({quote}{path}{quote})"
-                next_page = next_page or path
-    return re.sub(r"\s+", " ", str(soup)), next_page
+        if pagination:
+            path, quote = pagination["path"], pagination["quote"]
+            tag["onclick"] = f"setTargetAndSubmit({quote}{path}{quote})"
+            next_page = next_page or path
+    hints = [categories] if categories else []
+    if netserver_files:
+        hints.append(
+            "Public NetServer file list detected. Use modal=netserver_file_tree and "
+            f"files.path={NETSERVER_FILE_LINK!r} in the matching documents_by_host rule."
+        )
+    if base:
+        seen = set()
+        for label, url in _document_navigation(soup, base):
+            if url not in seen:
+                hints.append(f"Possible document-page link: {label!r} -> {url!r}")
+                seen.add(url)
+                if len(seen) == 3:
+                    break
+    return re.sub(r"\s+", " ", str(soup)), next_page, hints
 
 
 def _chunk(text: str, offset: int) -> str:
@@ -235,13 +293,11 @@ def _chunk(text: str, offset: int) -> str:
     return text[offset:end] + more
 
 
-def _page_content(html: str, offset: int = 0) -> str:
-    simplified, next_page = simplify(html)
-    chunk = _chunk(simplified, offset)
+def _page_content(html: str, offset: int = 0, *, base: str | None = None) -> str:
+    simplified, next_page, hints = simplify(html, base)
     if next_page:
-        hint = f"Page navigation URL from a.browseForward's onclick: {next_page}"
-        return f"{hint}\n{chunk}"
-    return chunk
+        hints.insert(0, f"Page navigation URL from a.browseForward's onclick: {next_page}")
+    return "\n".join([*hints, _chunk(simplified, offset)])
 
 
 NO_DOCUMENT_LINKS = (
@@ -352,16 +408,8 @@ async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetc
     except (Blocked, httpx.HTTPError, ValueError, OSError):
         return None
     known = set(tender["_documentUrls"]) | {tender["url"], str(resp.url)}
-    for link in BeautifulSoup(resp.text, "html.parser").find_all("a", href=True):
-        text = " ".join(link.get_text(" ").split()).casefold()
-        href = urljoin(str(resp.url), link["href"]).split("#")[0]
-        if (
-            0 < len(text) <= 60
-            and DOCUMENT_PAGE.search(text)
-            and href.startswith("http")
-            and href not in known
-            and not FILE_SUFFIX.search(urlsplit(href).path)
-        ):
+    for text, href in _document_navigation(BeautifulSoup(resp.text, "html.parser"), str(resp.url)):
+        if href not in known:
             return (
                 f"tender page {tender['url']} links to {text!r} ({href}) but documents_page is not set. If that"
                 " page lists the tender's files (often more than the notice), set documents_page to that link"
@@ -393,6 +441,7 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
         "problem": problem,
         "warnings": warnings,
         "tenderCount": len(tenders),
+        "openTenderCount": sum(tender["status"] == "open" for tender in tenders),
         "withDocumentLinks": sum(bool(t["_documentUrls"]) for t in tenders),
         "sample": sample[:3],
     }
@@ -410,10 +459,11 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
             ):
                 return f"BINARY FILE ({kind or 'unknown type'}, {len(resp.content)} bytes): a downloadable document", None
         if name == "fetch_page":
-            return f"URL: {resp.url}\n{_page_content(resp.text, args.get('offset', 0))}", None
+            base = str(resp.url)
+            return f"URL: {base}\n{_page_content(resp.text, args.get('offset', 0), base=base)}", None
         if name == "render_page":
             html, calls, final = await render(args["url"], fetcher)
-            return f"URL: {final}\n{_page_content(html)}\nJSON responses: {json.dumps(calls)[:4000]}", None
+            return f"URL: {final}\n{_page_content(html, base=final)}\nJSON responses: {json.dumps(calls)[:4000]}", None
         if name == "fetch_json":
             return _chunk(resp.text, args.get("offset", 0)), None
         if name == "scan_scripts":
@@ -442,6 +492,7 @@ async def explore(url: str, fetcher: Fetcher, usage: Usage, hint: str | None = N
     messages: list = [{"role": "system", "content": INSTRUCTIONS}, {"role": "user", "content": prompt}]
     done: set[str] = set()
     attempted = passed = refused = warned = False
+    index_sample_count = 0
     min_turns = min(10, max(1, MAX_TURNS // 4))
     discovery_turns = min(20, max(min_turns, MAX_TURNS // 2))
     for turn in range(1, MAX_TURNS + 1):
@@ -488,6 +539,19 @@ async def explore(url: str, fetcher: Fetcher, usage: Usage, hint: str | None = N
                 output, recipe = await _call(call.function.name, args, fetcher)
                 if call.function.name in ("test_recipe", "submit_recipe") and output.startswith('{"problem":'):
                     attempted = True
+                if recipe:
+                    count = json.loads(output)["openTenderCount"]
+                    listing = recipe.listing
+                    if listing.index:
+                        index_sample_count = max(index_sample_count, count)
+                    elif count < index_sample_count and not (listing.next_page or listing.page_param):
+                        output = (
+                            f"NOT ACCEPTED: this unpaginated listing has {count} open tenders. "
+                            f"Your earlier listing.index recipe found {index_sample_count} open tenders in the "
+                            "sample and passed document validation. Submit that recipe or improve on its coverage.\n"
+                            f"{output}"
+                        )
+                        recipe = None
                 if recipe and not warned and '"warnings": []' not in output:
                     warned, recipe = True, None
                     output = "NOT YET ACCEPTED: fix the warnings below, or submit again to accept them.\n" + output
