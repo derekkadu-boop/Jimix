@@ -810,14 +810,16 @@ def test_refresh_preserves_files_after_document_page_error(monkeypatch, tmp_path
     assert empty["_documentsComplete"] is True
 
 
-def test_category_pagination_uses_the_public_get_path():
+@pytest.mark.parametrize("attribute", ["onclick", "href"])
+def test_category_pagination_uses_the_public_get_path(attribute):
     category = "/notices/categories"
     next_page = category + "?table=list&pageIndex=2"
     control = (
         f"""<a class="browseForward" href="javascript:void(0);" """
         f"""onclick="setTargetAndSubmit('{next_page}'); untrusted()">next</a>"""
     )
-    listing = LIST_1.replace('<a class="next" href="/list?page=2">next</a>', control)
+    original_next = '<a class="next" href="/list?page=2">next</a>'
+    listing = LIST_1.replace(original_next, control)
     simplified, hint, _ = agent.simplify(listing)
     assert "pageIndex=2" in simplified
     assert hint == next_page
@@ -833,15 +835,17 @@ def test_category_pagination_uses_the_public_get_path():
     assert double_quoted["onclick"] == f'setTargetAndSubmit("{next_page}")'
     first_chunk = agent._page_content("<p>" + "x" * agent.PAGE_CHARS + "</p>" + control)
     assert first_chunk.splitlines()[0].endswith(next_page)
+    selector = {"path": "a.browseForward", "attribute": attribute}
+    if attribute == "onclick":
+        selector["pattern"] = "'(/notices/categories[?]table=list&pageIndex=[0-9]+)'"
+    else:
+        extra = '<a class="browseForward" href="javascript:void(0);" onclick="unsupported()">Other</a>'
+        listing = LIST_1.replace(original_next, extra + control)
     recipe = Recipe.model_validate(RECIPE | {
         "listing": RECIPE["listing"] | {
             "url": f"https://portal.example{category}?method=showCategoryOverview",
             "index": {"path": "a[href*='cpvCode=']"},
-            "next_page": {
-                "path": "a.browseForward",
-                "attribute": "onclick",
-                "pattern": "'(/notices/categories[?]table=list&pageIndex=[0-9]+)'",
-            },
+            "next_page": selector,
         },
         "detail": None,
         "documents": None,
@@ -883,6 +887,46 @@ def test_category_pagination_uses_the_public_get_path():
     assert [tender["id"] for tender in sampled] == ["1", "2", "4", "5"]
     assert not complete
     assert len([url for url in requested if url.path != "/robots.txt"]) == 3
+
+
+@pytest.mark.parametrize("handler", [
+    "setTargetAndSubmit('//outside.example/list?page=2')",
+    "setTargetAndSubmit('/list?pageIndex=2&X-Amz-Signature=private')",
+    "setTargetAndSubmit('/list?restart=2')",
+    "setTargetAndSubmit('/list?pageIndex=2' + other)",
+    "unrelatedsetTargetAndSubmit('/list?pageIndex=2')",
+])
+@pytest.mark.parametrize("href", ["#", "javascript:void(0);"])
+def test_href_pagination_skips_unsafe_handlers_and_unselected_controls(handler, href):
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"next_page": {"path": "a.selected"}},
+        "detail": None,
+        "documents": None,
+    })
+    controls = (
+        f'<a class="browseForward selected" href="{href}" onclick="{handler}">Selected</a>'
+        """<a class="browseForward" href="#" onclick="setTargetAndSubmit('/list?pageIndex=2')">Other</a>"""
+    )
+    requests = []
+
+    def response(request):
+        requests.append(str(request.url))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        listing = LIST_1.replace('<a class="next" href="/list?page=2">next</a>', controls)
+        return httpx.Response(200, html=listing)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await apply(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    tenders, complete = asyncio.run(run())
+    assert not complete
+    assert [tender["id"] for tender in tenders] == ["1", "2"]
+    assert requests == ["https://portal.example/robots.txt", "https://portal.example/list"]
 
 
 def test_category_index_hint_surfaces_same_site_category_links_before_truncated_markup():

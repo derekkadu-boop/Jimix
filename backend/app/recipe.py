@@ -38,6 +38,18 @@ NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
 MAX_INDEX_LISTS = 50
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
+PAGINATION_HANDLER = re.compile(
+    r"""\s*(?:return\s+)?setTargetAndSubmit\(\s*(?P<quote>['"])"""
+    r"(?P<path>/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+)"
+    r"(?P=quote)\s*(?=[,)])"
+)
+PAGINATION_KEY = re.compile(
+    r"page(?:index|number|num|no)?|offset|cursor|start|selectedTablePage\w+", re.IGNORECASE
+)
+SENSITIVE_KEY = re.compile(
+    r"token|session|secret|auth|key|password|csrf|signature|credential|^(sid|sig)$", re.IGNORECASE
+)
+PAGINATION_PLACEHOLDERS = {"", "#", "javascript:void(0)"}
 
 
 class _AutomaticModalBlocked(Blocked):
@@ -186,6 +198,38 @@ def _values(node, selector: Selector, kind: Kind) -> list[str]:
     return values
 
 
+def pagination_handler(tag) -> re.Match[str] | None:
+    if tag.name != "a" or "browseForward" not in tag.get("class", ()):
+        return None
+    placeholder = tag.get("href", "").strip().casefold().rstrip(";")
+    if placeholder not in PAGINATION_PLACEHOLDERS:
+        return None
+    match = PAGINATION_HANDLER.match(tag.get("onclick", ""))
+    if match and len(match["path"]) <= 300:
+        params = parse_qsl(urlsplit(match["path"]).query, keep_blank_values=True)
+        if not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
+            PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
+        ):
+            return match
+    return None
+
+
+def _next_link(page, selector: Selector, kind: Kind) -> tuple[str | None, bool]:
+    if kind == "json" or selector.attribute != "href" or selector.pattern:
+        return next(iter(_values(page, selector, kind)), None), False
+    unresolved = False
+    for tag in [page] if selector.path == "$" else page.select(selector.path):
+        if match := pagination_handler(tag):
+            return match["path"], False
+        href = tag.get("href")
+        href = " ".join(href.split()) if isinstance(href, str) else ""
+        normalized = href.casefold().rstrip(";")
+        if normalized not in PAGINATION_PLACEHOLDERS and not normalized.startswith("javascript:"):
+            return href, False
+        unresolved |= bool(tag.get("onclick")) or normalized not in PAGINATION_PLACEHOLDERS
+    return None, unresolved
+
+
 def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
     out = {}
     for name, selector in fields.items():
@@ -250,8 +294,12 @@ async def apply(
                 raws.append(raw)
             if listing.page_param:
                 url = _with_param(start, listing.page_param, page_number + 1)
-            elif listing.next_page and (links := _values(page, listing.next_page, listing.kind)):
-                url = urljoin(base, links[0])
+            elif listing.next_page:
+                link, unresolved = _next_link(page, listing.next_page, listing.kind)
+                if not link:
+                    finished = not unresolved
+                    break
+                url = urljoin(base, link)
             else:
                 finished = True
                 break

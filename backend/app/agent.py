@@ -14,7 +14,7 @@ from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .discovery import discover, scan_scripts
 from .documents import fetch_documents
 from .fetch import Blocked, Fetcher
-from .recipe import KEYWORDS, TENDER_FIELDS, Recipe, apply, check
+from .recipe import KEYWORDS, SENSITIVE_KEY, TENDER_FIELDS, Recipe, apply, check, pagination_handler
 
 log = logging.getLogger("watchtower.agent")
 MODEL = os.environ.get("WATCHTOWER_MODEL", "gpt-5.4-mini")
@@ -41,18 +41,7 @@ KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetim
 DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
 FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
 
-PAGINATION_HANDLER = re.compile(
-    r"""setTargetAndSubmit\(\s*(?P<quote>['"])"""
-    r"(?P<path>/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+)"
-    r"(?P=quote)\s*(?=[,)])"
-)
-PAGINATION_KEY = re.compile(
-    r"page(?:index|number|num|no)?|offset|cursor|start|selectedTablePage\w+", re.IGNORECASE
-)
 CATEGORY_KEY = re.compile(r"(?:categor(?:y|ie)|classification|cpv)(?:id|code)?", re.IGNORECASE)
-SENSITIVE_KEY = re.compile(
-    r"token|session|secret|auth|key|password|csrf|signature|credential|^(sid|sig)$", re.IGNORECASE
-)
 SESSION_PATH = re.compile(r";jsessionid=[^/;]*", re.IGNORECASE)
 
 
@@ -268,22 +257,12 @@ def simplify(html: str, base: str | None = None) -> tuple[str, str | None, list[
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in soup.find_all(True):
-        placeholder = tag.get("href", "").strip().casefold().rstrip(";")
-        pagination = (
-            PAGINATION_HANDLER.search(tag.get("onclick", ""))
-            if tag.name == "a" and "browseForward" in tag.get("class", [])
-            and placeholder in ("", "#", "javascript:void(0)")
-            else None
-        )
+        pagination = pagination_handler(tag)
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
-        if pagination and len(path := pagination["path"]) <= 300:
-            params = parse_qsl(urlsplit(path).query, keep_blank_values=True)
-            if not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
-                PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
-            ):
-                quote = pagination["quote"]
-                tag["onclick"] = f"setTargetAndSubmit({quote}{path}{quote})"
-                next_page = next_page or path
+        if pagination:
+            path, quote = pagination["path"], pagination["quote"]
+            tag["onclick"] = f"setTargetAndSubmit({quote}{path}{quote})"
+            next_page = next_page or path
     hints = [categories] if categories else []
     if netserver_files:
         hints.append(
