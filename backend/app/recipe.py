@@ -59,6 +59,10 @@ class _AutomaticModalBlocked(Blocked):
     pass
 
 
+class MissingTenderIds(ValueError):
+    pass
+
+
 class Selector(BaseModel):
     path: str
     attribute: str | None = None
@@ -135,10 +139,10 @@ class Recipe(BaseModel):
             raise ValueError("index is not supported for POST listings")
         if self.listing.method == "GET" and self.listing.body is not None:
             raise ValueError("listing.body is only for POST listings")
-        if "id" not in self.listing.fields:
-            raise ValueError("listing.fields needs id")
         if "id" in detail_fields:
-            raise ValueError("id must come from the listing, not the detail page")
+            raise ValueError("remove detail.fields.id and map each record's stable ID in listing.fields.id")
+        if "id" not in self.listing.fields:
+            raise ValueError("listing.fields.id is required to identify each listing record")
         if self.documents_page and not (self.detail and (self.documents or self.documents_by_host)):
             raise ValueError("documents_page needs detail and a document selector")
         if self.documents_by_host and not self.detail:
@@ -479,6 +483,12 @@ async def apply(
                 finished = True
                 break
         complete = complete and finished
+    if raws and not any(raw.get("id") for raw in raws):
+        selector = listing.fields["id"].model_dump_json(exclude_none=True)
+        raise MissingTenderIds(
+            f"listing.fields.id {selector} returned no tender IDs from the records matched by "
+            f"listing.records {listing.records!r}. Map a stable identifier relative to each listing record."
+        )
     attempted, blocked = 0, []
     details = raws
     if recipe.detail and max_details is not None and (indexed_sample or "submissionDeadline" in listing.fields):

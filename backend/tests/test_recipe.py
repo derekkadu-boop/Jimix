@@ -1452,6 +1452,45 @@ def test_post_json_listing_pages_inside_the_body():
     assert tenders[0]["url"] == "https://portal.example/n/1"
 
 
+@pytest.mark.parametrize("path,empty", [("notice.number", False), ("missing.id", False), ("missing.id", True)])
+def test_post_validation_identifies_missing_id_mapping(path, empty):
+    url = "https://portal.example/search"
+    rows = [] if empty else [{"notice": {"number": 0}, "title": "Bridge works", "url": "/notice/0"}]
+    recipe = {
+        "method": "discovered_api",
+        "listing": {"kind": "json", "method": "POST", "url": url, "body": {}, "records": "hits",
+                    "fields": {"id": {"path": path}, "title": {"path": "title"}, "url": {"path": "url"}}},
+        "documents_url": {"template": "/files/{id}.pdf"},
+    }
+
+    def response(request):
+        if request.method == "POST" and str(request.url) == url:
+            return httpx.Response(200, json={"hits": rows})
+        if request.url.path == "/files/0.pdf":
+            return httpx.Response(200, headers={"content-type": "application/pdf"}, content=b"%PDF-1.4 contract")
+        return httpx.Response(404)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        fetcher.observed_posts[url] = [{}]
+        try:
+            for name in ("test_recipe", "submit_recipe"):
+                output, accepted = await agent._call(name, {"recipe": recipe}, fetcher)
+                report = json.loads(output)
+                if empty:
+                    assert report["problem"] == "no tenders found"
+                elif path == "missing.id":
+                    assert "listing.fields.id" in report["problem"] and path in report["problem"]
+                    assert "hits" in report["problem"] and report["tenderCount"] == 0
+                else:
+                    assert report["problem"] is None and report["sample"][0]["id"] == "0"
+                assert (accepted is not None) == (name == "submit_recipe" and report["problem"] is None)
+        finally:
+            await fetcher.close()
+
+    asyncio.run(run())
+
+
 def test_post_listing_requires_json_body_and_observed_endpoint():
     base = {"method": "discovered_api", "listing": {"kind": "json", "url": "https://portal.example/api/search",
             "method": "POST", "records": "hits", "fields": {"id": {"path": "id"}}}}
@@ -1470,6 +1509,12 @@ def test_post_listing_requires_json_body_and_observed_endpoint():
     assert not agent.same_shape({"n": True}, {"n": 5})
     assert not agent.same_shape({"n": 1}, {"n": True})
     assert agent.same_shape({"n": 1, "s": "a"}, {"n": 50.0, "s": "a"})
+
+
+def test_detail_id_error_identifies_both_mapping_locations():
+    recipe = API_RECIPE | {"detail": {"kind": "json", "fields": {"id": {"path": "number"}}}}
+    with pytest.raises(ValueError, match=r"remove detail\.fields\.id.*listing\.fields\.id"):
+        Recipe.model_validate(recipe)
 
 
 def test_post_paging_stops_cleanly_on_a_later_client_error():
