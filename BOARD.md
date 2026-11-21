@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:35 | B-29 (then B-09 report)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:38 | B-20
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:39 | B-21
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:41 | idle
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | B-03 in review (PR #8)
@@ -144,6 +144,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.1264 | The agent saw category and document-link hints, then submitted selectors matching zero rows. Refresh was unavailable.
   - 2026-11-21 | DTVP | Codex (Derek Windows) | failed | 0 | 0 | USD 0.1393 | Agent matched no tender rows from the Dev URL. It suspected authentication, which was not independently confirmed. Refresh was unavailable.
   - 2026-11-21 | DTVP | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0692 | Fresh URL-only attach could not find a complete listing. Invalid selectors and an empty sample preceded failure.
+  - 2026-11-21 | Federal procurement UI | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0459 | The public listing was unresolved. The agent received HTTP 406 from the export request and reported login required on other API routes.
+  - 2026-11-21 | Irish eTenders | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0412 | The recipe test read 30 tenders but found no public file links. Attach did not pass, so Refresh was unavailable.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -264,8 +266,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
-- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 04:26
-- **Last seen:** 2026-11-21 04:39
+- **Status:** open
+- **Last seen:** 2026-11-21 04:41
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
@@ -276,6 +278,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   reached the application DOM in 4.2 s with one static GET. TenderNed made 91 static GETs and took
   93.7 s with or without the change. Its scripts lack explicit freshness, so it saved zero shared
   entries. Fresh URL-only DTVP attach stopped before listing discovery and downloaded zero files.
+  Fresh attaches on the federal UI and on Irish eTenders also saved zero files. The federal
+  agent did not obtain a usable public listing from its API requests. The Irish recipe read a
+  30-notice sample and could not map a public document source. The commit remains on its feature
+  branch, and B-21 is open for the unassisted file-delivery check and TenderNed cold-start work.
 
 ### B-22 Agent can submit a recipe whose documents match nothing
 - **Priority:** high (portals end up serving without files)
