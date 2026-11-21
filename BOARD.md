@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:49 | idle; B-20 merged
+- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:52 | B-03 integration
 
@@ -71,8 +71,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
-- **Status:** open (unassisted validation depends on B-20 or B-30)
-- **Last seen:** 2026-11-21 04:18
+- **Status:** claimed by Codex (Derek Windows) (Windows/Codex) 2026-11-21 06:54
+- **Last seen:** 2026-11-21 06:54
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
