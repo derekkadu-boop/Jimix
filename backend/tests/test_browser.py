@@ -1,10 +1,12 @@
 import asyncio
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
 import httpx
 
 from app import browser, fetch
+from app.discovery import scan_scripts
 from app.fetch import Fetcher
 from app.recipe import Recipe, apply
 
@@ -116,3 +118,80 @@ def test_netserver_modal_reads_links_without_other_actions(monkeypatch):
     ]
     assert ("GET", "/jump") in calls
     assert not any(call[1] in ("/outside", "/forbidden", "/redirect-target") for call in calls)
+
+
+def test_public_assets_are_shared_between_discovery_and_fresh_browser_runs(monkeypatch):
+    requests = Counter()
+    blocked = False
+
+    class Site(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests[self.path] += 1
+            headers = {}
+            if self.path == "/robots.txt":
+                content = "User-agent: *\nDisallow: /public.js" if blocked else "User-agent: *\nDisallow:"
+                kind = "text/plain"
+            elif self.path == "/public.js":
+                assert self.headers["Accept-Encoding"] == "identity"
+                content = "document.body.innerHTML += '<a href=\"/spec.pdf\">Specification</a>';"
+                kind = "application/javascript"
+                headers = {"Cache-Control": "public, max-age=60", "Vary": "Accept-Encoding"}
+            elif self.path == "/private.js":
+                content = f"document.body.dataset.revision = '{requests[self.path]}';"
+                kind = "application/javascript"
+                headers = {"Cache-Control": "private, max-age=60"}
+            elif self.path == "/style.css":
+                content = "body { color: black; }"
+                kind = "text/css"
+                headers = {"Cache-Control": "max-age=60"}
+            else:
+                kind = "text/html"
+                content = (
+                    '<link rel="stylesheet" href="/style.css">'
+                    '<body><script src="/public.js"></script><script src="/private.js"></script></body>'
+                )
+            self.send_response(200)
+            self.send_header("Content-Type", kind)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(content.encode())
+
+        def log_message(self, *_args):
+            pass
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Site) as site:
+        base = f"http://127.0.0.1:{site.server_port}/"
+
+        async def allow_fixture(url):
+            assert url.startswith(base)
+
+        monkeypatch.setattr(browser, "check_public", allow_fixture)
+        monkeypatch.setattr(fetch, "INTERVAL", 0)
+        worker = Thread(target=site.serve_forever, daemon=True)
+        worker.start()
+
+        async def read(*, scan=False):
+            fetcher = Fetcher(transport=httpx.AsyncHTTPTransport())
+            try:
+                if scan:
+                    await scan_scripts(base, fetcher)
+                html, _, _ = await browser.render(base, fetcher)
+                return html
+            finally:
+                await fetcher.close()
+
+        try:
+            first = asyncio.run(read(scan=True))
+            second = asyncio.run(read())
+            blocked = True
+            forbidden = asyncio.run(read())
+        finally:
+            site.shutdown()
+            worker.join()
+
+    assert "/spec.pdf" in first and "/spec.pdf" in second
+    assert 'data-revision="2"' in first and 'data-revision="3"' in second
+    assert "/spec.pdf" not in forbidden
+    assert requests["/public.js"] == 1
+    assert requests["/style.css"] == 1
