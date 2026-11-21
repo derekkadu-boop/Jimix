@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:19 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:25 | idle (B-34 done)
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:26 | B-32
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:21 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:19 | B-33
@@ -402,8 +402,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-32 Rendering returns before JavaScript apps load their data
 - **Priority:** high (dominant failure in the wide test)
-- **Status:** open
-- **Last seen:** 2026-11-21 05:15
+- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:26, continuing branch b-32-render-readiness
+- **Last seen:** 2026-11-21 05:26
 - **Problem:** Wide test (fresh DBs, 14 portals): at least 7 JS portals rendered as empty shells (`<div id="root"></div>`, `<app-root></app-root>`, empty `#app`), and 0 JSON responses were captured. 38 browser requests were aborted: 21 because the page or context was already closed, 7 on Route.fetch 30 s timeouts, 9 on network errors. `render()` waits for `load` + 2 s, but with one request per second per site, the app's script chunks and data XHRs arrive much later.
 - **Idea:** Wait until the page settles: no pending routed requests for about 3 s and the DOM stops growing, with a total cap (the render timeout). Raise the per-request Route.fetch timeout. Log render time and the number of requests. Coordinate with B-21 (render speed).
 - **Findings:**
