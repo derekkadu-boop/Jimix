@@ -12,8 +12,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:48 | B-62
-- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:50 | B-04 unassisted NRW validation
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:53 | B-62 consolidation and fresh Doffin validation
+- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:53 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:51 | B-50 and B-28 in review
@@ -78,7 +78,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by Codex (Derek Windows) (Windows/Codex) 2026-11-21 07:29
-- **Last seen:** 2026-11-21 07:50
+- **Last seen:** 2026-11-21 07:53
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
@@ -92,7 +92,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Code is on main at 4665b28a. Reopened under the revised protocol for an unassisted attach
   that saves real files on a previously untested NetServer portal.
   Fresh URL-only attaches from Bremen and Baden-Wuerttemberg, started before the Dev-list update, reached public listings but saved no files. Bremen had no detail hrefs and exposes them through its own read-only row lookup (B-30). NRW remains the applicable Dev portal and is blocked on mixed-platform discovery (B-20).
-  Reviewed code is committed locally at 26e9873; 170 backend tests and Ruff pass. A 360-second fresh attach did not finish, and the next fresh attach failed before model calls because the API account reports no credits. B-04 live verification remains pending a funded API account.
+  Reviewed code is committed locally at 26e9873; 173 backend tests and Ruff pass. A 360-second fresh attach did not finish, and the next fresh attach failed before model calls because the API account reports no credits. B-04 live verification remains pending a funded API account.
 
 ### B-05 Prompt-injection hardening
 - **Status:** in review (PR #17, defensive prompt guidance)
@@ -707,7 +707,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-46 README: deployment and the PDF's hand-in requirements
 - **Priority:** high (mandatory hand-in, per the PDF)
 - **Status:** claimed by lead-w2 (matiiss/Codex) 2026-11-21 07:50
-- **Last seen:** 2026-11-21 07:50
+- **Last seen:** 2026-11-21 07:53
 - **Problem:** The README covers local setup and how Watchtower works, but doesn't match the PDF's "What you
   hand in" section yet, and the Docker deployment isn't the main path.
 - **The PDF expects:**
@@ -848,7 +848,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-60 Documents split by lot or folder
 - **Priority:** normal
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 07:52
+- **Last seen:** 2026-11-21 07:52
 - **Problem:** Tender documents are often grouped by lot or folder (lot pages, folder trees, "show more" lists), so one documents page shows only part of the files.
 - **Idea:** Allow a documents selector to follow up to N levels of folder or lot links (same site, bounded), deduplicating by sha256.
 - **Findings:**
