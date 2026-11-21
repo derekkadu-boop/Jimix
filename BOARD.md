@@ -8,9 +8,9 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:10 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:15 | B-01
-- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 02:46 | B-09
-- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:36 | coord monitoring
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-01 (paused until 04:05 CET, claim held)
+- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
+- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:27 | B-16
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:31 | B-04
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
