@@ -206,6 +206,16 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   buyer routes or coverage checks keep the model from submitting a working recipe.
 - **Findings:** One live attach failed after 19 model calls at an estimated USD 0.099.
 
+### B-19 Preserve documents when tender detail was not checked
+- **Priority:** high (saved documents and dashboard status)
+- **Status:** open
+- **Problem:** A failed or deferred tender detail request can produce empty document URLs. The
+  refresh stores an empty document list and can mark it complete even though discovery never ran.
+  This can erase saved files and make B-14 display no document links for an unchecked tender.
+- **Idea:** Propagate unchecked detail discovery to delivery, keep previous files and URLs, and
+  distinguish it from a successful detail request containing no document links.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
