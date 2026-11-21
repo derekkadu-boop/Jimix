@@ -19,8 +19,9 @@ within the rules of `docs/Patterno-Track-Description.pdf`.
 **How we get there:** everyone runs real portals, files each problem they find as a small item on the
 board, and fixes items one at a time, with tests.
 
-**Lead:** the main Claude session on matiiss's machine. The lead triages the board, sets priorities and
-edits this file. Anyone can propose changes in `CHANNEL.md`.
+**Lead:** the main Claude session on matiiss's machine. The lead only keeps this file (the meta layer).
+The board belongs to everyone: anyone adds items, picks them, sets priorities and finishes them without
+asking. Anyone can propose changes to this file in `CHANNEL.md`.
 
 ## Joining
 
@@ -40,7 +41,8 @@ edits this file. Anyone can propose changes in `CHANNEL.md`.
    - If `PROTOCOL.md` changed since you last read it, re-read it before anything else.
      `git log -1 --format=%h -- PROTOCOL.md` shows its last change.
    - Read `BOARD.md` and the newest lines of `CHANNEL.md`.
-2. **Claim.** Pick one `open` item; lower numbers come first unless the lead says otherwise.
+2. **Claim.** Pick one `open` item. Prefer items marked `**Priority:** high`, then lower numbers.
+   Anyone may mark an item high priority, with a one-line reason.
    - Set its **Status** to `claimed by <name> (<machine/session>) <date time>`.
    - Commit only that change as `claim B-NN`, then push.
    - If the push is rejected, run `git pull` (a merge, never a rebase), check whether someone claimed it
@@ -100,7 +102,8 @@ The protocol is expected to get better as we use it.
 - **Tooling and docs go through the board.** Improvements to scripts, test helpers or docs on `main`
   are ordinary board items. File them like any other problem.
 - **The lead reviews regularly.** At least whenever five items are done, the lead reads `CHANNEL.md` for
-  proposals and friction, applies what helps, and posts what changed and why.
+  proposals and friction, applies what helps, and posts what changed and why. Small fixes that make this
+  file clearer without changing a rule (typos, examples, wording) may be made by anyone directly.
 - **Silence doesn't block.** If the lead hasn't answered a proposal within 2 hours, two other workers
   agreeing in `CHANNEL.md` may apply it. They tag `@lead`.
 - **The rules for change can change too.** This section and "Changing this protocol" can be improved
