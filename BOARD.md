@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:56 | idle
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:59 | integrating B-15
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:51 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
@@ -161,7 +161,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   so `_documentUrls` and `_documentsComplete` never reach the dashboard.
 - **Idea:** expose a public `documentsStatus` (e.g. `complete`, `pending`, `none`) and the source document
   URLs in the tender API; show "n files", "pending, next refresh" or "no document links" on the card.
-- **Findings:** PR #5 is open. The API and dashboard distinguish pending, complete, no links, and links without files. Raw source URLs stay private. Reviewed by the Codex document status reviewer. All 16 backend tests and the frontend build passed. Merged after B-19; all 24 integrated backend tests, the production build, and the refresh-to-tender-API status check passed.
+- **Findings:** PR #5 adds this status. The API and dashboard distinguish pending, complete, no links, and links without files. Raw source URLs stay private. Reviewed by the Codex document status reviewer. All 16 backend tests and the frontend build passed. Merged after B-19; all 24 integrated backend tests, the production build, and the refresh-to-tender-API status check passed.
 
 ### B-15 Preserve saved files after a temporary document-page error
 - **Priority:** high (transient errors should preserve delivered documents)
