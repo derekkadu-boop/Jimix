@@ -12,11 +12,22 @@ docker compose up --build --wait
 Compose starts the Next.js frontend at `http://127.0.0.1:3000/`. If port 3000
 is busy, set `JIMIX_FRONTEND_PORT` before starting and open that port instead.
 
-For features that use an external API, set `JIMIX_API_URL` before building.
-The default API origin is `http://host.docker.internal:8000` on Docker Desktop.
-
 Use `docker compose logs -f frontend` to follow startup and `docker compose down`
 to stop the frontend.
+
+### Connect the backend
+
+On Docker Desktop, run FastAPI on the host from the repository root in a
+second terminal. Install uv first if needed.
+
+```sh
+uv run --extra backend python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+The frontend proxies API requests to `http://host.docker.internal:8000`.
+Verify the connection through the frontend's [OpenAPI response](http://127.0.0.1:3000/openapi.json).
+To use a different reachable API, set `JIMIX_API_URL` before rebuilding the frontend.
+[Docker Desktop host networking](https://docs.docker.com/desktop/features/networking/networking-how-tos/#connect-a-container-to-a-service-on-the-host)
 
 ## Local setup
 
@@ -29,7 +40,7 @@ environment and can download a compatible Python version (3.13 or newer).
 From the repository root, use uv to install the backend dependencies and start FastAPI.
 
 ```sh
-uv run --extra backend uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+uv run --extra backend python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
 ### Next.js frontend
@@ -58,12 +69,8 @@ the registration or country-code domain provides a usable country.
 ## Manual frontend Docker setup
 
 Run these PowerShell commands from the repository root with Docker Desktop in
-Linux container mode. When the API runs on your host, start FastAPI with uv in
-a separate terminal and bind it to an address the container can reach.
-
-```powershell
-uv run --extra backend uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000
-```
+Linux container mode. To start FastAPI on your host, follow the connection
+instructions above.
 
 Both targets use Node.js 24 and install dependencies from `package-lock.json`
 during the build. The frontend reaches the host API at
