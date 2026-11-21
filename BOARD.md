@@ -15,7 +15,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-30 NetServer detail navigation
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
-- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:57 | B-03 in review, PR #8
+- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:59 | B-05
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
@@ -93,7 +93,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Fresh URL-only attaches from Bremen and Baden-Wuerttemberg, started before the Dev-list update, reached public listings but saved no files. Bremen had no detail hrefs and exposes them through its own read-only row lookup (B-30). NRW remains the applicable Dev portal and is blocked on mixed-platform discovery (B-20).
 
 ### B-05 Prompt-injection hardening
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:59 (untrusted input slice)
+- **Last seen:** 2026-11-21 06:59
 - **Problem:** recipes are data, so no code runs, but page text could still steer the agent: wrong pages,
   fetching unrelated URLs. `give_up(blocked=true)` is already refused unless a block was detected.
 - **Idea:** require listing and detail URLs to share the portal's site (documents may be elsewhere);
