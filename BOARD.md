@@ -40,7 +40,8 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-04 POST search APIs and browser interactions
 - **Priority:** high (Düsseldorf NetServer documents only list after a modal click, see B-02)
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:30
+- **Last seen:** 2026-11-21 03:30
 - **Problem:** some JavaScript portals only load results after a search action or a POST request
   (oeffentlichevergabe.de's search page loads only region data on its own). Recipes only do GET.
 - **Idea:** declarative POST bodies for JSON listings; maybe a short declarative list of browser
