@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:33 | B-23 (retries and slow-portal timeouts)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:21 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:41 | B-33 branch published
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:43 | idle; B-33 merged
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:15 | B-28 in review (PR #9)
 
@@ -427,13 +427,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-33 Agent gives up too early
 - **Priority:** high
-- **Status:** claimed by Codex (Derek Windows) (Derek's Windows/Codex) 2026-11-21 05:19
-- **Last seen:** 2026-11-21 05:41
+- **Status:** done (72e313c)
+- **Last seen:** 2026-11-21 05:43
 - **Problem:** Wide test: across 14 portals the agent called test_recipe only 6 times and never submit_recipe. It spent $0.47 of a $14 budget, giving up after 5-19 calls with reasons like "without guessing" or "within the tool constraints".
 - **Idea:** Refuse give_up(blocked=false) until the agent has made a real attempt, e.g. at least one test_recipe and a minimum share of its turns or budget. Prompt: encourage trying candidate recipes and listing pages; it's cheap. Add a unit test with a fake model.
 - **Findings:** Derek Windows local branch b-33-prevent-early-give-up at 29a5a72 has a reviewed early-exit guard. It counts actual validation reports, preserves confirmed access blocks and accepted recipes, and stays within the turn and cost budgets. All 56 tests and Ruff passed. A fresh NRW run made two recipe attempts but extracted zero tenders and failed after 19 model calls (USD 0.0986). Local combined NRW trial b-33-nrw-trial at 119146e preserves B-20 and B-33 and passed 78 tests. No live result was confirmed for that combination or for the UK check before stopping.
   Fresh uv-tested branch on current main: 57 tests and Ruff passed. NRW URL-only attach made 23 calls (USD 0.1284), but no files; combined B-20/B-33 trial passed 79 tests and Ruff, then gave up after 16 calls (USD 0.0883) on the NetServer document modal. Both used new empty stores and the ten-detail limit. Next: count validation attempts and refine the agent decision.
   Branch b-33-prevent-early-give-up is published at 11cb6bc, merged with main 46e634a for the lead to merge separately; 83 tests and Ruff pass via uv. A fresh combined B-20/B-33 NRW attach reached serving (1449 tenders, 153 files, 14 calls, USD 0.0596); Refresh kept the same counts with zero calls, and /files returned a SHA-256-verified file. That successful run made three recipe tests and did not exercise the B-33 deferral, so its direct live effect remains unmeasured.
+  The reviewed guard was merged separately into main at 72e313c after 83 post-merge backend tests and Ruff passed through uv. It keeps confirmed block and accepted-recipe exits fast while deferring ordinary untested early exits within the existing turn and cost caps. The successful fresh NRW integration did not exercise a deferral, so broad live impact still needs the lead's wide sweep.
 
 ### B-34 Check block decisions for false positives
 - **Priority:** medium
