@@ -240,7 +240,21 @@ async def apply(
                 break
         complete = complete and finished
     attempted, blocked = 0, []
-    for raw in raws[:max_details]:
+    details = raws
+    if recipe.detail and max_details is not None and "submissionDeadline" in listing.fields:
+        now, tz = datetime.now(UTC), ZoneInfo(recipe.timezone)
+        first_rows = {}
+        for raw in raws:
+            if tender_id := raw.get("id"):
+                first_rows.setdefault(tender_id, raw)
+
+        def has_upcoming_deadline(raw):
+            deadline = _datetime(raw.get("submissionDeadline"), recipe.dayfirst, tz)
+            return deadline is not None and deadline >= now
+
+        candidates = (raw for raw in first_rows.values() if raw.get("url"))
+        details = sorted(candidates, key=has_upcoming_deadline, reverse=True)
+    for raw in details[:max_details]:
         if not recipe.detail or not raw.get("url"):
             continue
         raw["url"] = urljoin(raw["_base"], raw["url"])
@@ -261,7 +275,7 @@ async def apply(
                     raise
                 raw["_docs"] = []
                 raw["_documentBlock"] = str(exc)
-            except PlaywrightError:
+            except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
                 raw["_documentPageError"] = True
     if attempted and len(blocked) == attempted:
         raise Blocked(f"detail pages: {blocked[0]}")
@@ -330,10 +344,7 @@ def _link_values(node, selector: Selector, kind: Kind) -> list[str]:
 
 async def _follow_document_page(selector: Selector, page, base: str, kind: Kind, fetcher: Fetcher):
     if links := _link_values(page, selector, kind):
-        try:
-            return await _load("html", urljoin(base, links[0]), fetcher)
-        except (httpx.HTTPError, ValueError, OSError):
-            pass
+        return await _load("html", urljoin(base, links[0]), fetcher)
     return None
 
 

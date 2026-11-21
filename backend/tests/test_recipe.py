@@ -5,6 +5,7 @@ import zipfile
 
 import httpx
 import pytest
+from bs4 import BeautifulSoup
 from playwright.async_api import Error as PlaywrightError
 
 from app import agent, db, documents, fetch, watchtower
@@ -53,6 +54,32 @@ def _zip() -> bytes:
         zf.writestr("notice.pdf", b"%PDF-1.4 notice")
         zf.writestr("terms.txt", b"terms")
     return buffer.getvalue()
+
+
+def _office_package(main_part: str, *, with_relationships: bool = True) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("[Content_Types].xml", b"<Types/>")
+        zf.writestr(main_part, b"Office document")
+        if with_relationships:
+            zf.writestr("_rels/.rels", b"<Relationships/>")
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("main_part", [
+    "word/document.xml", "xl/workbook.xml", "xl/workbook.bin", "ppt/presentation.xml",
+])
+def test_office_package_is_saved_intact_even_with_a_generic_filename(tmp_path, main_part):
+    package = _office_package(main_part)
+    part = tmp_path / ".part-office"
+    part.write_bytes(package)
+
+    saved, unpacked = documents._save(part, "download", 0)
+
+    assert unpacked == 0
+    assert [doc["fileName"] for doc in saved] == ["download"]
+    assert (tmp_path / saved[0]["sha256"]).read_bytes() == package
+    assert not part.exists()
 
 
 def portal(request: httpx.Request) -> httpx.Response:
@@ -259,6 +286,18 @@ def test_recipe_validation_samples_each_document_host(monkeypatch):
     assert warnings == ["tender 3: no file links", "could not download sampled file from buyer-two.example"]
 
 
+def test_recipe_validation_requires_document_links():
+    recipe = Recipe.model_validate(RECIPE)
+    tenders = [{"id": "1", "_documentUrls": []}, {"id": "2", "_documentUrls": []}]
+    problem, _ = asyncio.run(agent._check_documents(recipe, tenders, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    by_host = Recipe.model_validate(RECIPE | {"documents_by_host": {"buyer.example": {"files": {"path": "a"}}}})
+    checked = [{"id": "1", "_documentUrls": [], "_documentChecked": True}]
+    problem, warnings = asyncio.run(agent._check_documents(by_host, checked, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    assert warnings == ["tender 1: no file links"]
+
+
 def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
     monkeypatch.setattr(fetch, "MAX_FILE_BYTES", 1024)
@@ -329,6 +368,63 @@ def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
         "/files/archive.zip", "/files/landing.pdf",
     ]
     assert not list(tmp_path.glob(".part-*"))
+
+
+@pytest.mark.parametrize("with_relationships", [True, False], ids=["office", "ordinary-zip"])
+def test_refresh_rechecks_legacy_office_entries_once(monkeypatch, tmp_path, with_relationships):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    monkeypatch.setattr(watchtower, "MAX_DETAILS", None)
+    db.init()
+    url = "https://portal.example/files/download"
+    legacy = {
+        "status": "open",
+        "documents": [{"fileName": name, "sha256": name} for name in ("[Content_Types].xml", "document.xml")],
+        "_documentUrls": [url],
+        "_documentSkips": {},
+        "_documentsComplete": True,
+    }
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('files', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute(
+            "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('files', '1', ?, ?)",
+            (json.dumps(legacy), db.now()),
+        )
+    downloads = []
+    package = _office_package("word/document.xml", with_relationships=with_relationships)
+    name = "specification.docx" if with_relationships else "specification.zip"
+
+    def response(request):
+        if request.url.path == "/t/1":
+            return httpx.Response(200, html=f'<a class="doc" href="{url}">File</a>')
+        if str(request.url) == url:
+            downloads.append(url)
+            return httpx.Response(200, content=package,
+                                  headers={"content-disposition": f'attachment; filename="{name}"'})
+        return portal(request)
+
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"records": "tr.t:first-child", "next_page": None},
+    })
+
+    async def refresh_twice():
+        for _ in range(2):
+            fetcher = Fetcher(transport=httpx.MockTransport(response))
+            try:
+                await watchtower._deliver("files", recipe, fetcher)
+            finally:
+                await fetcher.close()
+
+    asyncio.run(refresh_twice())
+    with db.connect() as conn:
+        record = json.loads(conn.execute("SELECT data FROM tender WHERE id = '1'").fetchone()["data"])
+    assert record["_documentsComplete"]
+    assert downloads == [url]
+    if with_relationships:
+        assert [file["fileName"] for file in record["documents"]] == [name]
+        assert (tmp_path / record["documents"][0]["sha256"]).read_bytes() == package
+    else:
+        assert [file["fileName"] for file in record["documents"]] == ["[Content_Types].xml", "document.xml"]
 
 
 def test_skipped_legacy_recheck_leaves_last_documents_visible(monkeypatch, tmp_path):
@@ -511,17 +607,125 @@ def test_index_reads_every_linked_list():
     assert complete
 
 
-def test_cosinex_category_pagination_uses_the_public_get_path():
-    category = "/VMPCenter/company/announcements/categoryOverview.do"
-    next_page = category + "?method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=2"
+NOTICE_ONLY = """<html><body><nav><a href="/help">Help</a></nav>
+<a href="./announcements/1/Bekanntmachung.pdf">download</a>
+<a href="/files/all.zip">Documents (ZIP)</a><a href="./documents">Vergabeunterlagen</a></body></html>"""
+
+
+@pytest.mark.parametrize(("page", "hinted"), [(NOTICE_ONLY, True), (DETAIL.format(n=1), False)])
+def test_recipe_test_hints_at_linked_documents_page(page, hinted):
+    def site(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404) if request.url.path == "/robots.txt" else httpx.Response(200, html=page)
+
+    recipe = Recipe.model_validate(RECIPE)
+    tenders = [{"id": "1", "url": "https://portal.example/p/1/overview",
+                "_documentUrls": ["https://portal.example/p/1/announcements/1/Bekanntmachung.pdf"]}]
+
+    async def run(recipe):
+        fetcher = Fetcher(transport=httpx.MockTransport(site))
+        try:
+            return await agent._document_page_hint(recipe, tenders, fetcher)
+        finally:
+            await fetcher.close()
+
+    hint = asyncio.run(run(recipe))
+    if hinted:
+        assert "'vergabeunterlagen' (https://portal.example/p/1/documents)" in hint
+    else:
+        assert hint is None
+    with_page = Recipe.model_validate(RECIPE | {"documents_page": {"path": "a.docs"}})
+    assert asyncio.run(run(with_page)) is None
+
+
+@pytest.mark.parametrize("by_host", [False, True])
+def test_refresh_preserves_files_after_document_page_error(monkeypatch, tmp_path, by_host):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('portal', 'https://portal.example/list', ?)",
+                     (db.now(),))
+
+    status = 200
+    html = '<a class="doc" href="/spec.pdf">Specification</a>'
+    downloads = 0
+
+    def response(request):
+        nonlocal downloads
+        if request.url.path == "/t/3":
+            return httpx.Response(200, html='<a class="platform" href="/documents">Documents</a>')
+        if request.url.path == "/documents":
+            return httpx.Response(status, html=html)
+        if request.url.path == "/spec.pdf":
+            downloads += 1
+            return httpx.Response(200, content=b"%PDF-1.4 fixture")
+        if request.url.path == "/list":
+            return httpx.Response(200, html=LIST_2)
+        return httpx.Response(404)
+
+    settings = {"documents_page": {"path": "a.platform"}}
+    if by_host:
+        settings = {
+            "documents_by_host": {"portal.example": {"page": {"path": "a.platform"}, "files": {"path": "a.doc"}}},
+        }
+    recipe = Recipe.model_validate(RECIPE | settings)
+
+    async def deliver():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            outcome = await watchtower._deliver("portal", recipe, fetcher)
+        finally:
+            await fetcher.close()
+        with db.connect() as conn:
+            stored = json.loads(conn.execute("SELECT data FROM tender").fetchone()[0])
+        return outcome, stored
+
+    _, initial = asyncio.run(deliver())
+    assert initial["documents"][0]["fileName"] == "spec.pdf"
+    assert initial["_documentsComplete"] is True
+
+    status = 503
+    result, failed = asyncio.run(deliver())
+    assert result == (1, None, "Could not read document pages for 1 of 1 tenders")
+    for key in ("documents", "_documentUrls", "_documentSkips"):
+        assert failed[key] == initial[key]
+    assert failed["_documentsComplete"] is False
+    assert "_documentPageError" not in failed
+
+    status = 200
+    _, recovered = asyncio.run(deliver())
+    assert recovered["_documentsComplete"] is True
+    assert downloads == 2
+
+    html = "<p>No documents</p>"
+    result, empty = asyncio.run(deliver())
+    assert result == (1, None, "No document links found for 1 of 1 tenders")
+    assert empty["documents"] == []
+    assert empty["_documentsComplete"] is True
+
+
+def test_category_pagination_uses_the_public_get_path():
+    category = "/notices/categories"
+    next_page = category + "?table=list&pageIndex=2"
     control = (
         f"""<a class="browseForward" href="javascript:void(0);" """
         f"""onclick="setTargetAndSubmit('{next_page}'); untrusted()">next</a>"""
     )
     listing = LIST_1.replace('<a class="next" href="/list?page=2">next</a>', control)
-    simplified = agent.simplify(listing)
-    assert "selectedTablePagePROJECT_RESULT=2" in simplified
+    simplified, hint = agent.simplify(listing)
+    assert "pageIndex=2" in simplified
+    assert hint == next_page
     assert "untrusted()" not in simplified
+    for key in ("csrf", "csrfToken", "sid", "signature"):
+        assert agent.simplify(control.replace("pageIndex=2", f"pageIndex=2&{key}=private"))[1] is None
+    assert agent.simplify(control.replace(category, "//outside.example/path"))[1] is None
+    assert agent.simplify(control.replace("pageIndex=2", "restart=2"))[1] is None
+    assert agent.simplify(control.replace("');", "' + other);"))[1] is None
+    assert agent.simplify(control.replace("javascript:void(0);", "/download"))[1] is None
+    double_quoted = control.replace(f"'{next_page}'", f"&quot;{next_page}&quot;")
+    double_quoted = BeautifulSoup(agent.simplify(double_quoted)[0], "html.parser").select_one("a")
+    assert double_quoted["onclick"] == f'setTargetAndSubmit("{next_page}")'
+    first_chunk = agent._page_content("<p>" + "x" * agent.PAGE_CHARS + "</p>" + control)
+    assert first_chunk.splitlines()[0].endswith(next_page)
     recipe = Recipe.model_validate(RECIPE | {
         "listing": RECIPE["listing"] | {
             "url": f"https://portal.example{category}?method=showCategoryOverview",
@@ -529,7 +733,7 @@ def test_cosinex_category_pagination_uses_the_public_get_path():
             "next_page": {
                 "path": "a.browseForward",
                 "attribute": "onclick",
-                "pattern": f"'{agent.COSINEX_PAGE_PATH}'",
+                "pattern": "'(/notices/categories[?]table=list&pageIndex=[0-9]+)'",
             },
         },
         "detail": None,
@@ -550,7 +754,7 @@ def test_cosinex_category_pagination_uses_the_public_get_path():
         page = listing
         if code := request.url.params.get("cpvCode"):
             active_category = code
-        elif "selectedTablePagePROJECT_RESULT" in request.url.params:
+        elif "pageIndex" in request.url.params:
             page = LIST_2
         if active_category == "45000000-7":
             page = page.replace("/t/1", "/t/4").replace("/t/2", "/t/5").replace("/t/3", "/t/6")
@@ -650,3 +854,76 @@ async def test_bulk_export_refresh_resolves_documents_and_expires_older_notices(
         assert not retry["_documentsComplete"]
     finally:
         await fetcher.close()
+
+
+
+def test_recipe_validation_checks_open_bidding_after_advance_notices():
+    advance_notices = "".join(
+        f'<tr class="t"><td><a href="/t/{i}">Advance notice {i}</a></td></tr>' for i in (4, 5, 6)
+    )
+    listing = LIST_1.replace("<table>", f"<table>{advance_notices}", 1)
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"next_page": None},
+    })
+    checked = []
+
+    def response(request: httpx.Request):
+        path = request.url.path
+        if path == "/list":
+            return httpx.Response(200, html=listing)
+        if path.startswith("/t/"):
+            checked.append(path)
+            if path != "/t/1":
+                return httpx.Response(200, html="<p>Documents have not been published yet.</p>")
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    result = asyncio.run(run())
+    assert checked[:3] == ["/t/1", "/t/4", "/t/5"]
+    assert set(checked) == {"/t/1", "/t/4", "/t/5"}
+    assert result["problem"] is None
+    assert result["withDocumentLinks"] == 1
+    assert {tender["id"] for tender in result["sample"]} == {"1", "4", "5"}
+
+
+def test_capped_detail_sample_uses_first_valid_tender_occurrences():
+    listing = """
+    <table>
+      <tr class="t" data-id="1"><td><a href="/t/1">First occurrence</a></td></tr>
+      <tr class="t" data-id="1"><td><a href="/t/1">Duplicate</a></td>
+        <td class="due">20.12.2099 10:00</td></tr>
+      <tr class="t" data-id="3"><td><a>Missing URL</a></td><td class="due">20.12.2099 10:00</td></tr>
+      <tr class="t"><td><a href="/t/4">Missing ID</a></td><td class="due">20.12.2099 10:00</td></tr>
+      <tr class="t" data-id="2"><td><a href="/t/2">Current bid</a></td>
+        <td class="due">20.12.2099 10:00</td></tr>
+    </table>
+    """
+    fields = RECIPE["listing"]["fields"] | {"id": {"path": "$", "attribute": "data-id"}}
+    recipe = Recipe.model_validate(RECIPE | {"listing": RECIPE["listing"] | {"fields": fields}})
+    fetched = []
+
+    def response(request: httpx.Request):
+        if request.url.path == "/list":
+            return httpx.Response(200, html=listing)
+        if request.url.path.startswith("/t/"):
+            fetched.append(request.url.path)
+        return portal(request)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await apply(recipe, fetcher, max_details=1)
+        finally:
+            await fetcher.close()
+
+    tenders, _ = asyncio.run(run())
+    assert fetched == ["/t/2"]
+    assert tenders[0]["title"] == "First occurrence"
+    assert tenders[0]["_documentDetailPending"]
+    assert tenders[2]["_documentUrls"] == ["https://portal.example/files/2.zip"]

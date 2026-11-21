@@ -3,8 +3,9 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
+import httpx
 from bs4 import BeautifulSoup, Comment
 from openai import AsyncOpenAI
 
@@ -12,7 +13,7 @@ from .browser import render
 from .discovery import discover, scan_scripts
 from .documents import fetch_documents
 from .fetch import Blocked, Fetcher
-from .recipe import TENDER_FIELDS, Recipe, apply, check
+from .recipe import KEYWORDS, TENDER_FIELDS, Recipe, apply, check
 
 log = logging.getLogger("watchtower.agent")
 MODEL = os.environ.get("WATCHTOWER_MODEL", "gpt-5.4-mini")
@@ -34,12 +35,20 @@ REFUSE_BLOCKED = (
 )
 PAGING_PARAMS = {"page", "p", "offset", "start", "size", "limit", "rows", "pagesize", "method"}
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
+DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
+FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
 
-COSINEX_PAGE_PATH = (
-    r"(/VMPCenter/company/announcements/categoryOverview[.]do"
-    r"[?]method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=[0-9]+)"
+PAGINATION_HANDLER = re.compile(
+    r"""setTargetAndSubmit\(\s*(?P<quote>['"])"""
+    r"(?P<path>/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+)"
+    r"(?P=quote)\s*(?=[,)])"
 )
-COSINEX_PAGE_LINK = re.compile(r"setTargetAndSubmit\(\s*'" + COSINEX_PAGE_PATH + "'")
+PAGINATION_KEY = re.compile(
+    r"page(?:index|number|num|no)?|offset|cursor|start|selectedTablePage\w+", re.IGNORECASE
+)
+SENSITIVE_KEY = re.compile(
+    r"token|session|secret|auth|key|password|csrf|^(sid|sig|signature)$", re.IGNORECASE
+)
 
 
 INSTRUCTIONS = f"""You connect a public procurement portal so that its open tenders can be read without you.
@@ -62,10 +71,9 @@ The listing must cover every open tender the portal has: no category, region, CP
 Prefer the broadest list (all current notices) and paginate through it. If the portal only offers lists
 split by category, set listing.url to the page linking to all of them and index to those links:
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
-On Cosinex category listings, use the overview's links with cpvCode= in index to read every category.
-For a.browseForward with a setTargetAndSubmit path shown in onclick, use next_page with
-path a.browseForward, attribute onclick, and pattern '{COSINEX_PAGE_PATH}'.
-That path supports GET. A javascript:void(0) href is a placeholder and cannot be fetched.
+If a next-page control has a placeholder href and a root-relative pagination path in onclick, test
+that path with GET. If it returns the next list page, map next_page to that control with attribute
+onclick and a pattern capturing only the literal URL. Never execute the handler.
 If you find no list of open tenders, keep searching before giving up:
 - a search or "all notices" page (Suche, Bekanntmachungen, recherche, búsqueda, zoeken, wyszukiwarka...),
   tried with an empty query: a GET search URL works as a listing URL;
@@ -114,6 +122,8 @@ When listings link to different document platforms, use documents_by_host with e
 If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
 match its destination host. Each matching rule may follow one public page link before reading files.
 Hosts without a rule use documents.
+When documents_page leads to a buyer's notice, use the host rule's page for a documents tab on that notice.
+File download links can be extensionless, so use the page's actual file controls.
 On a public NetServer documents page with an a.zipFileContents control, the netserver_file_tree modal
 opens the highest-numbered file list version. The files selector is scoped to the opened dialog, for
 example a.filenameEllipsis[href].
@@ -172,8 +182,9 @@ class Usage:
         return round((fresh * rate_in + self.cached_tokens * rate_cached + self.output_tokens * rate_out) / 1e6, 4)
 
 
-def simplify(html: str) -> str:
+def simplify(html: str) -> tuple[str, str | None]:
     soup = BeautifulSoup(html, "html.parser")
+    next_page = None
     for tag in soup(["head", "style", "svg", "img", "noscript", "iframe", "link", "meta"]):
         tag.decompose()
     for tag in soup("script"):
@@ -184,15 +195,23 @@ def simplify(html: str) -> str:
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in soup.find_all(True):
+        placeholder = tag.get("href", "").strip().casefold().rstrip(";")
         pagination = (
-            COSINEX_PAGE_LINK.search(tag.get("onclick", ""))
+            PAGINATION_HANDLER.search(tag.get("onclick", ""))
             if tag.name == "a" and "browseForward" in tag.get("class", [])
+            and placeholder in ("", "#", "javascript:void(0)")
             else None
         )
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
-        if pagination:
-            tag["onclick"] = f"setTargetAndSubmit('{pagination[1]}')"
-    return re.sub(r"\s+", " ", str(soup))
+        if pagination and len(path := pagination["path"]) <= 300:
+            params = parse_qsl(urlsplit(path).query, keep_blank_values=True)
+            if not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
+                PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
+            ):
+                quote = pagination["quote"]
+                tag["onclick"] = f"setTargetAndSubmit({quote}{path}{quote})"
+                next_page = next_page or path
+    return re.sub(r"\s+", " ", str(soup)), next_page
 
 
 def _chunk(text: str, offset: int) -> str:
@@ -200,6 +219,21 @@ def _chunk(text: str, offset: int) -> str:
     end = offset + PAGE_CHARS
     more = f"\n[chars {offset}-{min(end, len(text))} of {len(text)}; offset={end} reads more]" if len(text) > end else ""
     return text[offset:end] + more
+
+
+def _page_content(html: str, offset: int = 0) -> str:
+    simplified, next_page = simplify(html)
+    chunk = _chunk(simplified, offset)
+    if next_page:
+        hint = f"Page navigation URL from a.browseForward's onclick: {next_page}"
+        return f"{hint}\n{chunk}"
+    return chunk
+
+
+NO_DOCUMENT_LINKS = (
+    "no document links in the sampled tenders: map the actual file links (documents, documents_page or"
+    " documents_by_host); call give_up with blocked=true only if a login or captcha on documents was detected"
+)
 
 
 async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
@@ -225,7 +259,7 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
     if not urls:
         if any(t.get("_documentPageError") for t in tenders):
             return "could not read the sampled document pages", warnings
-        return None, warnings
+        return NO_DOCUMENT_LINKS, warnings
     blocked, downloaded = None, False
     for url in urls:
         try:
@@ -246,23 +280,55 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
     return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links", warnings
 
 
+async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> str | None:
+    if not recipe.detail or recipe.detail.kind != "html" or recipe.documents_page or recipe.documents_by_host:
+        return None
+    tender = next((t for t in tenders if t.get("url")), None)
+    if not tender:
+        return None
+    try:
+        resp = await fetcher.get(tender["url"])
+    except (Blocked, httpx.HTTPError, ValueError, OSError):
+        return None
+    known = set(tender["_documentUrls"]) | {tender["url"], str(resp.url)}
+    for link in BeautifulSoup(resp.text, "html.parser").find_all("a", href=True):
+        text = " ".join(link.get_text(" ").split()).casefold()
+        href = urljoin(str(resp.url), link["href"]).split("#")[0]
+        if (
+            0 < len(text) <= 60
+            and DOCUMENT_PAGE.search(text)
+            and href.startswith("http")
+            and href not in known
+            and not FILE_SUFFIX.search(urlsplit(href).path)
+        ):
+            return (
+                f"tender page {tender['url']} links to {text!r} ({href}) but documents_page is not set. If that"
+                " page lists the tender's files (often more than the notice), set documents_page to that link"
+                " and documents to the file links there"
+            )
+    return None
+
+
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
+    sample = tenders
+    if recipe.detail and (recipe.documents or recipe.documents_by_host):
+        sample = [t for t in tenders if not t.get("_documentDetailPending")] or tenders
     problem = check(tenders)
     document_warnings = []
     if not problem:
         problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
+        if hint := await _document_page_hint(recipe, sample, fetcher):
+            document_warnings.append(hint)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     warnings.extend(document_warnings)
-    if (recipe.documents or recipe.documents_by_host) and not any(t["_documentUrls"] for t in tenders):
-        warnings.append("no document links found in the sample: check documents/documents_page")
     return {
         "problem": problem,
         "warnings": warnings,
         "tenderCount": len(tenders),
         "withDocumentLinks": sum(bool(t["_documentUrls"]) for t in tenders),
-        "sample": tenders[:3],
+        "sample": sample[:3],
     }
 
 
@@ -278,10 +344,10 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
             ):
                 return f"BINARY FILE ({kind or 'unknown type'}, {len(resp.content)} bytes): a downloadable document", None
         if name == "fetch_page":
-            return f"URL: {resp.url}\n{_chunk(simplify(resp.text), args.get('offset', 0))}", None
+            return f"URL: {resp.url}\n{_page_content(resp.text, args.get('offset', 0))}", None
         if name == "render_page":
             html, calls, final = await render(args["url"], fetcher)
-            return f"URL: {final}\n{_chunk(simplify(html), 0)}\nJSON responses: {json.dumps(calls)[:4000]}", None
+            return f"URL: {final}\n{_page_content(html)}\nJSON responses: {json.dumps(calls)[:4000]}", None
         if name == "fetch_json":
             return _chunk(resp.text, args.get("offset", 0)), None
         if name == "scan_scripts":
