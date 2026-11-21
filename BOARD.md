@@ -789,7 +789,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:**
 
 ### B-52 Multi-step document downloads
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** open
 - **Problem:** Some portals don't link files directly: you request a ZIP of all documents (often POST), wait while it's prepared, poll a status URL, then download; or a link leads to a short-lived token URL.
 - **Idea:** Declarative steps on documents: `prepare` (request, possibly POST the site itself made), `poll` (URL plus JSON path until ready, bounded), `download` (URL from the poll response). Respect the rate limit and download budget.
@@ -797,42 +797,42 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Derek-Codex-A: Doffin Dev notice 2026-118085 links to an external buyer page and then a public attachment page. Its rendered DOM offers individual download controls and a ZIP control, but none has an href; the static HTML has no file anchors. This is an observed B-52 case, with no confirmed login block.
 
 ### B-53 Fixed interaction sequences for listings and searches
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** open
 - **Problem:** Some listings only appear after a fixed sequence: accept a cookie banner, choose "all" in a filter, press Search, open a tab. As long as it's the same steps every time it can be replayed.
 - **Idea:** Declarative `actions` for browser listings and details: click (literal label or selector), select option, type a fixed value, press Enter, wait for settle. Same safety guards as B-43 (no submits of personal data, no downloads, robots per navigation), a small step cap, and the agent may only use actions it ran in render_page.
 - **Findings:**
 
 ### B-54 Session tokens and CSRF fields in requests
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** open
 - **Problem:** Search APIs and form posts often need a token from the page (CSRF field, anti-forgery header, session id in the body), which changes every visit; a stored POST body with an old token fails.
 - **Idea:** Recipe placeholders filled at read time from the start page: `{{token: <selector or JSON path on the listing page>}}` in body or headers; the page is fetched first in the same session (cookies kept). Never store the token in the recipe.
 - **Findings:**
 
 ### B-55 Cursor and token pagination
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** open
 - **Problem:** APIs often page with a cursor from the previous response (`nextPageToken`, `cursor`, `after`, a `Link: rel=next` header) rather than page numbers or next links.
 - **Idea:** Listing `next_from`: JSON path (or header name) of the next cursor in the response, and where to put it (query parameter or body path). Stop when absent.
 - **Findings:**
 
 ### B-56 RSS, Atom and XML listings
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** open
 - **Problem:** Many portals publish notices as RSS/Atom feeds or XML (sitemaps, OCDS/eForms XML). Recipes can only read HTML and JSON.
 - **Idea:** A `kind: xml` listing with XPath-like paths (or convert XML to the JSON shape and reuse dot paths). Feeds often carry title, link, date and id; documents come from the linked page.
 - **Findings:**
 
 ### B-57 ASP.NET WebForms postback paging
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** open
 - **Problem:** Older portals page and search with `__doPostBack`: each page is a POST of the whole form with `__VIEWSTATE` and `__EVENTTARGET`; there are no next links or page numbers in URLs.
 - **Idea:** Either a browser `actions` click on the pager (see the fixed-interaction item), or a declarative postback: take the form fields from the current page and set `__EVENTTARGET`/`__EVENTARGUMENT` from the pager link. Same-site only.
 - **Findings:**
 
 ### B-58 Listings and documents inside iframes
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** open
 - **Problem:** Some portals embed the tender list or the document list in an iframe from another host (often the procurement software vendor). Selectors on the outer page find nothing.
 - **Idea:** render_page reports iframes with their src; the agent can use the iframe URL as the listing or detail URL (same robots and rate rules per host).
@@ -846,7 +846,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:**
 
 ### B-60 Documents split by lot or folder
-- **Priority:** normal
+- **Priority:** high (reusable declarative scraping capability)
 - **Status:** claimed by Codex (Johanna Mac) 2026-11-21 07:52
 - **Last seen:** 2026-11-21 07:52
 - **Problem:** Tender documents are often grouped by lot or folder (lot pages, folder trees, "show more" lists), so one documents page shows only part of the files.
@@ -876,10 +876,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:**
 
 ### B-64 Dashboard: Refresh button can't be spammed
-- **Priority:** normal (UI)
+- **Priority:** high (Refresh availability and feedback)
 - **Status:** open
 - **Problem:** Refresh is clickable again immediately and while a run is in progress.
-- **Idea:** Disable the button while the portal has an unfinished run (the API returns the running runId), and for a short cooldown after a click; show "read in progress" with the run's start time.
+- **Idea:** Disable while submitting, while an unfinished run exists, or during a short cooldown. Give a visible reason and re-enable when eligible, including after a failure. Keep this UI work separate from the backend retry investigation.
 - **Findings:**
 
 ### B-65 API contract tests against the PDF's "Exact answers"
@@ -944,3 +944,17 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Storage cap and deleting files no tender references.
 - Redaction of secrets as a logging filter.
 - Self-improving codebase: when the agent meets a pattern the recipe format can't express (as with POST search APIs before B-18), it writes the missing mechanism as a pull request to this repo, with tests, for human or agent review. Never applied automatically.
+
+### B-72 Investigate and fix Refresh after a failed run
+- **Priority:** high (operator report, core Refresh reliability)
+- **Status:** open
+- **Problem:** An operator reported that Refresh may do nothing after a failure. Reproduce before assuming the cause.
+- **Idea:** Trace the dashboard POST through run creation and state transitions after a failed attach or repair. Verify an eligible retry starts a fresh run, active requests reuse the active run, and failures finalize so they cannot block later retries. Add a focused regression test. The disabled button and cooldown are B-64.
+- **Findings:**
+
+### B-73 Keep exploring public paths to tenders and documents before giving up
+- **Priority:** high (discovery reliability, complements B-49)
+- **Status:** open
+- **Problem:** The model can stop after an unsuccessful recipe or a narrow discovery path while viable public listing and document routes remain untried.
+- **Idea:** Encourage distinct public discovery paths and use feedback from failed candidates to guide the next probe. Separate discovery coverage from final tender/detail/file preview limits. Keep existing cost, request pacing, robots, and download safeguards. Test early give-up and a later successful candidate deterministically.
+- **Findings:**
