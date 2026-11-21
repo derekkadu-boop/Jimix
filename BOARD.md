@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:06 | B-40
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:21 | idle (B-40 done)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:07 | B-43
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:11 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:58 | B-20
@@ -179,6 +179,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | Find a Tender (UK) | lead-w2 | failed | 0 | 0 | USD 0.0728 | Retest with B-23 timeouts: slow pages (43-94 s) now load; one HTTP 429 after ~48 requests, then the agent gave up without testing a recipe (B-33).
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0684 | Fresh URL-only attach at 8f14869, 15 calls, final recipe document validation failed; Refresh unavailable.
   - Note (lead): Find a Tender notice pages answer a 118-byte `403 Forbidden` to our honest user agent, while the listing gives 200 and there is no robots.txt. That's bot filtering, not a login. Don't spoof user agents. The right route is its official public OCDS API (see B-39's hint: look for an official API when blocked).
+  - 2026-11-21 | TenderNed | lead-w1 | serving | 1000 | 158 (10 sampled tenders), refresh kept 159 | USD 0.0452 attach, USD 0 Refresh | none for documents; award notices count as open (B-47)
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -540,14 +541,25 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-40 JSON paths with [*] and [0] are not understood
 - **Priority:** high (a correct document recipe failed on syntax)
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:49 (fix + 2 reviews done, TenderNed retest running)
-- **Last seen:** 2026-11-21 06:06
+- **Status:** done (62bbb61)
+- **Last seen:** 2026-11-21 06:21
 - **Problem:** A fresh TenderNed attach found the per-tender JSON file list and tested
   `documents: {"path": "$.documenten[*].links.download.href"}`, the usual JSONPath form. Recipe dot paths
   only accept `path: "documenten"` plus `attribute: "links.download.href"`, so every test reported no
   document links and the agent gave up.
 - **Idea:** Accept `[*]` (map over a list) and `[N]` (index) in dot paths, anywhere in the path.
-- **Findings:**
+- **Findings:** Dot paths now accept `[*]` (map over a list or a dict's values, results flattened,
+  None dropped) and `[N]`, parsed once; a literal key named `*` still wins. Unsupported JSONPath (`..`,
+  `['k']`, filters, negative indexes) returns nothing at runtime, as before, so stored recipes can't start
+  failing, but test_recipe now reports it as a problem naming the path. `attribute` results are flattened,
+  and an `attribute` on items that are already scalars keeps them (the agent wrote
+  `$.documenten[*].links.download.href` plus `attribute: "href"`). Two reviewers (4 + 4 findings), all
+  fixed; 102 tests. **Unassisted result:** fresh DB, just `https://www.tenderned.nl/aankondigingen/overzicht`:
+  serving, 1000 tenders, the 10 sampled tenders got 158 real tender files (leidraad, bijlagen, nota's van
+  inlichtingen, prijzenbladen; 48 MB), 10 model calls, $0.045. Refresh: ok, 0 model calls, 78 s, 159 files
+  kept. The recipe the agent built by itself: JSON listing `publicaties?page=0&size=50`, detail.url
+  template, `documents_url` `.../publicaties/{id}/documenten` (found via the B-01 sibling probe) with
+  documents `$.documenten[*].links.download.href`.
 
 ### B-41 Preserve tenders when a listing index is truncated
 - **Priority:** high (unvisited categories can lose open status and stop receiving documents)
@@ -636,6 +648,17 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   complete, current environment-variable table (model and key, `OPENAI_BASE_URL`, cost and turn limits,
   download limits, timeouts, `WATCHTOWER_BROWSER_WS`, `JIMIX_DB`/`JIMIX_FILES`). Add a cost-per-portal
   section with real numbers. Remove stale instructions (old watchtower package, scheduler).
+- **Findings:**
+
+### B-47 Status mapped to a field that never changes
+- **Priority:** medium (correct fields)
+- **Status:** open
+- **Problem:** TenderNed (fresh unassisted attach, 1000 tenders): the agent mapped `status` to
+  `publicatiestatus.omschrijving`, which is "Gepubliceerd" for every notice, so award and prior-information
+  notices (e.g. "Aankondiging gegunde opdracht") count as open: 774 of 1000 open.
+- **Idea:** Generic test_recipe warning: if `status` (or any mapped field) has one identical value across
+  the whole sample, say so and suggest a field naming the notice type or stage. Award-type wording is already
+  in keywords.json (closed list).
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
