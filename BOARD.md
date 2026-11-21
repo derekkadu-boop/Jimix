@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:08 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:04 | B-25
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:13 | idle
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:00 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 in review (PR #7)
 
@@ -254,15 +254,15 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-25 Preserve ZIP-based Office documents as tender files
 - **Priority:** high (deliver the original tender document)
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:03
-- **Last seen:** 2026-11-21 04:04
+- **Status:** done (971451f)
+- **Last seen:** 2026-11-21 04:13
 - **Problem:** Live NRW notice 1138704 links to a public Vergabe-Westfalen specification DOCX.
   Jimix unpacks every ZIP signature, so it exposes the Word file's package XML and loses the
   original DOCX from the tender. Five source links produced 51 stored entries. A two-entry
   synthetic DOCX also reproduces this via documents._save.
 - **Idea:** Keep Office packages intact, still unpack ordinary ZIP bundles, and recheck cached
   results that previously exposed Office package internals. Test on NRW 1138704.
-- **Findings:**
+- **Findings:** Recognizes Office ZIP packages by their internal entries and stores them intact. Ordinary ZIP bundles still unpack, and existing cache records with Office internals are rechecked. Two Codex reviewers approved. All 45 backend tests and Ruff passed after integrating current main. Live NRW notice 1138704 recovered from 51 old entries to five files, including an intact 11,749,325-byte DOCX verified via the file API. Fresh unassisted attach from the previously unused Niedersachsen public listings page (https://vergabe.niedersachsen.de/Satellite/company/welcome.do) reached serving, read 400 tenders, and delivered 10 open-tender files for - **Findings:**.0777. That sample contained no Office files. The bare-domain redirect failure is tracked in B-28.
 
 ### B-26 Listings silently capped at max_pages
 - **Priority:** medium (tenders beyond the cap never get documents)
