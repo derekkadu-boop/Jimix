@@ -338,11 +338,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-24 Browser subresources skip robots.txt
 - **Priority:** low
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:56
-- **Last seen:** 2026-11-21 05:56
+- **Status:** in review (PR #14)
 - **Problem:** `browser.render` checks robots.txt for the page URL only; scripts and XHRs it loads are fetched without a robots check.
 - **Idea:** Check `fetcher.allowed()` for same-site XHR/fetch requests in the route handler.
-- **Findings:**
+- **Findings:** PR #14 enforces cached robots rules for intercepted same-origin browser Fetch/XHR before cache or network. Chromium proves allowed data still yields a file link while the denied request never reaches the fixture. Two reviews, all 99 backend tests and Ruff pass. Broader cross-origin and service worker coverage is unchanged.
 
 ### B-25 Preserve ZIP-based Office documents as tender files
 - **Priority:** high (deliver the original tender document)
