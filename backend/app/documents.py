@@ -83,7 +83,9 @@ async def fetch_documents(
             downloaded = await fetcher.download(url, FILES_DIR)
             budget = MAX_RUN_DOWNLOAD_BYTES - fetcher.downloaded
             saved, unpacked = await asyncio.to_thread(_save, *downloaded, budget)
-            documents.extend(saved)
+            for doc in saved:
+                if all(doc["sha256"] != known["sha256"] for known in documents):
+                    documents.append(doc)
             fetcher.downloaded += unpacked
         except BudgetExceeded:
             return documents, False, None
