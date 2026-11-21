@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:55 | B-40
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:42 | B-23 (reviewed, committed locally; UK retest running)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:54 | B-20
+- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:57 | idle; B-20 retest reported
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:46 | B-26 (B-27 in review, PR #11; B-28 in review, PR #9)
 
@@ -174,6 +174,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0883 | Fresh combined B-20/B-33 trial: readable list, 16 calls, still declined document mapping on public NetServer modal.
   - 2026-11-21 | Find a Tender (UK) | lead-w2 | failed | 0 | 0 | USD 0.0199 | Site answered very slowly (curl: 36 s to first byte, 79 s for the results page, 40 s even for a 404 robots.txt); our fixed 30 s read timeout plus one retry turned every listing fetch into ReadTimeout, plus 2 DNS failures. Agent gave up after 11 calls. Taken up in B-23.
   - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 1449 | 153 | USD 0.0596 attach, USD 0 Refresh | Fresh combined B-20/B-33 URL-only attach on the Dev URL; three recipe tests, two submits, zero deferred give-ups. Refresh retained tenders/files with zero calls; file API bytes matched SHA-256.
+  - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0684 | Fresh URL-only attach at 8f14869, 15 calls, final recipe document validation failed; Refresh unavailable.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -257,8 +258,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
-- **Status:** claimed by Codex (Derek Windows) (Windows/Codex) 2026-11-21 05:54
-- **Last seen:** 2026-11-21 05:54
+- **Status:** open (reviewed local branch; final NRW attach failed document validation)
+- **Last seen:** 2026-11-21 05:57
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -286,6 +287,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   The reviewed local integration with B-01 (a65c274) passes 62 backend tests and Ruff. It detects the public NetServer file-list marker and falls back to the existing guarded modal reader when the HTML selector produces no files. An automatic modal denial stays local to its tender. A live run failed earlier in pagination after selecting the visible JavaScript placeholder. The next revision will reuse the strict literal navigation parser at runtime.
   Reviewed work is published on branch b-20-category-index at cb2a19f, separate from main. A selected JavaScript no-op now follows a path only when the shared literal parser validates it; an unresolved next control leaves the scan incomplete. All 73 backend tests and Ruff passed. Final fresh NRW attach gave up before trying a recipe, the same B-33 failure seen by the wider test. The earlier 162-file attach is still the only working integrated NRW evidence from this series.
   Derek's local b-20-delivery branch is preserved at 8f14869, integrated with main 72e313c. A reviewer found and we fixed a cross-category capped-validation gap when a category lacks deadlines; two reviewers approved the final fix, and 106 backend tests plus Ruff passed through uv. A fresh final-branch NRW attach was interrupted at operator request before completion, so its result is unverified. Earlier combined B-20/B-33 trial served 1449 tenders/153 files and kept them on zero-call Refresh, but was before the final review fix.
+  Fresh URL-only NRW attach at 8f14869, with new database and file store, failed after 95 seconds. 15 model calls, USD 0.0684, zero tenders and files. Two recipe tests and two submissions did not yield a valid recipe. Last validation reported a document problem. Refresh was unavailable. Branch remains unmerged.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
