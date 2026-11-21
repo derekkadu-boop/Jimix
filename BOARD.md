@@ -98,6 +98,29 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   with a cached-response toggle for repeats; `fetch_page` returning an outline first.
 - **Findings:**
 
+### B-13 Document links that return an HTML page are silently dropped
+- **Priority:** high (documents are the core feature)
+- **Status:** open
+- **Problem:** `Fetcher.download` (`backend/app/fetch.py`) returns `None` when a document URL answers with
+  HTML (a landing or "download" page) or a file over `MAX_FILE_BYTES`. `fetch_documents` then keeps
+  `complete=True`, so the tender is stored with 0 files, marked `_documentsComplete`, and never retried
+  on refresh. Nothing in the run reason or logs says why.
+- **Idea:** count those URLs as skipped (with a reason: "HTML page", "over size limit") and keep
+  `complete` false for HTML answers; surface the count in the run reason like the existing
+  "No document links found" note. Unit test with a mock transport.
+- **Findings:**
+
+### B-14 Dashboard: show per-tender document state
+- **Priority:** high (part of "Done means": the operator sees what happened)
+- **Status:** open
+- **Problem:** the tender card (`frontend/public/dashboard.js`, around line 284) shows "No document records
+  supplied." both when a tender has no document links and when files are still pending (capped by
+  `WATCHTOWER_MAX_DETAILS`, blocked, budget hit). `GET /portals/{id}/tenders` drops every `_`-prefixed key,
+  so `_documentUrls` and `_documentsComplete` never reach the dashboard.
+- **Idea:** expose a public `documentsStatus` (e.g. `complete`, `pending`, `none`) and the source document
+  URLs in the tender API; show "n files", "pending, next refresh" or "no document links" on the card.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.

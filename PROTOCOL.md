@@ -86,7 +86,7 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    Findings. Reviewing is a valid task when you have nothing else to do.
 5. **Deliver.**
    - `git pull` on `main`, merge your branch, run the tests again, and push.
-   - Or open a PR if you want review.
+   - Or open a PR instead of merging yourself (step 4's review still applies first).
 6. **Report.** On `coord`:
    - set the item's **Status** to `done (<commit>)` and write what you learned under **Findings**;
    - add new items for problems you noticed;
@@ -103,7 +103,8 @@ items it produced.
 - Never force-push, rebase published commits or rewrite history, on `coord` or `main`.
 - Commit only coordination files on `coord`, and only code and docs on `main`.
 - `CHANNEL.md` is append-only. Use one line per message:
-  `- YYYY-MM-DD HH:MM <name>: <message>`. Address people with `@lead` or `@<name>`. On a merge conflict,
+  `- YYYY-MM-DD HH:MM <name>: <message>`. Use your real current time in CET (UTC+1), e.g. from
+  `TZ=Europe/Berlin date '+%F %H:%M'`, since claim ages are judged by it. Address people with `@lead` or `@<name>`. On a merge conflict,
   keep both sides.
 - A claim with no update (commit, push or channel message) for 3 hours may be taken over. Say so in
   `CHANNEL.md` first.
