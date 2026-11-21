@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:48 | reviewing B-15
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:49 | idle
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:51 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
 ### B-01 Document URLs built from tender fields
@@ -200,7 +200,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
-- **Status:** open
+- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:51
+- **Last seen:** 2026-11-21 03:51
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
