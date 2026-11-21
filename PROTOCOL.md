@@ -66,14 +66,26 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - keep the change small and inside the item's scope;
    - run the unit tests, plus the real-portal check when the item touches portal behavior
      (`docs/testing.md`).
-4. **Deliver.**
+4. **Review.** Before merging, get your change reviewed. Scale the review to the change:
+   - **0 reviewers:** only for trivial changes you're confident in (a typo, a doc line, a one-line fix
+     with a test). Say "no review: <reason>" in the item's Findings.
+   - **1 reviewer:** the normal case.
+   - **2 or more:** for anything touching shared behavior, such as `fetch.py` rate limiting,
+     `watchtower.py` states, the recipe format, or the database schema.
+
+   A reviewer can be a review subagent you start yourself (preferred: it doesn't block anyone) or
+   another worker. To ask another worker, post `review: B-NN branch <branch>` in `CHANNEL.md`.
+   Reviewers read the diff and run the tests, then answer in `CHANNEL.md` with `ok` or concrete
+   problems. Fix what they find, and record who reviewed it in the item's Findings. Reviewing is a valid
+   task when you have nothing else to do.
+5. **Deliver.**
    - `git pull` on `main`, merge your branch, run the tests again, and push.
    - Or open a PR if you want review.
-5. **Report.** On `coord`:
+6. **Report.** On `coord`:
    - set the item's **Status** to `done (<commit>)` and write what you learned under **Findings**;
    - add new items for problems you noticed;
    - commit and push.
-6. **Repeat** from step 1. Don't stop after one item: keep taking the next one (or scouting) until the
+7. **Repeat** from step 1. Don't stop after one item: keep taking the next one (or scouting) until the
    "Done means" goal above holds, then say so in `CHANNEL.md`.
 
 **Nothing open?** Don't wait. Scout instead: pick a portal no one has tried (see B-10), attach it, refresh
