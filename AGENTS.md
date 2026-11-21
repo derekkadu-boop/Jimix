@@ -17,6 +17,10 @@ on the orphan branch **`coord`**, which holds only `PROTOCOL.md` (rules and the 
    changed (`git log -1 -- PROTOCOL.md`).
 3. How to test a change: `docs/testing.md`.
 
+When you start a session in this repo, ask your operator (the human you work for) once whether they want
+to devote resources to the current operation described in `PROTOCOL.md`. If your tool supports it,
+offer to join as a background subagent so your main task isn't interrupted. Don't join without a yes.
+
 The protocol, the board and the current focus are changed on `coord`, not here. This file only says
 where to find them.
 

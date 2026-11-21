@@ -77,6 +77,45 @@ def test_add_portal_persists_rdap_city_and_country(backend, monkeypatch, tmp_pat
     ]
 
 
+def test_refresh_portal_updates_registration_and_keeps_last_known_location(backend, monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    main, registration = backend
+    monkeypatch.setattr(main.db, "DB_PATH", tmp_path / "jimix.db")
+    url = "https://procurement.example.invalid/"
+    locations = iter([
+        registration.RegistrationLocation("Paris", "France", "FR", 48.85, 2.35),
+        registration.RegistrationLocation("Brussels", "Belgium", "BE", 50.85, 4.35),
+        None,
+    ])
+
+    async def lookup_registration(address):
+        assert address == url
+        return next(locations)
+
+    monkeypatch.setattr(main, "lookup_registration", lookup_registration)
+    with TestClient(main.app) as client:
+        portal_id = client.post("/portals", json={"url": url}).json()["id"]
+        portal = f"/portals/{portal_id}"
+        assert client.get(portal).json()["location"]["city"] == "Paris"
+
+        assert client.post("/portals/missing/refresh").status_code == 404
+        response = client.post(f"{portal}/refresh")
+        assert response.status_code == 202
+        assert response.json() == {"runId": "test-run"}
+        refreshed = client.get(portal).json()["location"]
+        assert refreshed == {
+            "city": "Brussels",
+            "country": "Belgium",
+            "countryCode": "BE",
+            "latitude": 50.85,
+            "longitude": 4.35,
+        }
+
+        assert client.post(f"{portal}/refresh").status_code == 202
+        assert client.get(portal).json()["location"] == refreshed
+
+
 def test_delete_portal_cascades_only_its_records(backend, monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
 

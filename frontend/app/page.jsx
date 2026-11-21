@@ -52,7 +52,7 @@ export default function Dashboard() {
             <div className="portal-detail-top">
               <div id="details"><div className="detail-empty"><Inbox size={22} aria-hidden="true" /><h2>Select a portal</h2><p>Choose a portal to review tenders and run history.</p></div></div>
               <div className="portal-actions" id="controls" role="group" aria-label="Selected portal actions" hidden>
-                <button id="check" hidden>Refresh now</button><button type="button" id="remove" className="danger delete-action" hidden><Trash2 size={15} aria-hidden="true" /> Delete portal</button>
+                <button id="check" type="button" title="Recheck registration and reload saved tenders and run history" hidden>Refresh now</button><button type="button" id="remove" className="danger delete-action" hidden><Trash2 size={15} aria-hidden="true" /> Delete portal</button>
               </div>
             </div>
             <p id="action-message" role="status"></p>

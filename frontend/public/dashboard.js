@@ -561,6 +561,7 @@
     renderDetail()
     try {
       await request(`${path(p)}/refresh`,{method:'POST'})
+      mutation++
       if (selected === id) text('action-message','Refresh requested.')
       for (const store of Object.values(data)) if (store.has(id)) store.get(id).attempt = 0
       void load()

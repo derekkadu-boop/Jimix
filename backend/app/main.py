@@ -60,6 +60,12 @@ def save_portal_location(portal_id: str, location: RegistrationLocation) -> None
             INSERT INTO portal_location (portal_id, city, country, country_code, latitude, longitude)
             SELECT id, :city, :country, :country_code, :latitude, :longitude
             FROM portal WHERE id = :portal_id
+            ON CONFLICT(portal_id) DO UPDATE SET
+                city = excluded.city,
+                country = excluded.country,
+                country_code = excluded.country_code,
+                latitude = excluded.latitude,
+                longitude = excluded.longitude
             """,
             {"portal_id": portal_id, **asdict(location)},
         )
@@ -118,8 +124,11 @@ async def delete_portal(portal_id: str, conn: Conn):
 
 
 @app.post("/portals/{portal_id}/refresh", status_code=202)
-async def refresh_portal(portal_id: str, conn: Conn):
-    require_portal(conn, portal_id)
+async def refresh_portal(portal_id: str, conn: Conn, background_tasks: BackgroundTasks):
+    row = conn.execute("SELECT url FROM portal WHERE id = ?", (portal_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Portal not found")
+    background_tasks.add_task(enrich_portal_location, portal_id, row["url"])
     return {"runId": watchtower.start(portal_id)}
 
 
