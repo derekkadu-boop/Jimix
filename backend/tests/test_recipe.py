@@ -1048,3 +1048,30 @@ def test_refresh_does_not_repair_after_a_temporary_failure(monkeypatch, tmp_path
         assert "temporary error" in portal_row["reason"]
     assert [tuple(r) for r in runs] == [("read", "failed")]
     assert repairs == 0
+
+
+def test_detail_click_renders_the_tab_before_reading_documents(monkeypatch):
+    with pytest.raises(ValueError, match="detail.click needs detail.kind browser"):
+        Recipe.model_validate(RECIPE | {"detail": {"click": "Documents"}})
+    rendered = []
+
+    async def fake_render(url, fetcher, *, require_stable, click):
+        rendered.append((url, click.pattern if click else None))
+        return '<a class="doc" href="/files/spec.pdf">Bestek</a>', [], url
+
+    monkeypatch.setattr(recipes, "render", fake_render)
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"next_page": None},
+        "detail": {"kind": "browser", "click": "  Tender   Documents "},
+    })
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(portal))
+        try:
+            return await apply(recipe, fetcher, max_details=1)
+        finally:
+            await fetcher.close()
+
+    tenders, _ = asyncio.run(run())
+    assert rendered == [("https://portal.example/t/1", re.escape("tender documents"))]
+    assert tenders[0]["_documentUrls"] == ["https://portal.example/files/spec.pdf"]

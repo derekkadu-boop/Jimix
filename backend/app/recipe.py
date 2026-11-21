@@ -69,6 +69,13 @@ class Detail(BaseModel):
     kind: Kind = "html"
     url: str | None = None
     fields: dict[str, Selector] = {}
+    click: str | None = Field(None, min_length=2, max_length=60)
+
+    @model_validator(mode="after")
+    def check_click(self):
+        if self.click and self.kind != "browser":
+            raise ValueError("detail.click needs detail.kind browser")
+        return self
 
 
 class DocumentsUrl(BaseModel):
@@ -190,9 +197,10 @@ def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
     return out
 
 
-async def _load(kind: Kind, url: str, fetcher: Fetcher):
+async def _load(kind: Kind, url: str, fetcher: Fetcher, click: str | None = None):
     if kind == "browser":
-        html, _, final = await render(url, fetcher, require_stable=True)
+        pattern = re.compile(re.escape(" ".join(click.split()).casefold())) if click else None
+        html, _, final = await render(url, fetcher, require_stable=True, click=pattern)
         return BeautifulSoup(html, "html.parser"), final
     resp = await fetcher.get(url)
     if kind == "json":
@@ -271,7 +279,7 @@ async def apply(
         if detail_url:
             attempted += 1
             try:
-                page, base = await _load(recipe.detail.kind, detail_url, fetcher)
+                page, base = await _load(recipe.detail.kind, detail_url, fetcher, recipe.detail.click)
             except Blocked as exc:
                 blocked.append(str(exc))
                 continue
