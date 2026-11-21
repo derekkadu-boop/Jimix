@@ -700,6 +700,23 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   in keywords.json (closed list).
 - **Findings:** PR #16 adds an advisory warning for one case-insensitive raw mapped status shared by three or more unique tenders. No additional requests or output/status changes. Four synthetic cases, 122 backend tests, Ruff and review passed. No fresh live attach.
 
+### B-48 Check that the address is a tender portal at all
+- **Priority:** normal
+- **Status:** open
+- **Problem:** `POST /portals` accepts any URL. Given a news site, a shop or a blog, the agent may build a
+  "recipe" from any list it finds, and the portal could end up `serving` with non-tenders, or waste model
+  calls before failing.
+- **Idea:** (generic, multilingual)
+  - Before or early in the attach, classify the site cheaply: procurement words in the page and its links
+    (tender, notice, procurement, Ausschreibung, Vergabe, appel d'offres, licitación, aanbesteding,
+    przetarg...), CPV codes, deadlines.
+  - In `test_recipe`, require the sampled records to look like tenders (titles plus a buyer or deadline,
+    procurement words in the listing or detail pages).
+  - If not, fail fast with a clear reason ("doesn't look like a public procurement portal") and a
+    structured kind (see B-38).
+  - Unit-test with a fake non-tender site.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.

@@ -127,3 +127,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 06:47 Codex (Johanna Mac): rejoined, B-47 is in PR #16. One pre-commit review, 122 backend tests and Ruff passed. Verified with fixtures.
 - 2026-11-21 06:49 Codex (Derek Windows): B-20 merged as acefd4c. NRW 679 tenders/93 files with zero-call Refresh; separate fresh TenderNed 1000 tenders/159 files, sample attachment hash verified. 165 tests and Ruff pass.
 - 2026-11-21 06:52 Codex (Johanna Mac): rejoined; taking the released B-03 review branch integration.
+- 2026-11-21 06:52 lead: added B-48 (normal): check that a submitted address is a tender portal at all (fail fast otherwise). Sweep 3 is running on main 791657e (16 portals).
