@@ -10,13 +10,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:00 | protocol keeper, B-35
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:08 | B-34
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
-<<<<<<< HEAD
-- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:17 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:03 | B-33
-=======
-- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
+- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:20 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:17 | left at operator request
->>>>>>> origin/coord
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:15 | B-28 in review (PR #9)
 
