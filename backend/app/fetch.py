@@ -8,8 +8,7 @@ import time
 import uuid
 from email.message import Message
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
-from urllib.robotparser import RobotFileParser
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
@@ -25,7 +24,16 @@ MAX_FILE_BYTES = int(os.environ.get("WATCHTOWER_MAX_FILE_MB", "250")) * MB
 MAX_RUN_DOWNLOAD_BYTES = int(os.environ.get("WATCHTOWER_MAX_RUN_DOWNLOAD_MB", "1000")) * MB
 OVERSIZE_SKIP = "over size limit"
 DOCUMENT_HTML_PROBE_BYTES = 64 * 1024
-CAPTCHA_MARKERS = ("g-recaptcha", "h-captcha", "cf-turnstile", "captcha")
+CAPTCHA_WIDGETS = (
+    ".g-recaptcha:not([data-size=invisible]), .h-captcha:not([data-size=invisible]), .cf-turnstile,"
+    " #challenge-form, #challenge-running, #cf-challenge-running, .cf-browser-verification,"
+    " iframe[src*=hcaptcha], iframe[src*='recaptcha/api2/bframe'], iframe[src*=turnstile],"
+    " script[src*=captcha-delivery], iframe[src*=captcha-delivery]"
+)
+CHALLENGE_TEXT = re.compile(
+    r"captcha|verify (that )?you are (a )?human|checking your browser|are you a robot|not a robot"
+)
+CAPTCHA_NOTICE = re.compile(r"protected by (re)?captcha|recaptcha privacy|recaptcha terms")
 LOGIN_PATH = re.compile(r"/(login|signin|sign-in|anmelden|sso|oauth|auth)(\b|/)", re.IGNORECASE)
 
 
@@ -94,18 +102,87 @@ def block_reason(status: int, headers, requested: str, final: str, html: str | N
         return "access denied (HTTP 403)"
     if headers.get("cf-mitigated") == "challenge":
         return "bot challenge"
+    if (waf := headers.get("x-amzn-waf-action")) in ("challenge", "captcha"):
+        return f"bot challenge (AWS WAF {waf})"
     if LOGIN_PATH.search(urlsplit(final).path) and not LOGIN_PATH.search(urlsplit(requested).path):
         return "login required (redirected to a login page)"
     if html is None:
         return None
-    lower = html.lower()
-    if len(BeautifulSoup(html, "html.parser").get_text(" ", strip=True)) > 1500:
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(" ", strip=True)
+    if len(text) > 1500:
         return None
-    if any(marker in lower for marker in CAPTCHA_MARKERS):
-        return "captcha"
-    if 'type="password"' in lower:
+    for badge in soup.select(".grecaptcha-badge"):
+        badge.decompose()
+    if widget := soup.select_one(CAPTCHA_WIDGETS):
+        label = " ".join([widget.name, *(widget.get("class") or [widget.get("id") or ""])]).strip()
+        return f"captcha ({label[:60]})"
+    if CHALLENGE_TEXT.search(CAPTCHA_NOTICE.sub("", text.lower())):
+        return "captcha (page text)"
+    if soup.select_one("input[type=password]"):
         return "login required (login form)"
     return None
+
+
+UNRESERVED = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
+
+def _canon(text: str) -> str:
+    def decode(m):
+        char = chr(int(m[0][1:], 16))
+        return char if char in UNRESERVED else m[0].upper()
+
+    return re.sub(r"%[0-9a-fA-F]{2}", decode, quote(text, safe="!#$%&'()*+,/:;=?@[]~"))
+
+
+def parse_robots(text: str, agent: str = USER_AGENT) -> list[tuple[str, bool]]:
+    groups, current, in_agents = [], None, False
+    for line in text.lstrip("\ufeff").split("\n"):
+        key, _, value = line.split("#", 1)[0].partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if key == "user-agent":
+            if not in_agents:
+                current = ([], [])
+                groups.append(current)
+            if value:
+                current[0].append(value.lower())
+            in_agents = True
+        elif key in ("allow", "disallow") and current is not None:
+            in_agents = False
+            if value:
+                current[1].append((_canon(value), key == "allow"))
+    name = agent.split("/")[0].lower()
+    own = [rules for agents, rules in groups if name in agents]
+    chosen = own or [rules for agents, rules in groups if "*" in agents]
+    return [rule for rules in chosen for rule in rules]
+
+
+def _rule_matches(pattern: str, path: str) -> bool:
+    anchored = pattern.endswith("$")
+    parts = pattern.removesuffix("$").split("*")
+    if not path.startswith(parts[0]):
+        return False
+    pos = len(parts[0])
+    if len(parts) == 1:
+        return not anchored or pos == len(path)
+    for part in parts[1:-1]:
+        pos = path.find(part, pos)
+        if pos < 0:
+            return False
+        pos += len(part)
+    if anchored:
+        return path.endswith(parts[-1]) and len(path) - len(parts[-1]) >= pos
+    return path.find(parts[-1], pos) >= 0
+
+
+def robots_allows(rules: list[tuple[str, bool]], url: str) -> bool:
+    parts = urlsplit(url)
+    path = _canon((parts.path or "/") + (f"?{parts.query}" if parts.query else ""))
+    best = None
+    for pattern, allow in rules:
+        if _rule_matches(pattern, path) and (best is None or (len(pattern), allow) > best):
+            best = (len(pattern), allow)
+    return best is None or best[1]
 
 
 def _file_name(resp: httpx.Response) -> str:
@@ -131,14 +208,15 @@ class Fetcher:
             event_hooks={"request": [self._before_request], "response": [self._after_response]},
         )
         self.check_hosts = transport is None
-        self.robots: dict[str, RobotFileParser] = {}
+        self.robots: dict[str, list[tuple[str, bool]]] = {}
         self.playwright = None
         self.browser = None
         self.blocks: list[str] = []
         self.downloaded = 0
         self.assets: dict[str, tuple] = {}
 
-    def blocked(self, reason: str) -> Blocked:
+    def blocked(self, reason: str, url: str = "") -> Blocked:
+        log.info("blocked %s: %s", url, reason)
         self.blocks.append(reason)
         return Blocked(reason)
 
@@ -166,20 +244,22 @@ class Fetcher:
             raise ValueError(f"not an absolute http(s) URL: {url!r}")
         root = f"{parts.scheme}://{parts.netloc}"
         if root not in self.robots:
-            parser = RobotFileParser()
             try:
                 resp = await self.client.get(root + "/robots.txt")
             except httpx.HTTPError:
-                parser.allow_all = True
+                rules = []
             else:
                 if resp.status_code in (401, 403):
-                    parser.disallow_all = True
-                elif resp.status_code >= 400:
-                    parser.allow_all = True
+                    rules = [("/", False)]
+                elif resp.status_code >= 400 or resp.text.lstrip("\ufeff \t\r\n").startswith("<"):
+                    rules = []
                 else:
-                    parser.parse(resp.text.splitlines())
-            self.robots[root] = parser
-        return self.robots[root].can_fetch(USER_AGENT, url)
+                    rules = parse_robots(resp.text)
+            self.robots[root] = rules
+        if not robots_allows(self.robots[root], url):
+            log.info("robots.txt of %s disallows %s", root, url)
+            return False
+        return True
 
     async def get(self, url: str) -> httpx.Response:
         if not await self.allowed(url):
@@ -190,7 +270,7 @@ class Fetcher:
             resp = await self.client.get(url)
         html = resp.text if "html" in resp.headers.get("content-type", "") else None
         if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
-            raise self.blocked(reason)
+            raise self.blocked(reason, url)
         resp.raise_for_status()
         return resp
 
