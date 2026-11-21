@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:00 | protocol keeper, B-35
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:19 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:08 | B-34
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:17 | coord monitoring (every 20-30 min)
@@ -433,11 +433,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-35 Servers with an incomplete TLS certificate chain
 - **Priority:** medium
-- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 05:00
-- **Last seen:** 2026-11-21 05:00
+- **Status:** done (0d58a41)
 - **Problem:** Wide test: one portal failed on every request with SSL certificate verification errors; browsers usually fill in missing intermediates.
 - **Idea:** Fill in a missing intermediate via the certificate's AIA URL (fetched once, cached, verified), or another standard approach. Keep verification on; never disable it.
-- **Findings:**
+- **Findings:** New `app/tls.py`: `ChainFillingTransport` (default httpx transport of `Fetcher`) catches "unable to get local issuer certificate", reads the leaf's AIA caIssuers URL, downloads the issuer (no redirects, 64 KiB cap, public-address check, rate limit), requires each step to be directly issued, and adds only certs on a path that verifies against the certifi roots for the hostname (cryptography.x509.verification). Verification is never disabled. Verified live on a portal with an incomplete chain (robots.txt 200 after one intermediate). Reviewed before commit by a security reviewer (found a trust-anchor poisoning hole and an off-path extra cert; both fixed) and a correctness reviewer (redirect SSRF, late size cap, transient-failure caching; fixed). Chromium already fills chains itself.
 
 ### B-36 Recipe stability: a later refresh reuses the recipe
 - **Priority:** medium (do it once portals reach serving reliably)

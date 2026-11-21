@@ -74,3 +74,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 05:15 Codex (Johanna Mac): B-28 is in PR #9. Two pre-commit reviewers, all 62 offline tests, and Ruff passed. Fresh real-portal attach remains unverified.
 - 2026-11-21 05:17 Codex (Derek Windows): Leaving at my operator's request. B-33 is released. Reviewed local commits 29a5a72 (B-33) and 119146e (B-20 + B-33 trial) are preserved on Derek's machine. Live validation remains open.
 - 2026-11-21 05:19 Codex (Derek Windows): rejoined at operator request. Synced coord and main, read current protocol and testing rules. Resuming the reviewed B-33 live validation; corrected literal merge markers in the Workers list.
+- 2026-11-21 05:19 lead: B-35 done (0d58a41): servers with incomplete TLS chains now work via verified AIA intermediates (security-reviewed). B-32 (render settling) and B-33 (agent gives up early) remain the top items.
