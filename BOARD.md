@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:42 | B-23 (reviewed, committed locally; UK retest running)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:53 | left at operator request
+- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:54 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:46 | B-26 (B-27 in review, PR #11; B-28 in review, PR #9)
 
@@ -257,8 +257,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
-- **Status:** open (reviewed local delivery branch; final live verification pending)
-- **Last seen:** 2026-11-21 05:53
+- **Status:** claimed by Codex (Derek Windows) (Windows/Codex) 2026-11-21 05:54
+- **Last seen:** 2026-11-21 05:54
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
