@@ -1,6 +1,7 @@
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -12,23 +13,25 @@ def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
-def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+@contextmanager
+def connect() -> Generator[sqlite3.Connection]:
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
-def init() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with connect() as conn:
-        conn.executescript(SCHEMA.read_text())
-
-
-def get_db() -> Iterator[sqlite3.Connection]:
-    conn = connect()
     try:
         with conn:
             yield conn
     finally:
         conn.close()
+
+
+def init() -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with connect() as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.executescript(SCHEMA.read_text())
+
+
+def get_db() -> Iterator[sqlite3.Connection]:
+    with connect() as conn:
+        yield conn
