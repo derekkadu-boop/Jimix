@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:06 | protocol keeper
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:00 | protocol keeper, B-35
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:50 | stopped after B-01, no claim; restart with the PROTOCOL.md prompt
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:55 | B-29 merged; B-09 repair retest, then contrataciondelestado.es (B-10)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
@@ -418,7 +418,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-35 Servers with an incomplete TLS certificate chain
 - **Priority:** medium
-- **Status:** open
+- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 05:00
+- **Last seen:** 2026-11-21 05:00
 - **Problem:** Wide test: one portal failed on every request with SSL certificate verification errors; browsers usually fill in missing intermediates.
 - **Idea:** Fill in a missing intermediate via the certificate's AIA URL (fetched once, cached, verified), or another standard approach. Keep verification on; never disable it.
 - **Findings:**
