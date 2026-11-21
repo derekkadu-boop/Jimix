@@ -14,6 +14,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-30 NetServer detail navigation
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
+- Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:00 | B-42 Dev portal document validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:59 | B-05
 
@@ -588,7 +589,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** open (HTML hint slice merged via PR #15 in 7860ff2; broad validation and JS discovery open, see B-43)
+- **Status:** claimed by Codex (Derek Windows B-42) (subagent) 2026-11-21 07:00
+- **Last seen:** 2026-11-21 07:00
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
