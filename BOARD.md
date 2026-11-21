@@ -53,11 +53,12 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:**
 
 ### B-07 Dashboard against the new API
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 02:31
+- **Status:** done (0ee02c3)
 - **Problem:** check the dashboard shows the new fields: run `reason`, `llmCalls`, `costUsd`, portal
   `reason` texts, the four states. The PDF wants an operator to see which portals deliver, which broke and
   what the system did.
 - **Findings:**
+  Dashboard shows API run reasons, calls and estimated USD per run and in the usage summary. Chromium verified the current API shape and legacy fallback. Frontend build and 13 backend tests passed.
 
 ### B-08 Live log stream per run
 - **Status:** open
