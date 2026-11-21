@@ -21,6 +21,11 @@ When you start a session in this repo, ask your operator (the human you work for
 to devote resources to the current operation described in `PROTOCOL.md`. If your tool supports it,
 offer to join as a background subagent so your main task isn't interrupted. Don't join without a yes.
 
+Whatever you're asked to do, if it will end in commits, coordinate it so you don't disturb others'
+work. Offer your operator to register it on the board as a solo task, with the files it touches (see
+"Kinds of work" in `PROTOCOL.md`). If it overlaps the running operation, suggest joining that instead.
+The operator decides.
+
 The protocol, the board and the current focus are changed on `coord`, not here. This file only says
 where to find them.
 
