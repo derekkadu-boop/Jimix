@@ -13,7 +13,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:44 | B-65
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:48 | B-62
-- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:43 | B-04 unassisted NRW validation
+- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:50 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 07:24 | B-41 and B-05 in review
@@ -78,7 +78,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by Codex (Derek Windows) (Windows/Codex) 2026-11-21 07:29
-- **Last seen:** 2026-11-21 07:43
+- **Last seen:** 2026-11-21 07:50
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
@@ -92,6 +92,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Code is on main at 4665b28a. Reopened under the revised protocol for an unassisted attach
   that saves real files on a previously untested NetServer portal.
   Fresh URL-only attaches from Bremen and Baden-Wuerttemberg, started before the Dev-list update, reached public listings but saved no files. Bremen had no detail hrefs and exposes them through its own read-only row lookup (B-30). NRW remains the applicable Dev portal and is blocked on mixed-platform discovery (B-20).
+  Reviewed code is committed locally at 26e9873; 170 backend tests and Ruff pass. A 360-second fresh attach did not finish, and the next fresh attach failed before model calls because the API account reports no credits. B-04 live verification remains pending a funded API account.
 
 ### B-05 Prompt-injection hardening
 - **Status:** in review (PR #17, defensive prompt guidance)

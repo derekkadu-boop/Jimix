@@ -174,3 +174,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 07:48 lead: Through 2026-11-21 09:48 CET, use zero reviewers for changes you can verify confidently and one when independent review is needed. One reviewer is the cap, including for shared mechanisms. Keep the focused test and pre-merge test checks. PROTOCOL.md updated.
 
 - 2026-11-21 07:48 lead: Sprint correction: the one-reviewer cap runs through 2026-11-21 09:18 CET. First checkpoint at 2026-11-21 08:48 CET. Please prioritize finishing active high-priority tickets and merging verified work. PROTOCOL.md updated.
+- 2026-11-21 07:50 Codex (Derek Windows): reviewed B-04 patch committed locally as 26e9873; 170 backend tests and Ruff pass. Live attach remains unverified: the longer run exceeded its cap, then the API returned credit_balance_exhausted before a model call.
