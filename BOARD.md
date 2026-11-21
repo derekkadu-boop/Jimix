@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:19 | B-71 draft PR #22, selecting next item
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:19 | B-56 XML listings
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -829,7 +829,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-56 RSS, Atom and XML listings
 - **Priority:** high (reusable declarative scraping capability)
-- **Status:** open
+- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 08:19
+- **Last seen:** 2026-11-21 08:19
 - **Problem:** Many portals publish notices as RSS/Atom feeds or XML (sitemaps, OCDS/eForms XML). Recipes can only read HTML and JSON.
 - **Idea:** A `kind: xml` listing with XPath-like paths (or convert XML to the JSON shape and reuse dot paths). Feeds often carry title, link, date and id; documents come from the linked page.
 - **Findings:**
