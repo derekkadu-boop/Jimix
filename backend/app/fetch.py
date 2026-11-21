@@ -23,6 +23,7 @@ MB = 1024 * 1024
 MAX_FILE_BYTES = int(os.environ.get("WATCHTOWER_MAX_FILE_MB", "250")) * MB
 MAX_RUN_DOWNLOAD_BYTES = int(os.environ.get("WATCHTOWER_MAX_RUN_DOWNLOAD_MB", "1000")) * MB
 OVERSIZE_SKIP = "over size limit"
+DOCUMENT_HTML_PROBE_BYTES = 64 * 1024
 CAPTCHA_MARKERS = ("g-recaptcha", "h-captcha", "cf-turnstile", "captcha")
 LOGIN_PATH = re.compile(r"/(login|signin|sign-in|anmelden|sso|oauth|auth)(\b|/)", re.IGNORECASE)
 
@@ -194,25 +195,46 @@ class Fetcher:
             raise Blocked(f"robots.txt disallows {url}")
         part = folder / f".part-{uuid.uuid4().hex}"
         size = 0
-        async with self.client.stream("GET", url) as resp:
-            html = None
-            if "html" in resp.headers.get("content-type", "").lower():
-                html = (await resp.aread()).decode(errors="replace")
-            if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), html):
-                raise self.blocked(reason)
-            resp.raise_for_status()
-            if html is not None:
-                raise DocumentSkipped("HTML response", retryable=True)
-            with part.open("wb") as file:
-                async for chunk in resp.aiter_bytes():
-                    size += len(chunk)
-                    if size > limit:
-                        break
-                    file.write(chunk)
-        self.downloaded += min(size, limit)
-        if size > limit:
-            part.unlink()
-            if limit < MAX_FILE_BYTES:
-                raise BudgetExceeded
-            raise DocumentSkipped(OVERSIZE_SKIP, retryable=False)
-        return part, _file_name(resp)
+        saved = False
+        try:
+            async with self.client.stream("GET", url, headers={"Accept-Encoding": "identity"}) as resp:
+                is_html = "html" in resp.headers.get("content-type", "").lower()
+                if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), None):
+                    raise self.blocked(reason)
+                resp.raise_for_status()
+                if is_html:
+                    # Bound the wire prefix and avoid decoding compressed HTML into unbounded text.
+                    if resp.headers.get("content-encoding", "identity").lower() == "identity":
+                        prefix = bytearray()
+                        probe_limit = min(limit, DOCUMENT_HTML_PROBE_BYTES)
+                        if resp.is_stream_consumed:
+                            prefix.extend(resp.content[:probe_limit])
+                            size = len(resp.content)
+                        else:
+                            async for chunk in resp.aiter_raw():
+                                size += len(chunk)
+                                prefix.extend(chunk[:probe_limit - len(prefix)])
+                                if len(prefix) == probe_limit:
+                                    break
+                        if reason := block_reason(
+                            resp.status_code, resp.headers, url, str(resp.url), prefix.decode(errors="replace")
+                        ):
+                            raise self.blocked(reason)
+                    raise DocumentSkipped("HTML response", retryable=True)
+                with part.open("wb") as file:
+                    async for chunk in resp.aiter_bytes():
+                        size += len(chunk)
+                        if size > limit:
+                            break
+                        file.write(chunk)
+            if size > limit:
+                if limit < MAX_FILE_BYTES:
+                    raise BudgetExceeded
+                raise DocumentSkipped(OVERSIZE_SKIP, retryable=False)
+            name = _file_name(resp)
+            saved = True
+            return part, name
+        finally:
+            self.downloaded += min(size, limit)
+            if not saved:
+                part.unlink(missing_ok=True)
