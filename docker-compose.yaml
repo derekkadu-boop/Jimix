@@ -1,11 +1,25 @@
 services:
+  backend:
+    build: ./backend
+    init: true
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - jimix-data:/data
+    ports:
+      - "127.0.0.1:${JIMIX_BACKEND_PORT:-8000}:8000"
+
   frontend:
     build:
       context: ./frontend
       target: production
       args:
-        JIMIX_API_URL: ${JIMIX_API_URL:-http://host.docker.internal:8000}
+        JIMIX_API_URL: ${JIMIX_API_URL:-http://backend:8000}
     init: true
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${JIMIX_FRONTEND_PORT:-3000}:3000"
     healthcheck:
@@ -20,3 +34,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+
+volumes:
+  jimix-data:

@@ -102,6 +102,11 @@ def portal_out(row: sqlite3.Row) -> dict:
     return portal
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/portals")
 def list_portals(conn: Conn):
     return [portal_out(r) for r in conn.execute(PORTAL_SELECT + "ORDER BY p.created_at")]
