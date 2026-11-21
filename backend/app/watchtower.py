@@ -155,14 +155,27 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     known = {row["id"]: json.loads(row["data"]) for row in rows}
     if problem := check(tenders, sum(t["status"] == "open" for t in known.values())):
         raise Broken(problem)
-    fetched = blocked = pending = 0
+    fetched = cached = blocked = blocked_pages = pending = 0
     reason = None
     for tender in tenders:
         old = known.get(tender["id"])
+        tender.pop("_documentChecked", None)
+        if why := tender.pop("_documentBlock", None):
+            tender["documents"] = old.get("documents", []) if old else []
+            tender["_documentsComplete"] = False
+            fetched += 1
+            blocked += 1
+            blocked_pages += 1
+            reason = why
+            continue
         if old and old.get("_documentsComplete") and old.get("_documentUrls") == tender["_documentUrls"]:
             tender["documents"], tender["_documentsComplete"] = old["documents"], True
+            cached += bool(old["documents"])
             continue
-        if (blocked >= 5 and blocked == fetched) or (MAX_DETAILS is not None and fetched >= MAX_DETAILS):
+        if not recipe.documents_by_host and blocked >= 5 and blocked == fetched:
+            tender["_documentsComplete"] = False
+            continue
+        if MAX_DETAILS is not None and fetched >= MAX_DETAILS:
             tender["_documentsComplete"] = False
             continue
         docs, done, why = await fetch_documents(tender["_documentUrls"], fetcher)
@@ -172,14 +185,18 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         if why:
             blocked, reason = blocked + 1, why
     _save_tenders(portal_id, tenders, close_missing=complete)
-    if blocked and blocked * 2 >= fetched:
-        return len(tenders), f"documents: {reason} ({blocked} of {fetched} tenders)", ""
-    if missing := sum(not t["_documentUrls"] for t in tenders):
-        return len(tenders), None, f"No document links found for {missing} of {len(tenders)} tenders"
+    attempted = fetched + cached if recipe.documents_by_host else fetched
+    if blocked and blocked * 2 >= attempted:
+        return len(tenders), f"documents: {reason} ({blocked} of {attempted} tenders)", ""
+    notes = []
+    if blocked_pages:
+        notes.append(f"Document pages blocked for {blocked_pages} of {len(tenders)} tenders")
+    if missing := sum(not t["_documentUrls"] for t in tenders) - blocked_pages:
+        notes.append(f"No document links found for {missing} of {len(tenders)} tenders")
     if pending:
         log.info("portal %s: documents incomplete for %d tenders, %d MB downloaded", portal_id, pending,
                  fetcher.downloaded // 2**20)
-    return len(tenders), None, ""
+    return len(tenders), None, ". ".join(notes)
 
 
 async def _cycle(portal_id: str, run_id: str) -> None:

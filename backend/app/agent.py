@@ -84,11 +84,17 @@ A recipe is JSON:
   "documents": {{"path": "selector or dot path matching every document file link", "attribute": "href"}} or null,
   "documents_page": {{"path": "selector of the link from the tender page to its documents page",
                      "attribute": "href"}} or null,
+  "documents_by_host": {{"host.example": {{"files": {{"path": "selector of file links"}},
+                        "page": {{"path": "optional selector of a public documents-page link"}}}}}},
   "timezone": "IANA zone of the portal's local times, e.g. Europe/Berlin",
   "dayfirst": true when dates are written day first
 }}
 "attribute" reads an HTML attribute, or a key of each item when the dot path gives a list.
 Documents are read from the documents page, else the detail page when detail is set, else the row.
+When listings link to different document platforms, use documents_by_host with exact lowercase hostnames.
+If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
+match its destination host. Each matching rule may follow one public page link before reading files.
+Hosts without a rule use documents.
 CSS selectors are BeautifulSoup/soupsieve: use :-soup-contains("text"), not :contains.
 Fields: {", ".join(TENDER_FIELDS)}.
 id is the portal's own stable identifier (often a number in the tender URL, e.g. pattern "pid=(\\d+)").
@@ -167,31 +173,57 @@ def _chunk(text: str, offset: int) -> str:
     return text[offset:end] + more
 
 
-async def _document_problem(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> str | None:
-    if not recipe.documents:
-        return "documents is not set: map the document file links (use documents_page if they are on another page)"
-    urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))[:3]
+async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
+    if not (recipe.documents or recipe.documents_by_host):
+        return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
+    urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
+    warnings = []
+    if recipe.documents_by_host:
+        checked = [t for t in tenders if t.get("_documentChecked")]
+        for tender in checked:
+            if not tender["_documentUrls"]:
+                reason = tender.get("_documentBlock", "no file links")
+                warnings.append(f"tender {tender['id']}: {reason}")
+        if checked and all(t.get("_documentBlock") for t in checked):
+            return "all sampled tender document pages were blocked", warnings
+        by_host = {}
+        for url in urls:
+            by_host.setdefault(urlsplit(url).hostname, url)
+        if len(by_host) > 1:
+            urls = list(by_host.values())
+    urls = urls[:3]
     if not urls:
-        return None
-    blocked = None
+        return None, warnings
+    blocked, downloaded = None, False
     for url in urls:
         try:
-            docs, _, blocked = await fetch_documents([url], fetcher)
-        except Exception:  # noqa: BLE001, S112
-            continue
+            docs, _, why = await fetch_documents([url], fetcher)
+        except Exception:  # noqa: BLE001
+            docs, why = [], None
         if docs:
-            return None
+            if not recipe.documents_by_host:
+                return None, warnings
+            downloaded = True
+        elif recipe.documents_by_host:
+            warnings.append(f"could not download sampled file from {urlsplit(url).hostname}")
+        blocked = blocked or why
+    if downloaded:
+        return None, warnings
     if blocked:
-        return f"document download blocked ({blocked}); call give_up with blocked=true if that holds for all"
-    return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links"
+        return f"document download blocked ({blocked}); call give_up with blocked=true if that holds for all", warnings
+    return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links", warnings
 
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
-    problem = check(tenders) or await _document_problem(recipe, tenders, fetcher)
+    problem = check(tenders)
+    document_warnings = []
+    if not problem:
+        problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
-    if recipe.documents and not any(t["_documentUrls"] for t in tenders):
+    warnings.extend(document_warnings)
+    if (recipe.documents or recipe.documents_by_host) and not any(t["_documentUrls"] for t in tenders):
         warnings.append("no document links found in the sample: check documents/documents_page")
     return {
         "problem": problem,
