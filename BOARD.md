@@ -7,11 +7,11 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:00 | protocol keeper, B-35
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:19 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:08 | B-34
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
-- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:20 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:17 | left at operator request
+- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:21 | coord monitoring (every 20-30 min)
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:19 | B-33
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:15 | B-28 in review (PR #9)
 
@@ -417,8 +417,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-33 Agent gives up too early
 - **Priority:** high
-- **Status:** open (reviewed local work; live verification pending)
-- **Last seen:** 2026-11-21 05:17
+- **Status:** claimed by Codex (Derek Windows) (Derek's Windows/Codex) 2026-11-21 05:19
+- **Last seen:** 2026-11-21 05:19
 - **Problem:** Wide test: across 14 portals the agent called test_recipe only 6 times and never submit_recipe. It spent $0.47 of a $14 budget, giving up after 5-19 calls with reasons like "without guessing" or "within the tool constraints".
 - **Idea:** Refuse give_up(blocked=false) until the agent has made a real attempt, e.g. at least one test_recipe and a minimum share of its turns or budget. Prompt: encourage trying candidate recipes and listing pages; it's cheap. Add a unit test with a fake model.
 - **Findings:** Derek Windows local branch b-33-prevent-early-give-up at 29a5a72 has a reviewed early-exit guard. It counts actual validation reports, preserves confirmed access blocks and accepted recipes, and stays within the turn and cost budgets. All 56 tests and Ruff passed. A fresh NRW run made two recipe attempts but extracted zero tenders and failed after 19 model calls (USD 0.0986). Local combined NRW trial b-33-nrw-trial at 119146e preserves B-20 and B-33 and passed 78 tests. No live result was confirmed for that combination or for the UK check before stopping.
@@ -433,11 +433,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-35 Servers with an incomplete TLS certificate chain
 - **Priority:** medium
-- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 05:00
-- **Last seen:** 2026-11-21 05:00
+- **Status:** done (0d58a41)
 - **Problem:** Wide test: one portal failed on every request with SSL certificate verification errors; browsers usually fill in missing intermediates.
 - **Idea:** Fill in a missing intermediate via the certificate's AIA URL (fetched once, cached, verified), or another standard approach. Keep verification on; never disable it.
-- **Findings:**
+- **Findings:** New `app/tls.py`: `ChainFillingTransport` (default httpx transport of `Fetcher`) catches "unable to get local issuer certificate", reads the leaf's AIA caIssuers URL, downloads the issuer (no redirects, 64 KiB cap, public-address check, rate limit), requires each step to be directly issued, and adds only certs on a path that verifies against the certifi roots for the hostname (cryptography.x509.verification). Verification is never disabled. Verified live on a portal with an incomplete chain (robots.txt 200 after one intermediate). Reviewed before commit by a security reviewer (found a trust-anchor poisoning hole and an off-path extra cert; both fixed) and a correctness reviewer (redirect SSRF, late size cap, transient-failure caching; fixed). Chromium already fills chains itself.
 
 ### B-36 Recipe stability: a later refresh reuses the recipe
 - **Priority:** medium (do it once portals reach serving reliably)
