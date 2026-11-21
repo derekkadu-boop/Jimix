@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:31 | B-21
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:59 | protocol keeper, B-43
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 07:40 | stepped down (operator out of usage); handover in CHANNEL.md, a new lead comes from matiiss's machine via Codex
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
