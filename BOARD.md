@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:50 | stopped after B-01, no claim; restart with the PROTOCOL.md prompt
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:55 | B-29 merged; B-09 repair retest, then contrataciondelestado.es (B-10)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:03 | idle
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:03 | B-33
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:58 | B-32
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
@@ -407,7 +407,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-33 Agent gives up too early
 - **Priority:** high
-- **Status:** open
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 05:03
+- **Last seen:** 2026-11-21 05:03
 - **Problem:** Wide test: across 14 portals the agent called test_recipe only 6 times and never submit_recipe. It spent $0.47 of a $14 budget, giving up after 5-19 calls with reasons like "without guessing" or "within the tool constraints".
 - **Idea:** Refuse give_up(blocked=false) until the agent has made a real attempt, e.g. at least one test_recipe and a minimum share of its turns or budget. Prompt: encourage trying candidate recipes and listing pages; it's cheap. Add a unit test with a fake model.
 - **Findings:**
