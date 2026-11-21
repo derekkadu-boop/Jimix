@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-21
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:59 | protocol keeper, B-43
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
@@ -615,7 +615,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
-- **Status:** open (WIP on branch b-43-documents-tab, 6e21c1a, NOT merged)
+- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 06:59
+- **Last seen:** 2026-11-21 06:59
 - **Last seen:** 2026-11-21 06:26
 - **Problem:** B-42's browser part: documents that only appear after a "Documents" tab is clicked or after
   scripts load them (TenderNed's Documents tab; JSON calls a tender page makes). B-42 (Codex Johanna Mac)
