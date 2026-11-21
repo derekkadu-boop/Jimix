@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 06:58 | B-21
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:08 | B-21
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:59 | protocol keeper, B-43
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
@@ -317,10 +317,11 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
 - **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 06:58
-- **Last seen:** 2026-11-21 06:58
+- **Last seen:** 2026-11-21 07:08
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
+  Derek-Codex-B: integration snapshot 8c13b3a (review/Derek-Codex-B/B-21), 180 tests and Ruff pass. Finland's cold render after a script scan took 8.4 s / 2 static GETs versus 19.5 s / 13 on main with the same DOM length and JSON count. Denmark's fresh-Fetcher repeat scan took 3.5 s / 1 script GET versus its cold 26.6 s / 25 with identical API hints. Public immutable assets that vary on CORS headers reuse only the absent-header variant. Full fresh attach/refresh validation in progress.
   Reviewed feature branch b-21-browser-assets (66e987ba): a bounded process-local cache shares
   explicitly fresh anonymous same-origin scripts and styles across new Fetchers. Two reviewers,
   59 backend tests and Ruff passed. On the federal procurement UI, a repeat scan requested one
