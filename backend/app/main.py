@@ -1,18 +1,28 @@
 import json
+import logging
+import re
 import sqlite3
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import db
+from app import db, watchtower
+from app.documents import FILES_DIR
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    load_dotenv()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     db.init()
+    watchtower.recover()
     yield
 
 
@@ -38,13 +48,16 @@ def require_portal(conn: sqlite3.Connection, portal_id: str) -> None:
 
 
 @app.post("/portals", status_code=201)
-def create_portal(body: PortalIn, conn: Conn):
-    conn.execute(
+async def create_portal(body: PortalIn, conn: Conn):
+    inserted = conn.execute(
         "INSERT OR IGNORE INTO portal (id, url, created_at) VALUES (?, ?, ?)",
         (uuid.uuid4().hex, body.url, db.now()),
-    )
-    row = conn.execute("SELECT id FROM portal WHERE url = ?", (body.url,)).fetchone()
-    return {"id": row["id"]}
+    ).rowcount
+    conn.commit()
+    portal_id = conn.execute("SELECT id FROM portal WHERE url = ?", (body.url,)).fetchone()["id"]
+    if inserted:
+        watchtower.start(portal_id)
+    return {"id": portal_id}
 
 
 @app.get("/portals")
@@ -60,51 +73,64 @@ def get_portal(portal_id: str, conn: Conn):
     return dict(row)
 
 
-TENDER_OPTIONAL = (
-    "referenceNumber",
-    "description",
-    "procedureType",
-    "contractNature",
-    "cpvCodes",
-    "placeOfPerformance",
-)
+@app.delete("/portals/{portal_id}", status_code=204)
+async def delete_portal(portal_id: str, conn: Conn):
+    require_portal(conn, portal_id)
+    conn.execute("DELETE FROM portal WHERE id = ?", (portal_id,))
+    conn.commit()
+    return Response(status_code=204)
 
 
-def tender_out(row: sqlite3.Row) -> dict:
-    t = dict(row)
-    for key in ("cpvCodes", "placeOfPerformance"):
-        if t[key] is not None:
-            t[key] = json.loads(t[key])
-    t["documents"] = []
-    return {k: v for k, v in t.items() if v is not None or k not in TENDER_OPTIONAL}
+@app.post("/portals/{portal_id}/refresh", status_code=202)
+async def refresh_portal(portal_id: str, conn: Conn):
+    require_portal(conn, portal_id)
+    return {"runId": watchtower.start(portal_id)}
 
 
 @app.get("/portals/{portal_id}/tenders")
 def list_tenders(portal_id: str, conn: Conn, changedSince: str | None = None):
     require_portal(conn, portal_id)
+    if changedSince is not None:
+        try:
+            since = datetime.fromisoformat(re.sub(r" (\d\d:?\d\d)$", r"+\1", changedSince))
+        except ValueError:
+            raise HTTPException(422, "changedSince must be a date and time with offset") from None
+        if since.tzinfo is None:
+            raise HTTPException(422, "changedSince must include an offset")
+        changedSince = since.isoformat()
     rows = conn.execute(
         """
-        SELECT id, url, title, buyer_name AS buyerName, publication_date AS publicationDate,
-               submission_deadline AS submissionDeadline, status,
-               reference_number AS referenceNumber, description,
-               procedure_type AS procedureType, contract_nature AS contractNature,
-               cpv_codes AS cpvCodes, place_of_performance AS placeOfPerformance,
-               last_changed_at AS lastChangedAt
-        FROM tender
+        SELECT data, last_changed_at FROM tender
         WHERE portal_id = ? AND (? IS NULL OR julianday(last_changed_at) > julianday(?))
-        ORDER BY publication_date DESC
+        ORDER BY json_extract(data, '$.publicationDate') DESC
         """,
         (portal_id, changedSince, changedSince),
     )
-    return [tender_out(r) for r in rows]
+    return [
+        {k: v for k, v in json.loads(row["data"]).items() if not k.startswith("_")}
+        | {"lastChangedAt": row["last_changed_at"]}
+        for row in rows
+    ]
 
 
 @app.get("/portals/{portal_id}/runs")
 def list_runs(portal_id: str, conn: Conn):
     require_portal(conn, portal_id)
     rows = conn.execute(
-        "SELECT id, kind, started_at AS startedAt, finished_at AS finishedAt, result"
-        " FROM run WHERE portal_id = ? ORDER BY started_at DESC",
+        """
+        SELECT id, kind, started_at AS startedAt, finished_at AS finishedAt, result, reason,
+               llm_calls AS llmCalls, input_tokens AS inputTokens, output_tokens AS outputTokens,
+               cost_usd AS costUsd
+        FROM run WHERE portal_id = ? ORDER BY started_at DESC
+        """,
         (portal_id,),
     )
     return [dict(r) for r in rows]
+
+
+@app.get("/files/{sha256}")
+def get_file(sha256: str):
+    path = FILES_DIR / sha256
+    if not re.fullmatch(r"[0-9a-f]{64}", sha256) or not path.is_file():
+        raise HTTPException(404, "File not found")
+    return FileResponse(path)
