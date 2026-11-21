@@ -35,6 +35,13 @@ REFUSE_BLOCKED = (
 PAGING_PARAMS = {"page", "p", "offset", "start", "size", "limit", "rows", "pagesize", "method"}
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
 
+COSINEX_PAGE_PATH = (
+    r"(/VMPCenter/company/announcements/categoryOverview[.]do"
+    r"[?]method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=[0-9]+)"
+)
+COSINEX_PAGE_LINK = re.compile(r"setTargetAndSubmit\(\s*'" + COSINEX_PAGE_PATH + "'")
+
+
 INSTRUCTIONS = f"""You connect a public procurement portal so that its open tenders can be read without you.
 Find where the portal lists its open tenders, write a recipe that reads all of them with their documents,
 check it with test_recipe and finish with submit_recipe.
@@ -55,6 +62,10 @@ The listing must cover every open tender the portal has: no category, region, CP
 Prefer the broadest list (all current notices) and paginate through it. If the portal only offers lists
 split by category, set listing.url to the page linking to all of them and index to those links:
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
+On Cosinex category listings, use the overview's links with cpvCode= in index to read every category.
+For a.browseForward with a setTargetAndSubmit path shown in onclick, use next_page with
+path a.browseForward, attribute onclick, and pattern '{COSINEX_PAGE_PATH}'.
+That path supports GET. A javascript:void(0) href is a placeholder and cannot be fetched.
 If you find no list of open tenders, keep searching before giving up:
 - a search or "all notices" page (Suche, Bekanntmachungen, recherche, búsqueda, zoeken, wyszukiwarka...),
   tried with an empty query: a GET search URL works as a listing URL;
@@ -166,7 +177,14 @@ def simplify(html: str) -> str:
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in soup.find_all(True):
+        pagination = (
+            COSINEX_PAGE_LINK.search(tag.get("onclick", ""))
+            if tag.name == "a" and "browseForward" in tag.get("class", [])
+            else None
+        )
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
+        if pagination:
+            tag["onclick"] = f"setTargetAndSubmit('{pagination[1]}')"
     return re.sub(r"\s+", " ", str(soup))
 
 
