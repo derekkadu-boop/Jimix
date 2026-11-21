@@ -70,7 +70,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-09 Verify refresh and repair end to end
 - **Priority:** high (documents are the core feature)
-- **Status:** open
+- **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 02:46
 - **Problem:** `/refresh` and repair work in unit-level runs but haven't been exercised on a real portal
   that reached `serving`.
 - **Test:** attach a portal until `serving`, refresh it, then break its stored recipe (edit `recipe.data`)
