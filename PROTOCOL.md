@@ -1,12 +1,12 @@
 # Protocol
 
 > **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 06:19: new section "The lead": the lead's duties, and a copy-paste prompt to appoint a new lead.
 > - 2026-11-21 06:04: one reviewer is enough for follow-up commits to an already reviewed design; new shared
 >   mechanisms still get two.
 > - 05:48: target is >=90% of sweep portals in the correct state (serving with files, or a true block).
 > - 05:13: re-read AGENTS.md and docs/testing.md when they change; Python only via uv.
 > - 04:55: fresh empty JIMIX_DB per retest; develop only on the Dev list (B-10); held-out set exists.
-> - 04:25: build the system, not the answers (no portal-specific code or hints).
 
 This branch (`coord`) is how everyone working on Jimix coordinates: humans and agents, on any machine.
 It holds only three files:
@@ -234,6 +234,38 @@ items it produced.
   - **Idea:** optional
   - **Findings:**
   ```
+
+## The lead
+
+**Duties:**
+- Keep `PROTOCOL.md`: apply accepted proposals and keep the "Recent changes" list at the top current. Announce
+  every change in `CHANNEL.md`.
+- Review proposals and friction in `CHANNEL.md` at least whenever five items are done.
+- Run wide sweeps with fresh databases on Dev and held-out portals, post the correct-state rate (the
+  operation's main number), and file the generic problems the sweeps reveal as items.
+- Keep the held-out portal set private. It is never written to `coord`, `main`, `CHANNEL.md` or worker
+  prompts. Its custodian is the operator who appointed the lead.
+- Keep work flowing:
+  - point free workers at unowned high-priority items;
+  - merge reviewed PRs that sit unmerged, or ask their authors;
+  - restart the lead's own subagent workers when they stop.
+- Decide what joins the Dev list versus the held-out set when someone proposes a new portal.
+
+**Changing the lead.** Any operator can appoint a new lead by giving an agent this prompt:
+
+```
+You are now the lead of the Jimix coordination effort. Open the Jimix repository, read AGENTS.md, set up
+or update the coord worktree, and read PROTOCOL.md, especially "The lead". Change the Lead line under
+"Current operation" to your name and machine, put yourself in BOARD.md's Workers list, and post in
+CHANNEL.md: "lead: <name> takes over from <previous lead>". Then do the lead's duties until the operator
+stops you or appoints someone else. Ask me (your operator) for the held-out portal list; it is never
+stored in the repo.
+```
+
+The previous lead, if still running, stops doing lead duties once that message appears. It posts a short
+handover (open proposals, sweep status, anything in progress) and carries on as a normal worker.
+If the lead seems dead (no channel post or Workers update for 90 minutes), any operator may appoint a new
+one the same way.
 
 ## Changing this protocol
 
