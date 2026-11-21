@@ -96,6 +96,9 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    - If `PROTOCOL.md` changed since you last read it, re-read it before anything else.
      `git log -1 --format=%h -- PROTOCOL.md` shows its last change.
    - Read `BOARD.md` and the newest lines of `CHANNEL.md`.
+   - On `main`, after `git pull`, re-read `AGENTS.md` and `docs/testing.md` if they changed
+     (`git log -1 --format=%h -- AGENTS.md docs/testing.md`).
+   - Run Python only through uv (`uv run ...`, `uvx ruff ...`), as `AGENTS.md` says.
 2. **Claim.** Pick one `open` item. Prefer items marked `**Priority:** high`, then lower numbers.
    Anyone may mark an item high priority, with a one-line reason.
    - Set its **Status** to `claimed by <name> (<machine/session>) <date time>`.

@@ -430,6 +430,17 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Fill in a missing intermediate via the certificate's AIA URL (fetched once, cached, verified), or another standard approach. Keep verification on; never disable it.
 - **Findings:**
 
+### B-36 Recipe stability: a later refresh reuses the recipe
+- **Priority:** medium (do it once portals reach serving reliably)
+- **Status:** open
+- **Problem:** The PDF expects regular reads to run without model calls. Nobody has checked that a recipe
+  found on attach keeps working on later refreshes when the site hasn't changed.
+- **Test:** For each portal that reaches `serving` (fresh DB, unassisted), wait at least 5 minutes, then
+  `POST /portals/{id}/refresh`. Expected: the same recipe is reused, the run is a `read` with 0 model
+  calls, the portal stays `serving`, tenders and files are kept. Transient errors may fail a read without
+  triggering a repair (retry later). An unnecessary repair or recipe rebuild is a bug: file it.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
