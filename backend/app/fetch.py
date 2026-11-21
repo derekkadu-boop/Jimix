@@ -108,9 +108,15 @@ def block_reason(status: int, headers, requested: str, final: str, html: str | N
 
 
 def _file_name(resp: httpx.Response) -> str:
+    disposition = resp.headers.get("content-disposition", "")
+    if extended := re.search(r"filename\*\s*=\s*([\w-]+)'[^']*'([^;\s]+)", disposition, re.IGNORECASE):
+        try:
+            return unquote(extended.group(2), encoding=extended.group(1), errors="replace")
+        except LookupError:
+            pass
     msg = Message()
-    msg["content-disposition"] = resp.headers.get("content-disposition", "")
-    return msg.get_filename() or unquote(resp.url.path.rsplit("/", 1)[-1]) or "document"
+    msg["content-disposition"] = disposition
+    return unquote(msg.get_filename() or resp.url.path.rsplit("/", 1)[-1]) or "document"
 
 
 class Fetcher:

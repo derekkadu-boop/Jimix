@@ -259,6 +259,18 @@ def test_recipe_validation_samples_each_document_host(monkeypatch):
     assert warnings == ["tender 3: no file links", "could not download sampled file from buyer-two.example"]
 
 
+def test_recipe_validation_requires_document_links():
+    recipe = Recipe.model_validate(RECIPE)
+    tenders = [{"id": "1", "_documentUrls": []}, {"id": "2", "_documentUrls": []}]
+    problem, _ = asyncio.run(agent._check_documents(recipe, tenders, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    by_host = Recipe.model_validate(RECIPE | {"documents_by_host": {"buyer.example": {"files": {"path": "a"}}}})
+    checked = [{"id": "1", "_documentUrls": [], "_documentChecked": True}]
+    problem, warnings = asyncio.run(agent._check_documents(by_host, checked, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    assert warnings == ["tender 1: no file links"]
+
+
 def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
     monkeypatch.setattr(fetch, "MAX_FILE_BYTES", 1024)
@@ -509,6 +521,102 @@ def test_index_reads_every_linked_list():
     tenders, complete = asyncio.run(run())
     assert sorted(t["id"] for t in tenders) == ["1", "2", "3"]
     assert complete
+
+
+NOTICE_ONLY = """<html><body><nav><a href="/help">Help</a></nav>
+<a href="./announcements/1/Bekanntmachung.pdf">download</a>
+<a href="/files/all.zip">Documents (ZIP)</a><a href="./documents">Vergabeunterlagen</a></body></html>"""
+
+
+@pytest.mark.parametrize(("page", "hinted"), [(NOTICE_ONLY, True), (DETAIL.format(n=1), False)])
+def test_recipe_test_hints_at_linked_documents_page(page, hinted):
+    def site(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404) if request.url.path == "/robots.txt" else httpx.Response(200, html=page)
+
+    recipe = Recipe.model_validate(RECIPE)
+    tenders = [{"id": "1", "url": "https://portal.example/p/1/overview",
+                "_documentUrls": ["https://portal.example/p/1/announcements/1/Bekanntmachung.pdf"]}]
+
+    async def run(recipe):
+        fetcher = Fetcher(transport=httpx.MockTransport(site))
+        try:
+            return await agent._document_page_hint(recipe, tenders, fetcher)
+        finally:
+            await fetcher.close()
+
+    hint = asyncio.run(run(recipe))
+    if hinted:
+        assert "'vergabeunterlagen' (https://portal.example/p/1/documents)" in hint
+    else:
+        assert hint is None
+    with_page = Recipe.model_validate(RECIPE | {"documents_page": {"path": "a.docs"}})
+    assert asyncio.run(run(with_page)) is None
+
+
+@pytest.mark.parametrize("by_host", [False, True])
+def test_refresh_preserves_files_after_document_page_error(monkeypatch, tmp_path, by_host):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('portal', 'https://portal.example/list', ?)",
+                     (db.now(),))
+
+    status = 200
+    html = '<a class="doc" href="/spec.pdf">Specification</a>'
+    downloads = 0
+
+    def response(request):
+        nonlocal downloads
+        if request.url.path == "/t/3":
+            return httpx.Response(200, html='<a class="platform" href="/documents">Documents</a>')
+        if request.url.path == "/documents":
+            return httpx.Response(status, html=html)
+        if request.url.path == "/spec.pdf":
+            downloads += 1
+            return httpx.Response(200, content=b"%PDF-1.4 fixture")
+        if request.url.path == "/list":
+            return httpx.Response(200, html=LIST_2)
+        return httpx.Response(404)
+
+    settings = {"documents_page": {"path": "a.platform"}}
+    if by_host:
+        settings = {
+            "documents_by_host": {"portal.example": {"page": {"path": "a.platform"}, "files": {"path": "a.doc"}}},
+        }
+    recipe = Recipe.model_validate(RECIPE | settings)
+
+    async def deliver():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            outcome = await watchtower._deliver("portal", recipe, fetcher)
+        finally:
+            await fetcher.close()
+        with db.connect() as conn:
+            stored = json.loads(conn.execute("SELECT data FROM tender").fetchone()[0])
+        return outcome, stored
+
+    _, initial = asyncio.run(deliver())
+    assert initial["documents"][0]["fileName"] == "spec.pdf"
+    assert initial["_documentsComplete"] is True
+
+    status = 503
+    result, failed = asyncio.run(deliver())
+    assert result == (1, None, "Could not read document pages for 1 of 1 tenders")
+    for key in ("documents", "_documentUrls", "_documentSkips"):
+        assert failed[key] == initial[key]
+    assert failed["_documentsComplete"] is False
+    assert "_documentPageError" not in failed
+
+    status = 200
+    _, recovered = asyncio.run(deliver())
+    assert recovered["_documentsComplete"] is True
+    assert downloads == 2
+
+    html = "<p>No documents</p>"
+    result, empty = asyncio.run(deliver())
+    assert result == (1, None, "No document links found for 1 of 1 tenders")
+    assert empty["documents"] == []
+    assert empty["_documentsComplete"] is True
 
 
 def test_cosinex_category_pagination_uses_the_public_get_path():
