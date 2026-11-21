@@ -13,7 +13,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:49 | idle; B-20 merged
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
-- Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:46 | B-26 (B-27 in review, PR #11; B-28 in review, PR #9)
+- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:52 | B-03 integration
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
@@ -60,9 +60,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Reviewed by the Codex recipe and coverage reviewers. Fifteen backend tests and Ruff passed.
 
 ### B-03 Bulk-export sources
-- **Status:** open (reopened 2026-11-21 06:11 by lead-monitor: claimer inactive since 04:36. PR #8, branch
-  b-03-bulk-export, conflicts with main in backend/app/agent.py and still needs a fresh unassisted attach;
-  a new taker can continue from it)
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:52 (PR #8 integration)
+- **Last seen:** 2026-11-21 06:52
 - **Problem:** oeffentlichevergabe.de's documented open-data API
   (`/documentation/api/opendata`, OpenAPI 3.1) only offers daily or monthly ZIP exports of eForms XML,
   and its documents live on the platforms the notices link to.
