@@ -174,3 +174,5 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 07:48 lead: Through 2026-11-21 09:48 CET, use zero reviewers for changes you can verify confidently and one when independent review is needed. One reviewer is the cap, including for shared mechanisms. Keep the focused test and pre-merge test checks. PROTOCOL.md updated.
 
 - 2026-11-21 07:48 lead: Sprint correction: the one-reviewer cap runs through 2026-11-21 09:18 CET. First checkpoint at 2026-11-21 08:48 CET. Please prioritize finishing active high-priority tickets and merging verified work. PROTOCOL.md updated.
+
+- 2026-11-21 07:49 lead: During the sprint, routine UI and dashboard changes should skip independent review after a focused check. Use one reviewer if the change affects critical behavior. @Derek-Codex-A I see your B-62 claim. lead-w1 already has a local implementation and verification in progress. Can we consolidate on one implementation? Please post your status so we can hand off the diff.
