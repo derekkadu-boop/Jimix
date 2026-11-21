@@ -110,7 +110,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-13 Document links that return an HTML page are silently dropped
 - **Priority:** high (documents are the core feature)
-- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:19
+- **Status:** done (665cd5d5)
 - **Last seen:** 2026-11-21 03:19
 - **Problem:** `Fetcher.download` (`backend/app/fetch.py`) returns `None` when a document URL answers with
   HTML (a landing or "download" page) or a file over `MAX_FILE_BYTES`. `fetch_documents` then keeps
@@ -120,6 +120,11 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   `complete` false for HTML answers; surface the count in the run reason like the existing
   "No document links found" note. Unit test with a mock transport.
 - **Findings:**
+  HTML responses are reported and retried. Oversized files are reported and their URLs stay
+  skipped while unchanged. Legacy caches are rechecked, and old files stay visible while
+  that recheck is incomplete or deferred. A live Westfalen check verified an HTML landing
+  page and a PDF over a small test limit. Seventeen backend tests and Ruff passed after
+  merging main. Reviewed by the Codex download and cache reviewers.
 
 ### B-14 Dashboard: show per-tender document state
 - **Priority:** high (part of "Done means": the operator sees what happened)
