@@ -154,6 +154,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - https://udbud.dk/ (DK)
   - https://www.vergabe.metropoleruhr.de/ (DE, Cosinex; scouted by lead-w2 for B-09, so not unseen)
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
+  - 2026-11-21 | TenderNed | Derek-Codex-B, B-21 reviewed | serving | 1000 | 158 distinct files | USD 0.0524 (13 calls) | Fresh URL-only attach and zero-call Refresh; same file count and sample SHA-256 after both. See B-49 for the count difference.
   - 2026-11-21 | udbud.dk | Derek-Codex-B, B-21 final | failed | 0 | 0 | USD 0.0733 (15 calls) | Public listing discovered; agent could not map external document links on the sampled notices. B-42 already covers this.
   - 2026-11-21 | TenderNed | Derek-Codex-B, B-21 cache integration | serving | 2000 | 158 distinct files | USD 0.0674 (15 calls) | fresh URL-only attach; Refresh preserved all 2000 tenders and 158 files with 0 calls. API document SHA-256 matched after both.
   - 2026-11-21 | NRW | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0737 | Fresh attach from the public landing page produced no category-spanning recipe. Refresh was unavailable.
@@ -754,6 +755,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
      allows.
   4. Lower temperature or seed if the provider supports it.
 - **Findings:**
+  Two B-21 fresh TenderNed attaches both served 158 distinct files; reads and hashes survived both zero-call refreshes. Stored listing recipes request different page sizes (100 vs 50) at the same 20-page limit, yielding 2000 vs 1000 saved tenders. One was before the final cache-directive review; the cache probe measured zero cross-run entries on this portal.
 
 ### B-50 Notice-only PDFs pass tender-document validation
 - **Priority:** high (false `serving` state without procurement documents)
