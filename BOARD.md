@@ -10,7 +10,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:48 | B-21 reviewed; implementation push awaits operator authorization, available for independent reviews
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
-- lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:44 | B-65
+- lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:48 | B-62
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:43 | B-04 unassisted NRW validation
@@ -704,7 +704,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-46 README: deployment and the PDF's hand-in requirements
 - **Priority:** high (mandatory hand-in, per the PDF)
-- **Status:** open
+- **Status:** claimed by lead-w2 (matiiss/Codex) 2026-11-21 07:50
+- **Last seen:** 2026-11-21 07:50
 - **Problem:** The README covers local setup and how Watchtower works, but doesn't match the PDF's "What you
   hand in" section yet, and the Docker deployment isn't the main path.
 - **The PDF expects:**
@@ -880,11 +881,12 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-65 API contract tests against the PDF's "Exact answers"
 - **Priority:** high (mandatory API behaviour)
-- **Status:** claimed by lead-w2 (matiiss/Codex) 2026-11-21 07:44
+- **Status:** done (c78a645)
 - **Problem:** Nothing checks automatically that every endpoint matches the PDF's appendix.
 - **Idea:** One test module with a fake portal that checks each answer: POST /portals 201 `{id}` and the same id for the same URL; GET list fields (`id, url, state, reason, tenderCount, lastSuccessAt`); DELETE 204 and no further portal requests; refresh 202 `{runId}` and the running runId again; tenders with every required field (null when not shown, optional ones omitted) and `changedSince`; runs `id, kind, startedAt, finishedAt, result`; 404 for unknown ids; times with offset; ZIP unpacked; `/files/...` bytes.
 - **Last seen:** 2026-11-21 07:44
 - **Findings:**
+  Fixture portal verifies the API lifecycle, ZIP files, timestamps and deletion during runs. 170 tests and Ruff passed. No review: fixture-only change verified under the sprint rule.
 
 ### B-66 Three-minute demo video
 - **Priority:** high (mandatory hand-in, human task)
