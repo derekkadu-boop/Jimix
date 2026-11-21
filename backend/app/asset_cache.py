@@ -3,6 +3,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
+from urllib.request import parse_http_list
 
 MAX_ASSET_BYTES = 2 * 1024 * 1024
 MAX_CACHE_BYTES = 32 * 1024 * 1024
@@ -10,6 +11,10 @@ MAX_ASSETS = 256
 MAX_FRESH_SECONDS = 6 * 60 * 60
 SCRIPT_TYPES = {"text/javascript", "application/javascript", "application/x-javascript", "text/ecmascript"}
 CORS_HEADERS = {"origin", "access-control-request-method", "access-control-request-headers"}
+UNSHAREABLE_HEADERS = {
+    "authorization", "cookie", "range", "if-range",
+    "if-match", "if-none-match", "if-modified-since", "if-unmodified-since",
+}
 
 
 def same_origin(left: str, right: str) -> bool:
@@ -22,9 +27,7 @@ def shareable_request(url: str, headers) -> bool:
     return (
         len(url) <= 2048
         and not (parts.query or parts.fragment or parts.username or parts.password)
-        and not any(
-            h in headers for h in ("cookie", "authorization", "range", "if-none-match", "if-modified-since")
-        )
+        and not any(h in headers for h in UNSHAREABLE_HEADERS)
         and not headers.get("cache-control")
         and not headers.get("pragma")
     )
@@ -75,7 +78,7 @@ class AssetCache:
         if vary - CORS_HEADERS - {"accept-encoding"} or any(header in request_headers for header in cors_vary):
             return
         directives = {}
-        for value in headers.get("cache-control", "").lower().split(","):
+        for value in parse_http_list(headers.get("cache-control", "").lower()):
             name, _, argument = value.strip().partition("=")
             if name in directives:
                 return

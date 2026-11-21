@@ -15,6 +15,7 @@ from app import asset_cache
     {"cache-control": "max-age=60", "age": "60"},
     {"cache-control": "max-age=60, s-maxage=0"},
     {"cache-control": "max-age=60, max-age=10"},
+    {"cache-control": 'community="shared, max-age=60"'},
     {},
 ])
 def test_public_asset_cache_ignores_unshareable_responses(headers):
@@ -22,6 +23,11 @@ def test_public_asset_cache_ignores_unshareable_responses(headers):
     cache.save("https://portal.example/static.js", "script",
                {"content-type": "application/javascript"} | headers, b"script")
     assert cache.get("https://portal.example/static.js", "script") is None
+
+
+@pytest.mark.parametrize("field", ["if-match", "if-unmodified-since", "if-range"])
+def test_conditional_requests_bypass_the_shared_cache(field):
+    assert not asset_cache.shareable_request("https://portal.example/static.js", {field: "validator"})
 
 
 @pytest.mark.parametrize("field", ["origin", "access-control-request-method", "access-control-request-headers"])
