@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:08 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:13 | idle
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:00 | B-20
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:13 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 in review (PR #7)
 
 ### B-01 Document URLs built from tender fields
@@ -62,7 +62,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
-- **Status:** done (4665b28a)
+- **Status:** open
 - **Last seen:** 2026-11-21 03:49
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
@@ -74,6 +74,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   after 19 calls (estimated USD 0.099). A stored-recipe Refresh then delivered 232 files and served
   the verified PDF through the API with zero model calls. Public POST search is B-18 and automatic
   NRW attachment is B-20.
+  Code is on main at 4665b28a. Reopened under the revised protocol for an unassisted attach
+  that saves real files on a previously untested NetServer portal.
 
 ### B-05 Prompt-injection hardening
 - **Status:** open
@@ -200,7 +202,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:51
-- **Last seen:** 2026-11-21 04:00
+- **Last seen:** 2026-11-21 04:13
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -212,6 +214,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Two categories now returned 80 distinct notices across four sampled pages. Two reviewers and
   25 integrated backend tests passed. A live attach with the new paging hint reached serving and
   read 449 tenders, but saved zero files. Its recipe only mapped Düsseldorf and did not use the modal.
+  Under the updated protocol, the pagination candidate is derived from recognized markup.
+  On NRW it appears at character 21,854, beyond the first 12,000 characters the agent sees.
+  Testing early exposure plus upcoming-deadline sample selection. A fresh Brandenburg attach
+  was blocked by robots.txt. Fresh NRW and previously untested Rheinland-Pfalz runs are underway.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
