@@ -8,12 +8,12 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:06 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:25 | B-01
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
-- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:08 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:19 | B-20
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:16 | idle
-- Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 in review (PR #7)
+- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:29 | B-20
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:26 | B-21
+- Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | B-03 in review (PR #8)
 
@@ -26,7 +26,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** a declarative URL template in the recipe, e.g. `"documents": {"template": ".../{id}/pdf"}`,
   filled from mapped fields. Also check whether that PDF is the notice or the actual tender documents.
 - **Test with:** TenderNed.
-- **Last seen:** 2026-11-21 03:39 (paused until 04:05 CET, claim held)
+- **Last seen:** 2026-11-21 04:25
 - **Findings:** (in progress, branch `b-01-url-templates`, not merged, awaiting review) Recipe gains
   `detail.url` and `documents_url: {template, kind}` (placeholders = mapped fields) plus dot-path
   `attribute`. TenderNed attaches with it ($0.04-0.05, serving, 9 of 10 sampled tenders got a file), but
@@ -139,6 +139,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - https://udbud.dk/ (DK)
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
   - 2026-11-21 | NRW | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0737 | Fresh attach from the public landing page produced no category-spanning recipe. Refresh was unavailable.
+  - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 20 | 162 (54 Office) | USD 0.0797 attach, USD 0 Refresh | Fresh attach from the Dev URL with B-20 category hints. Refresh retained all files. Agent dropped its wider tested index for an unpaginated recipe.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -220,7 +221,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:19
-- **Last seen:** 2026-11-21 04:19
+- **Last seen:** 2026-11-21 04:29
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -243,6 +244,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Rheinland-Pfalz trace also showed repeated recipe validation errors. Both runs started before
   the Dev-list-only update. A reusable category index hint could expose repeated same-site links
   in the page tool alongside the existing pagination hint.
+  The category-index hint and cross-category validation budget produced the first successful NRW URL-only attach in this investigation. It delivered 162 files and Refresh retained them, but the model submitted a 20-notice unpaginated fallback after an indexed candidate passed validation on 37 notices. A fresh retest is running with a coverage comparison that counts open tenders.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
@@ -257,7 +259,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
-- **Status:** open
+- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 04:26
+- **Last seen:** 2026-11-21 04:26
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
