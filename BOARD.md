@@ -106,7 +106,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-09 Verify refresh and repair end to end
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 02:46
-- **Last seen:** 2026-11-21 03:38 (paused until 04:05; metropoleruhr attach/refresh/repair verified, 2 fixes committed on branch b-09-refresh-repair, not merged yet)
+- **Last seen:** 2026-11-21 04:15 (fixes merged in 4d75b8a; unassisted re-attach of metropoleruhr running, then unseen-portal check)
 - **Problem:** `/refresh` and repair work in unit-level runs but haven't been exercised on a real portal
   that reached `serving`.
 - **Test:** attach a portal until `serving`, refresh it, then break its stored recipe (edit `recipe.data`)
