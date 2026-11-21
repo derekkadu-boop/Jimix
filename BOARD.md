@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:22 | B-20
+- Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:40 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:46 | B-26 (B-27 in review, PR #11; B-28 in review, PR #9)
 
@@ -180,6 +180,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0684 | Fresh URL-only attach at 8f14869, 15 calls, final recipe document validation failed; Refresh unavailable.
   - Note (lead): Find a Tender notice pages answer a 118-byte `403 Forbidden` to our honest user agent, while the listing gives 200 and there is no robots.txt. That's bot filtering, not a login. Don't spoof user agents. The right route is its official public OCDS API (see B-39's hint: look for an official API when blocked).
   - 2026-11-21 | TenderNed | lead-w1 | serving | 1000 | 158 (10 sampled tenders), refresh kept 159 | USD 0.0452 attach, USD 0 Refresh | none for documents; award notices count as open (B-47)
+  - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 679 | 93 (18 Office) | USD 0.1019 attach, USD 0 Refresh | Fresh URL-only on eef301a; zero-call Refresh kept all files; sample SHA-256 verified.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -263,7 +264,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** claimed by Codex (Derek Windows) (Windows/Codex) 2026-11-21 05:58
-- **Last seen:** 2026-11-21 06:22
+- **Last seen:** 2026-11-21 06:40
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -292,6 +293,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Reviewed work is published on branch b-20-category-index at cb2a19f, separate from main. A selected JavaScript no-op now follows a path only when the shared literal parser validates it; an unresolved next control leaves the scan incomplete. All 73 backend tests and Ruff passed. Final fresh NRW attach gave up before trying a recipe, the same B-33 failure seen by the wider test. The earlier 162-file attach is still the only working integrated NRW evidence from this series.
   Derek's local b-20-delivery branch is preserved at 8f14869, integrated with main 72e313c. A reviewer found and we fixed a cross-category capped-validation gap when a category lacks deadlines; two reviewers approved the final fix, and 106 backend tests plus Ruff passed through uv. A fresh final-branch NRW attach was interrupted at operator request before completion, so its result is unverified. Earlier combined B-20/B-33 trial served 1449 tenders/153 files and kept them on zero-call Refresh, but was before the final review fix.
   Fresh URL-only NRW attach at 8f14869, with new database and file store, failed after 95 seconds. 15 model calls, USD 0.0684, zero tenders and files. Two recipe tests and two submissions did not yield a valid recipe. Last validation reported a document problem. Refresh was unavailable. Branch remains unmerged.
+  Reviewed delivery branch is published at d125a58, integrated with main 7860ff2. Fresh NRW at eef301a accepted buyer document mapping and served 679 tenders and 93 files (18 Office) for USD 0.1019. Refresh retained all with zero model calls and the sampled file API SHA-256 still matched. Fixes recover stale HTML detail templates and resolve guarded literal pagination paths. Final integration passed 157 tests and Ruff. TenderNed validated real files but timed out during a six-minute full read; standard-timeout retest in progress.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
