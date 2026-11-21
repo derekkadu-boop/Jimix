@@ -154,14 +154,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-14 Dashboard: show per-tender document state
 - **Priority:** high (part of "Done means": the operator sees what happened)
-- **Status:** in review (PR #5)
+- **Status:** done (153746a)
 - **Problem:** the tender card (`frontend/public/dashboard.js`, around line 284) shows "No document records
   supplied." both when a tender has no document links and when files are still pending (capped by
   `WATCHTOWER_MAX_DETAILS`, blocked, budget hit). `GET /portals/{id}/tenders` drops every `_`-prefixed key,
   so `_documentUrls` and `_documentsComplete` never reach the dashboard.
 - **Idea:** expose a public `documentsStatus` (e.g. `complete`, `pending`, `none`) and the source document
   URLs in the tender API; show "n files", "pending, next refresh" or "no document links" on the card.
-- **Findings:** PR #5 is open. The API and dashboard distinguish pending, complete, no links, and links without files. Raw source URLs stay private. Reviewed by the Codex document status reviewer. All 16 backend tests and the frontend build passed.
+- **Findings:** PR #5 is open. The API and dashboard distinguish pending, complete, no links, and links without files. Raw source URLs stay private. Reviewed by the Codex document status reviewer. All 16 backend tests and the frontend build passed. Merged after B-19; all 24 integrated backend tests, the production build, and the refresh-to-tender-API status check passed.
 
 ### B-15 Preserve saved files after a temporary document-page error
 - **Priority:** high (transient errors should preserve delivered documents)
