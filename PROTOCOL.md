@@ -209,6 +209,9 @@ items it produced.
   `grep -oE '^### [BS]-[A-Za-z0-9-]+' BOARD.md | sort | uniq -d` must print nothing. If it prints a
   duplicate, renumber the newer item (the one added later in `git log`), fix references to it, and say so
   in `CHANNEL.md`.
+  Also `grep -nE '^(<<<<<<<|=======|>>>>>>>)' *.md` must print nothing: no conflict markers left from a
+  merge. The Workers list conflicts often because its lines sit next to each other. Keep both sides and
+  take the newer `last seen` for each worker.
 - Item format for new items:
   ```
   ### B-NN Short title
