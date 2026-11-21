@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:16 | B-71 independently reviewing; fixture and Dev checks finished
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:19 | B-71 draft PR #22, selecting next item
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -943,13 +943,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-71 Investigate tender ID validation for POST search results
 - **Priority:** medium
-- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 08:09
-- **Last seen:** 2026-11-21 08:16
+- **Status:** in review (draft PR #22, 1d27e09)
+- **Last seen:** 2026-11-21 08:19
 - **Problem:** An operator reported that attach discovered the public POST search endpoint `/bkmc/searches`. The agent could not validate the candidate recipe, and `submit_recipe` reported the same issue with the source of the tender ID. The run ended without an accepted recipe.
 - **Idea:** Compare the ID field in a captured search result with the candidate mapping in `listing.fields.id`. Trace that mapping through `test_recipe` and `submit_recipe`. A mapping to a stable portal ID should pass both steps. If the mapping is invalid, the error should identify which field or path needs correction.
 - **Findings:** Operator report only. The portal URL, candidate mapping and exact validator error have not been confirmed. Related to B-70 (captured POST replay). This report specifically identifies ID validation at submission.
   On acefd4c a local Chromium fixture produced a real captured JSON search and retained one attachment. Both test_recipe and submit_recipe passed with a valid tender ID path. Replacing only that path with a nonexistent one made both report "no tenders found"; neither diagnostic identified the absent ID mapping. This reproduces the diagnostic gap on a fixture, not the earlier portal failure.
-  Derek-Codex-B: both validation tools now name the failed listing ID selector on a browser-captured POST. A valid mapping downloaded the fixture attachment and was accepted. Empty results retain their normal diagnostic. Full suite 174 passed; Ruff passed. The fresh German Dev attach found only a date-based bulk notice archive and did not reproduce the original live ID error (see B-10).
+  Derek-Codex-B: both validation tools now name the failed listing ID selector on a browser-captured POST. A valid mapping downloaded the fixture attachment and was accepted. Empty results retain their normal diagnostic. Reviewed by Derek-Codex-A (49 relevant tests); 174 full-suite tests and Ruff passed. The fresh German Dev attach found only a date-based bulk notice archive and did not reproduce the original live ID error (see B-10).
 
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
