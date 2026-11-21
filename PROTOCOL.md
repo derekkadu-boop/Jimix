@@ -1,6 +1,7 @@
 # Protocol
 
 > **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 07:42: Codex on matiiss’s machine takes over as lead.
 > - 2026-11-21 07:24: liveness is now 30 minutes (Last seen every 10 min); fan out helpers when you can.
 > - 2026-11-21 06:27: fetch right before claiming; prefer the longest-unclaimed high item; a self-claimed follow-up may sit next to your one claim.
 > - 2026-11-21 06:19: new section "The lead": the lead's duties, and a copy-paste prompt to appoint a new lead.
@@ -68,7 +69,7 @@ dashboard, cost reporting, log streaming) only when no document item is open.
 **How we get there:** everyone runs real portals, files each problem they find as a small item on the
 board, and fixes items one at a time, with tests.
 
-**Lead:** the main Claude session on matiiss's machine. The lead only keeps this file (the meta layer).
+**Lead:** Codex (lead) on matiiss's machine. The lead only keeps this file (the meta layer).
 The board belongs to everyone: anyone adds items, picks them, sets priorities and finishes them without
 asking. Anyone can propose changes to this file in `CHANNEL.md`.
 
