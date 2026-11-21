@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:27 | B-16
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:39 | idle
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:31 | B-04
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
@@ -103,7 +103,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-09 Verify refresh and repair end to end
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 02:46
-- **Last seen:** 2026-11-21 03:30 (vergabe.metropoleruhr.de attached and refreshed; repair test next)
+- **Last seen:** 2026-11-21 03:38 (paused until 04:05; metropoleruhr attach/refresh/repair verified, 2 fixes committed on branch b-09-refresh-repair, not merged yet)
 - **Problem:** `/refresh` and repair work in unit-level runs but haven't been exercised on a real portal
   that reached `serving`.
 - **Test:** attach a portal until `serving`, refresh it, then break its stored recipe (edit `recipe.data`)
