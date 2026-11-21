@@ -425,9 +425,10 @@ async def apply(
     if listing.index:
         page, base = await _load(listing.kind, listing.url, fetcher)
         links = [urljoin(base, u) for u in _values(page, listing.index, listing.kind)]
-        starts = list(dict.fromkeys(links))[:MAX_INDEX_LISTS]
+        starts = list(dict.fromkeys(links))
         budget -= 1
-    complete = bool(starts)
+    complete = 0 < len(starts) <= MAX_INDEX_LISTS
+    starts = starts[:MAX_INDEX_LISTS]
     for index, start in enumerate(starts):
         seen: set[str] = set()
         url, finished, body = start, False, listing.body if listing.method == "POST" else None
