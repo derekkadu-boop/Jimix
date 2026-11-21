@@ -58,10 +58,10 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:**
 
 ### B-06 Docker: backend image, compose entry, single root Dockerfile
-- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 02:20
+- **Status:** done (700f08b), verification split out as B-16
 - **Problem:** the PDF wants one root `Dockerfile` serving API and dashboard on port 8080. Only the
   frontend has a Dockerfile.
-- **Findings:**
+- **Findings:** `backend/Dockerfile` + compose `backend` service (frontend waits for its /health); root `Dockerfile` builds the dashboard (standalone Next.js) and backend with Chromium into one image; `docker/start.sh` runs uvicorn on 127.0.0.1:8000 and the dashboard on 0.0.0.0:8080, which proxies /portals, /files, /openapi.json, /health. No nginx or Docker-in-Docker (DinD would need --privileged). Builds untested: Docker Hub DNS failed on the build machine.
 
 ### B-07 Dashboard against the new API
 - **Status:** done (0ee02c3)
@@ -133,13 +133,21 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-15 Preserve saved files after a temporary document-page error
 - **Priority:** high (transient errors should preserve delivered documents)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 03:18
-- **Last seen:** 2026-11-21 03:18
+- **Status:** in review (PR #6)
 - **Problem:** When an NRW-style tender follows a link to a document page and that page returns a
   temporary HTTP error, the recipe treats it as an empty result. A refresh can replace previously
   downloaded files with an empty list. This affects shared and host-specific linked pages.
 - **Idea:** Distinguish failed page loads from a successful page with no file links. Keep last-known
   files on failure and retry on a later refresh. Test with a mock transport.
+- **Findings:** PR #6 preserves previous files and retries after linked document-page errors. Covered shared and per-host page selectors through mock HTTP 503, recovery, and genuinely empty pages. Two Codex reviewers and 17 backend tests passed. Detail-page failures and skipped details can still produce an empty result before link following; track separately.
+
+### B-16 Verify the root and backend images build and run
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 03:27
+- **Last seen:** 2026-11-21 03:27
+- **Problem:** `docker build .` (root) and `docker compose up --build --wait` were never run successfully;
+  the build machine couldn't reach Docker Hub. Check: build on linux/amd64 reasonably fast, `docker run -p
+  8080:8080 -e OPENAI_API_KEY=... <image>` serves `/` (dashboard), `/portals`, `/health` on 8080, Chromium
+  renders inside the container, data persists in `/data`.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
