@@ -22,11 +22,16 @@ COPY --from=web /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app/backend
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
-RUN pip install . && playwright install --with-deps chromium-headless-shell
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && pip install . \
+    && playwright install --with-deps chromium-headless-shell \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=web /web/.next/standalone /app/web
 COPY --from=web /web/.next/static /app/web/.next/static
 COPY --from=web /web/public /app/web/public
-COPY docker/start.sh /usr/local/bin/start
+COPY --chmod=755 docker/start.sh /usr/local/bin/start
+RUN sed -i 's/\r$//' /usr/local/bin/start
 VOLUME /data
 EXPOSE 8080
 CMD ["start"]

@@ -156,12 +156,24 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     known = {row["id"]: json.loads(row["data"]) for row in rows}
     if problem := check(tenders, sum(t["status"] == "open" for t in known.values())):
         raise Broken(problem)
-    fetched = cached = blocked = blocked_pages = pending = 0
+    fetched = cached = blocked = blocked_pages = failed_pages = missing = pending = 0
     skips: Counter[str] = Counter()
     reason = None
     for tender in tenders:
         old = known.get(tender["id"])
         tender.pop("_documentChecked", None)
+        page_error = tender.pop("_documentPageError", False)
+        detail_pending = tender.pop("_documentDetailPending", False)
+        if page_error or detail_pending:
+            if old:
+                tender["documents"] = old.get("documents", [])
+                tender["_documentUrls"] = old.get("_documentUrls", [])
+                if "_documentSkips" in old:
+                    tender["_documentSkips"] = old["_documentSkips"]
+            tender["_documentsComplete"] = False
+            failed_pages += page_error
+            pending += detail_pending
+            continue
         if why := tender.pop("_documentBlock", None):
             tender["documents"] = old.get("documents", []) if old else []
             tender["_documentsComplete"] = False
@@ -171,6 +183,7 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
             reason = why
             continue
         urls = tender["_documentUrls"]
+        missing += not urls
         same_urls = old and old.get("_documentUrls") == urls
         if same_urls and old.get("_documentsComplete") and (not urls or "_documentSkips" in old):
             tender["documents"], tender["_documentsComplete"] = old["documents"], True
@@ -214,7 +227,9 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         return len(tenders), ". ".join([failure, *notes]), ""
     if blocked_pages:
         notes.append(f"Document pages blocked for {blocked_pages} of {len(tenders)} tenders")
-    if missing := sum(not t["_documentUrls"] for t in tenders) - blocked_pages:
+    if failed_pages:
+        notes.append(f"Could not read document pages for {failed_pages} of {len(tenders)} tenders")
+    if missing:
         notes.append(f"No document links found for {missing} of {len(tenders)} tenders")
     if pending:
         log.info("portal %s: documents incomplete for %d tenders, %d MB downloaded", portal_id, pending,

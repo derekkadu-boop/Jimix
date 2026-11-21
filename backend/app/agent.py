@@ -38,6 +38,13 @@ KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetim
 DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
 FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
 
+COSINEX_PAGE_PATH = (
+    r"(/VMPCenter/company/announcements/categoryOverview[.]do"
+    r"[?]method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=[0-9]+)"
+)
+COSINEX_PAGE_LINK = re.compile(r"setTargetAndSubmit\(\s*'" + COSINEX_PAGE_PATH + "'")
+
+
 INSTRUCTIONS = f"""You connect a public procurement portal so that its open tenders can be read without you.
 Find where the portal lists its open tenders, write a recipe that reads all of them with their documents,
 check it with test_recipe and finish with submit_recipe.
@@ -58,6 +65,10 @@ The listing must cover every open tender the portal has: no category, region, CP
 Prefer the broadest list (all current notices) and paginate through it. If the portal only offers lists
 split by category, set listing.url to the page linking to all of them and index to those links:
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
+On Cosinex category listings, use the overview's links with cpvCode= in index to read every category.
+For a.browseForward with a setTargetAndSubmit path shown in onclick, use next_page with
+path a.browseForward, attribute onclick, and pattern '{COSINEX_PAGE_PATH}'.
+That path supports GET. A javascript:void(0) href is a placeholder and cannot be fetched.
 If you find no list of open tenders, keep searching before giving up:
 - a search or "all notices" page (Suche, Bekanntmachungen, recherche, búsqueda, zoeken, wyszukiwarka...),
   tried with an empty query: a GET search URL works as a listing URL;
@@ -88,7 +99,8 @@ A recipe is JSON:
   "documents_page": {{"path": "selector of the link from the tender page to its documents page",
                      "attribute": "href"}} or null,
   "documents_by_host": {{"host.example": {{"files": {{"path": "selector of file links"}},
-                        "page": {{"path": "optional selector of a public documents-page link"}}}}}},
+                        "page": {{"path": "optional selector of a public documents-page link"}},
+                        "modal": "netserver_file_tree" or null}}}},
   "timezone": "IANA zone of the portal's local times, e.g. Europe/Berlin",
   "dayfirst": true when dates are written day first
 }}
@@ -98,6 +110,9 @@ When listings link to different document platforms, use documents_by_host with e
 If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
 match its destination host. Each matching rule may follow one public page link before reading files.
 Hosts without a rule use documents.
+On a public NetServer documents page with an a.zipFileContents control, the netserver_file_tree modal
+opens the highest-numbered file list version. The files selector is scoped to the opened dialog, for
+example a.filenameEllipsis[href].
 CSS selectors are BeautifulSoup/soupsieve: use :-soup-contains("text"), not :contains.
 Fields: {", ".join(TENDER_FIELDS)}.
 id is the portal's own stable identifier (often a number in the tender URL, e.g. pattern "pid=(\\d+)").
@@ -165,7 +180,14 @@ def simplify(html: str) -> str:
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in soup.find_all(True):
+        pagination = (
+            COSINEX_PAGE_LINK.search(tag.get("onclick", ""))
+            if tag.name == "a" and "browseForward" in tag.get("class", [])
+            else None
+        )
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
+        if pagination:
+            tag["onclick"] = f"setTargetAndSubmit('{pagination[1]}')"
     return re.sub(r"\s+", " ", str(soup))
 
 
@@ -176,12 +198,19 @@ def _chunk(text: str, offset: int) -> str:
     return text[offset:end] + more
 
 
+NO_DOCUMENT_LINKS = (
+    "no document links in the sampled tenders: map the actual file links (documents, documents_page or"
+    " documents_by_host); call give_up with blocked=true only if a login or captcha on documents was detected"
+)
+
+
 async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
     if not (recipe.documents or recipe.documents_by_host):
         return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
     urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
     warnings = []
     if recipe.documents_by_host:
+        warnings.extend(f"tender {t['id']}: document page unavailable" for t in tenders if t.get("_documentPageError"))
         checked = [t for t in tenders if t.get("_documentChecked")]
         for tender in checked:
             if not tender["_documentUrls"]:
@@ -196,7 +225,9 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
             urls = list(by_host.values())
     urls = urls[:3]
     if not urls:
-        return None, warnings
+        if any(t.get("_documentPageError") for t in tenders):
+            return "could not read the sampled document pages", warnings
+        return NO_DOCUMENT_LINKS, warnings
     blocked, downloaded = None, False
     for url in urls:
         try:
@@ -257,8 +288,6 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     warnings.extend(document_warnings)
-    if (recipe.documents or recipe.documents_by_host) and not any(t["_documentUrls"] for t in tenders):
-        warnings.append("no document links found in the sample: check documents/documents_page")
     return {
         "problem": problem,
         "warnings": warnings,
