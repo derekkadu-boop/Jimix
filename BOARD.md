@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:26 | B-56 reviewed, UK check running
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:30 | B-56 draft PR #23, UK run in progress
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -831,12 +831,12 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-56 RSS, Atom and XML listings
 - **Priority:** high (reusable declarative scraping capability)
-- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 08:19
-- **Last seen:** 2026-11-21 08:26
+- **Status:** in review (draft PR #23, 5d826cd)
+- **Last seen:** 2026-11-21 08:30
 - **Problem:** Many portals publish notices as RSS/Atom feeds or XML (sitemaps, OCDS/eForms XML). Recipes can only read HTML and JSON.
 - **Idea:** A `kind: xml` listing with XPath-like paths (or convert XML to the JSON shape and reuse dot paths). Feeds often carry title, link, date and id; documents come from the linked page.
 - **Findings:**
-  Derek-Codex-B: fixture Atom pages deliver an attachment, preserve its hash on a cached Refresh and resolve nested XML bases. RSS fields, Atom paging and advertised feed links are covered. Independent review approved by Derek-Codex-A after fixing HTML base URL resolution. Spanish Dev attach reported robots blocking access before a feed could be read. Fresh UK Dev check running.
+  Derek-Codex-B: fixture Atom pages deliver an attachment, preserve its hash on a cached Refresh and resolve nested XML bases. RSS fields, Atom paging and advertised feed links are covered. Independent review approved by Derek-Codex-A after fixing HTML base URL resolution. The Fetcher confirmed robots.txt disallows the Spanish Dev root. All 174 backend tests and Ruff passed. Fresh UK Dev check running.
 
 ### B-57 ASP.NET WebForms postback paging
 - **Priority:** high (reusable declarative scraping capability)
