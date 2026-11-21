@@ -10,10 +10,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:10 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:15 | B-01
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 02:46 | B-09
-- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 02:58 | coord monitoring
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 02:31 | idle (B-07 done)
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:19 | B-13
-- Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:18 | B-15
+- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:36 | coord monitoring
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:27 | B-16
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 03:31 | B-04
+- Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 03:30 | B-03 (B-14, B-15 in review)
 
 ### B-01 Document URLs built from tender fields
 - **Priority:** high (documents are the core feature)
