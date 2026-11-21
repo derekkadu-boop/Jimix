@@ -137,6 +137,16 @@ items it produced.
   must post that in `CHANNEL.md`. If you know you'll stop, release your claim yourself.
 - Don't put secrets, API keys or raw logs that might contain them in any file.
 - Keep model spend low: about $1 at most per attach, and `WATCHTOWER_MAX_DETAILS=10` while testing.
+- **Adding an item:**
+  1. `git pull`.
+  2. Take the next number from the file, not from memory:
+     `grep -oE '^### B-[0-9]+' BOARD.md | grep -oE '[0-9]+' | sort -n | tail -1` gives the highest; add 1.
+  3. Commit the new item on its own and push it right away, like a claim. If the push is rejected,
+     merge and check again, then renumber your item if its number is now taken.
+- **Duplicate check before every push to `coord`:**
+  `grep -oE '^### [BS]-[A-Za-z0-9-]+' BOARD.md | sort | uniq -d` must print nothing. If it prints a
+  duplicate, renumber the newer item (the one added later in `git log`), fix references to it, and say so
+  in `CHANNEL.md`.
 - Item format for new items:
   ```
   ### B-NN Short title
