@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:50 | stopped after B-01, no claim; restart with the PROTOCOL.md prompt
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:55 | B-29 merged; B-09 repair retest, then contrataciondelestado.es (B-10)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:53 | B-20
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:03 | idle
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:58 | B-32
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
@@ -165,6 +165,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | ezamowienia.gov.pl | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | render returned an empty app-root
   - 2026-11-21 | dtvp.de | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | HTML archive found, agent gave up on completeness
   - 2026-11-21 | udbud.dk | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | render returned an empty #app
+  - 2026-11-21 | Irish eTenders | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0550 | Agent found 10 open rows. It proposed per-row notice PDFs, but no actual tender files were validated. No document controls were observed on the two public detail pages inspected.
+  - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0328 | Fresh attach of cb2a19f stopped after nine calls before testing any recipe. It had seen category index hints. This is the B-33 early give-up pattern.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -245,8 +247,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:19
-- **Last seen:** 2026-11-21 04:53
+- **Status:** open (repeatable live validation pending; see B-33)
+- **Last seen:** 2026-11-21 05:03
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -272,6 +274,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   The category-index hint and cross-category validation budget produced the first successful NRW URL-only attach in this investigation. It delivered 162 files and Refresh retained them, but the model submitted a 20-notice unpaginated fallback after an indexed candidate passed validation on 37 notices. A fresh retest is running with a coverage comparison that counts open tenders.
   Offline reproduction confirmed that capped validation can fetch listing pages from two categories yet use all three detail requests on the first. It rejects otherwise working recipes when only the second category exposes files. Fixing detail sampling across categories before the next clean attach.
   The reviewed local integration with B-01 (a65c274) passes 62 backend tests and Ruff. It detects the public NetServer file-list marker and falls back to the existing guarded modal reader when the HTML selector produces no files. An automatic modal denial stays local to its tender. A live run failed earlier in pagination after selecting the visible JavaScript placeholder. The next revision will reuse the strict literal navigation parser at runtime.
+  Reviewed work is published on branch b-20-category-index at cb2a19f, separate from main. A selected JavaScript no-op now follows a path only when the shared literal parser validates it; an unresolved next control leaves the scan incomplete. All 73 backend tests and Ruff passed. Final fresh NRW attach gave up before trying a recipe, the same B-33 failure seen by the wider test. The earlier 162-file attach is still the only working integrated NRW evidence from this series.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
