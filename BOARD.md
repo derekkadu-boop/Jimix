@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:44 | B-65
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:47 | B-42 in draft PR #18, taking next document task
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:48 | B-62
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:43 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -858,7 +858,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-62 Deliver tenders even when their documents can't be collected
 - **Priority:** high (UX, operator request)
-- **Status:** open
+- **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 07:48
+- **Last seen:** 2026-11-21 07:48
 - **Problem:** B-22 refuses any recipe whose sampled tenders yield no downloadable files. On portals whose documents are on buyers' platforms that block crawlers or need a login (Doffin: tendsign robots-disallowed, artifik/hyyr HTML pages; Ireland and Finland: documents behind login), we deliver nothing at all, although the tenders and their links are public.
 - **Idea:** Accept a recipe that reads tenders correctly even if documents can't be collected, once the agent has really tried (documents mapped, the downloads blocked or not files). Deliver tenders with `url` so people can open them in a browser, `documents: []`, and a per-tender reason (e.g. `documentsNote: "hosted on tendsign.com, which disallows crawlers"`). The portal stays serving, with its reason saying documents are unavailable and why. Keep "no tenders" as a real failure. Update B-22's check accordingly and test it.
 - **Findings:**
