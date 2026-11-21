@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:47 | protocol keeper, B-18
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:55 | B-40
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:06 | B-40
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:06 | B-42
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:58 | B-20
@@ -539,8 +539,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-40 JSON paths with [*] and [0] are not understood
 - **Priority:** high (a correct document recipe failed on syntax)
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:49
-- **Last seen:** 2026-11-21 05:55
+- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:49 (fix + 2 reviews done, TenderNed retest running)
+- **Last seen:** 2026-11-21 06:06
 - **Problem:** A fresh TenderNed attach found the per-tender JSON file list and tested
   `documents: {"path": "$.documenten[*].links.download.href"}`, the usual JSONPath form. Recipe dot paths
   only accept `path: "documenten"` plus `attribute: "links.download.href"`, so every test reported no
@@ -557,8 +557,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 06:06
-- **Last seen:** 2026-11-21 06:06
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:05 (public HTML hint slice)
+- **Last seen:** 2026-11-21 06:05
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
