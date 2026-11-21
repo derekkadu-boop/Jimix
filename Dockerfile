@@ -14,6 +14,7 @@ FROM python:3.13-slim-bookworm
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 \
     JIMIX_DB=/data/jimix.db \
     JIMIX_FILES=/data/files \
     NODE_ENV=production \
