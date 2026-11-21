@@ -195,6 +195,12 @@ def _chunk(text: str, offset: int) -> str:
     return text[offset:end] + more
 
 
+NO_DOCUMENT_LINKS = (
+    "no document links in the sampled tenders: map the actual file links (documents, documents_page or"
+    " documents_by_host); call give_up with blocked=true only if a login or captcha on documents was detected"
+)
+
+
 async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
     if not (recipe.documents or recipe.documents_by_host):
         return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
@@ -218,7 +224,7 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
     if not urls:
         if any(t.get("_documentPageError") for t in tenders):
             return "could not read the sampled document pages", warnings
-        return None, warnings
+        return NO_DOCUMENT_LINKS, warnings
     blocked, downloaded = None, False
     for url in urls:
         try:
@@ -248,8 +254,6 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     warnings.extend(document_warnings)
-    if (recipe.documents or recipe.documents_by_host) and not any(t["_documentUrls"] for t in tenders):
-        warnings.append("no document links found in the sample: check documents/documents_page")
     return {
         "problem": problem,
         "warnings": warnings,

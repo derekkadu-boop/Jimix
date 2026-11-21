@@ -259,6 +259,18 @@ def test_recipe_validation_samples_each_document_host(monkeypatch):
     assert warnings == ["tender 3: no file links", "could not download sampled file from buyer-two.example"]
 
 
+def test_recipe_validation_requires_document_links():
+    recipe = Recipe.model_validate(RECIPE)
+    tenders = [{"id": "1", "_documentUrls": []}, {"id": "2", "_documentUrls": []}]
+    problem, _ = asyncio.run(agent._check_documents(recipe, tenders, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    by_host = Recipe.model_validate(RECIPE | {"documents_by_host": {"buyer.example": {"files": {"path": "a"}}}})
+    checked = [{"id": "1", "_documentUrls": [], "_documentChecked": True}]
+    problem, warnings = asyncio.run(agent._check_documents(by_host, checked, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    assert warnings == ["tender 1: no file links"]
+
+
 def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
     monkeypatch.setattr(fetch, "MAX_FILE_BYTES", 1024)
