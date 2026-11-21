@@ -3,8 +3,9 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
+import httpx
 from bs4 import BeautifulSoup, Comment
 from openai import AsyncOpenAI
 
@@ -12,7 +13,7 @@ from .browser import render
 from .discovery import discover, scan_scripts
 from .documents import fetch_documents
 from .fetch import Blocked, Fetcher
-from .recipe import TENDER_FIELDS, Recipe, apply, check
+from .recipe import KEYWORDS, TENDER_FIELDS, Recipe, apply, check
 
 log = logging.getLogger("watchtower.agent")
 MODEL = os.environ.get("WATCHTOWER_MODEL", "gpt-5.4-mini")
@@ -38,6 +39,8 @@ DOCUMENT_LISTS = (
     "anexos", "documenti", "allegati", "dokumenty", "zalaczniki", "dokument", "bilagor",
 )
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
+DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
+FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
 
 COSINEX_PAGE_PATH = (
     r"(/VMPCenter/company/announcements/categoryOverview[.]do"
@@ -277,12 +280,45 @@ async def _document_lists(tenders: list[dict], fetcher: Fetcher) -> list[str]:
     return []
 
 
+async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> str | None:
+    if recipe.documents_page or recipe.documents_by_host or recipe.documents_url:
+        return None
+    if not recipe.detail or recipe.detail.kind != "html":
+        return None
+    tender = next((t for t in tenders if t.get("url")), None)
+    if not tender:
+        return None
+    try:
+        resp = await fetcher.get(tender["url"])
+    except (Blocked, httpx.HTTPError, ValueError, OSError):
+        return None
+    known = set(tender["_documentUrls"]) | {tender["url"], str(resp.url)}
+    for link in BeautifulSoup(resp.text, "html.parser").find_all("a", href=True):
+        text = " ".join(link.get_text(" ").split()).casefold()
+        href = urljoin(str(resp.url), link["href"]).split("#")[0]
+        if (
+            0 < len(text) <= 60
+            and DOCUMENT_PAGE.search(text)
+            and href.startswith("http")
+            and href not in known
+            and not FILE_SUFFIX.search(urlsplit(href).path)
+        ):
+            return (
+                f"tender page {tender['url']} links to {text!r} ({href}) but documents_page is not set. If that"
+                " page lists the tender's files (often more than the notice), set documents_page to that link"
+                " and documents to the file links there"
+            )
+    return None
+
+
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
     problem = check(tenders)
     document_warnings = []
     if not problem:
         problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
+        if not problem and (hint := await _document_page_hint(recipe, tenders, fetcher)):
+            document_warnings.append(hint)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     warnings.extend(document_warnings)
