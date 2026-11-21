@@ -725,6 +725,24 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - Unit-test with a fake non-tender site.
 - **Findings:**
 
+### B-49 Attach results vary between runs on the same portal
+- **Priority:** high (reliability; the judges attach each portal once)
+- **Status:** open
+- **Problem:** The same code and portal succeed in one fresh run and fail in the next. TenderNed: Derek's fresh
+  run at 06:49 reached serving with 1000 tenders and 159 files. Sweep 3 (main 791657e, 06:45) failed with
+  "JS app and no usable rows/API endpoints were discovered". NRW also flips between runs. The agent's
+  exploration path decides the outcome.
+- **Idea:**
+  1. Measure it: attach the same 3 Dev portals 3 times each with fresh DBs and record success, calls and
+     the first divergent step (from `watchtower.agent tool` log lines).
+  2. Make discovery less path-dependent: run the cheap deterministic steps every time before the model
+     starts (render the start page and record its JSON/POST calls, B-01 probes, documents-page hints) and
+     give their results to the agent up front.
+  3. On a failed attach, retry once with a hint summarising what the first attempt found, if the budget
+     allows.
+  4. Lower temperature or seed if the provider supports it.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
