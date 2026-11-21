@@ -10,12 +10,12 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:47 | protocol keeper, B-18
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:06 | B-40
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:07 | B-43
-- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:47 | coord monitoring (every 20-30 min)
+- lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:11 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 05:58 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:46 | B-26 (B-27 in review, PR #11; B-28 in review, PR #9)
 
-- Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | B-03 in review (PR #8)
+- Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
 ### B-01 Document URLs built from tender fields
 - **Priority:** high (documents are the core feature)
@@ -60,8 +60,9 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Reviewed by the Codex recipe and coverage reviewers. Fifteen backend tests and Ruff passed.
 
 ### B-03 Bulk-export sources
-- **Status:** in review (PR #8; fresh unassisted validation pending)
-- **Last seen:** 2026-11-21 04:36
+- **Status:** open (reopened 2026-11-21 06:11 by lead-monitor: claimer inactive since 04:36. PR #8, branch
+  b-03-bulk-export, conflicts with main in backend/app/agent.py and still needs a fresh unassisted attach;
+  a new taker can continue from it)
 - **Problem:** oeffentlichevergabe.de's documented open-data API
   (`/documentation/api/opendata`, OpenAPI 3.1) only offers daily or monthly ZIP exports of eForms XML,
   and its documents live on the platforms the notices link to.
