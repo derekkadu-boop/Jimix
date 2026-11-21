@@ -17,6 +17,30 @@ RECIPE = {
 GIVE_UP = ("give_up", {"reason": "No working recipe", "blocked": False})
 
 
+def test_render_reports_document_link_fields_beyond_the_preview(monkeypatch):
+    sample = json.dumps({
+        "description": "x" * 700,
+        "profileUrl": "/buyer",
+        "deleteFileUrl": "/remove",
+        "uploadDocumentUrl": "/new",
+        "attachment_remove_href": "/changes",
+        "attachment_url": "/files/1",
+        "procurementDocumentsURL": "https://buyer.example/t/1",
+        "documentCount": 7,
+        "fileUrl": None,
+    })
+    portal = {"url": URL, "method": "GET", "sample": sample}
+    translation = {"url": URL + "/translations", "method": "GET", "sample": '{"documentUrl":"Label"}'}
+    monkeypatch.setattr(agent, "render", AsyncMock(return_value=("<main></main>", [translation, portal], URL)))
+    output, recipe = asyncio.run(agent._call("render_page", {"url": URL}, object()))
+    calls = json.loads(output.split("JSON responses: ", 1)[1])
+    assert recipe is None
+    assert calls[0]["url"] == URL
+    assert calls[0]["documentLinkFields"] == ["attachment_url", "procurementDocumentsURL"]
+    assert calls[0]["sample"] == sample[:600]
+    assert "documentLinkFields" not in calls[1]
+
+
 def fake_model(monkeypatch, turns, *, problem="no tenders found", blocks=()):
     completions = []
     for turn in turns:

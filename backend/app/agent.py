@@ -53,6 +53,10 @@ DOCUMENT_LISTS = ("documents", "attachments", "files", "dokumente", "documenten"
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
 DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
 FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
+JSON_LINK_KEY = re.compile(r'(?<!\\)"([A-Za-z][A-Za-z0-9_-]{0,63})"\s*:\s*"(?:https?:\\?/\\?/|\\?/(?!\\?/))')
+WRITE_ACTIONS = {
+    "add", "create", "delete", "edit", "manage", "modify", "remove", "replace", "submit", "update", "upload",
+}
 
 CATEGORY_KEY = re.compile(r"(?:categor(?:y|ie)|classification|cpv)(?:id|code)?", re.IGNORECASE)
 SESSION_PATH = re.compile(r";jsessionid=[^/;]*", re.IGNORECASE)
@@ -337,6 +341,22 @@ def _chunk(text: str, offset: int) -> str:
     return text[offset:end] + more
 
 
+def _call_preview(call: dict) -> dict:
+    sample = call["sample"]
+    preview = {k: v for k, v in call.items() if k != "sample"}
+    document_keys = []
+    for key in JSON_LINK_KEY.findall(sample):
+        words = set(re.split(r"[_-]+", re.sub(r"([a-z])([A-Z])", r"\1_\2", key).lower()))
+        if words & WRITE_ACTIONS:
+            continue
+        if (words & {"document", "documents", "docs", "attachment", "attachments", "file", "files"}
+                and words & {"url", "uri", "link", "href"} and key not in document_keys):
+            document_keys.append(key)
+    if document_keys:
+        preview["documentLinkFields"] = document_keys[:3]
+    return preview | {"sample": sample[:600]}
+
+
 def _page_content(html: str, offset: int = 0, *, base: str | None = None) -> str:
     simplified, next_page, hints = simplify(html, base)
     if next_page:
@@ -595,9 +615,13 @@ async def _call(name: str, args: dict, fetcher: Fetcher) -> tuple[str, Recipe | 
             clicked = next((c["clicked"] for c in calls if "clicked" in c), None)
             note = (f"After loading, clicked {clicked!r}: the page below is the page AFTER that click, and the JSON"
                     " responses it loaded come first.\n") if clicked else ""
-            calls = sorted((c for c in calls if "url" in c),
-                           key=lambda c: ("afterClicking" not in c, c["method"] != "POST"))
-            calls = [{k: v for k, v in c.items() if k != "sample"} | {"sample": c["sample"][:600]} for c in calls]
+            calls = sorted(
+                (_call_preview(c) for c in calls if "url" in c),
+                key=lambda c: ("afterClicking" not in c, "documentLinkFields" not in c, c["method"] != "POST"),
+            )
+            if any("documentLinkFields" in c for c in calls):
+                note += ("A JSON response contains document-link fields. Inspect that response with fetch_json "
+                         "and follow the linked file or buyer's documents page.\n")
             content = _page_content(html, base=final)
             return f"URL: {final}\n{note}{content}\nJSON responses: {json.dumps(calls)[:5000]}", None
         if name == "fetch_json":
