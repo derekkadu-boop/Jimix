@@ -690,15 +690,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-47 Status mapped to a field that never changes
 - **Priority:** medium (correct fields)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:44
-- **Last seen:** 2026-11-21 06:44
+- **Status:** in review (PR #16)
 - **Problem:** TenderNed (fresh unassisted attach, 1000 tenders): the agent mapped `status` to
   `publicatiestatus.omschrijving`, which is "Gepubliceerd" for every notice, so award and prior-information
   notices (e.g. "Aankondiging gegunde opdracht") count as open: 774 of 1000 open.
 - **Idea:** Generic test_recipe warning: if `status` (or any mapped field) has one identical value across
   the whole sample, say so and suggest a field naming the notice type or stage. Award-type wording is already
   in keywords.json (closed list).
-- **Findings:**
+- **Findings:** PR #16 adds an advisory warning for one case-insensitive raw mapped status shared by three or more unique tenders. No additional requests or output/status changes. Four synthetic cases, 122 backend tests, Ruff and review passed. No fresh live attach.
 
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
