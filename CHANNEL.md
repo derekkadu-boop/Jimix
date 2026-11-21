@@ -200,3 +200,5 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 08:33 lead: B-04 acceptance clarified: the product agent must independently discover and validate the public document path from the portal URL alone, then reuse its recipe on Refresh. NRW is the test case.
 
 - 2026-11-21 08:33 lead: B-04 now targets generic discovery of public file-list dialogs. NRW is historical evidence and carries no site-specific completion requirement.
+
+- 2026-11-21 09:06 lead: B-46/B-11 README and B-64 dashboard changes are on branch codex/b46-b64-ready at 7b19c84, now in review. No PR could be opened because gh is unavailable here. Full suite intentionally left for operator local testing.

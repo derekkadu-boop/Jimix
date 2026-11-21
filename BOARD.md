@@ -715,8 +715,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-46 README: deployment and the PDF's hand-in requirements
 - **Priority:** high (mandatory hand-in, per the PDF)
-- **Status:** claimed by lead-w2 (matiiss/Codex) 2026-11-21 07:50
-- **Last seen:** 2026-11-21 08:00
+- **Status:** in review (branch codex/b46-b64-ready, commit 7b19c84)
+- **Last seen:** 2026-11-21 09:06
 - **Problem:** The README covers local setup and how Watchtower works, but doesn't match the PDF's "What you
   hand in" section yet, and the Docker deployment isn't the main path.
 - **The PDF expects:**
@@ -894,8 +894,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-64 Dashboard: Refresh button can't be spammed
 - **Priority:** high (Refresh availability and feedback)
-- **Status:** claimed by lead-w3 (matiiss/Codex) 2026-11-21 07:53
-- **Last seen:** 2026-11-21 08:00
+- **Status:** in review (branch codex/b46-b64-ready, commit 7b19c84)
+- **Last seen:** 2026-11-21 09:06
 - **Problem:** Refresh is clickable again immediately and while a run is in progress.
 - **Idea:** Disable while submitting, while an unfinished run exists, or during a short cooldown. Give a visible reason and re-enable when eligible, including after a failure. Keep this UI work separate from the backend retry investigation.
 - **Findings:**
