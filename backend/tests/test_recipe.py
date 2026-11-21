@@ -1238,3 +1238,42 @@ def test_page_cap_is_reported_in_validation_and_delivery(monkeypatch, tmp_path):
     warnings, (count, _, note) = asyncio.run(run(2))
     assert count == 3 and "Listing coverage incomplete at the page limit" not in note
     assert not any("Listing coverage is incomplete" in warning for warning in warnings)
+
+
+@pytest.mark.parametrize(
+    ("link", "hinted"),
+    [
+        ('<link rel="next" href="/list/2">', True),
+        ('<a href="/list?page=2" aria-label="Nächste Seite">›</a>', True),
+        ('<a href="/list?offset=20">2</a>', True),
+        ('<a href="/list?offset=20&buyer=42">2</a>', False),
+        ('<a href="https://other.example/list?page=2" rel="next">Next</a>', False),
+        ('<a href="#next" rel="next">Next</a>', False),
+        ('<template><a href="/list?page=2">Next</a></template>', False),
+    ],
+)
+def test_recipe_validation_warns_about_unhandled_pagination(monkeypatch, link, hinted):
+    async def covered_documents(*_args):
+        return None, []
+
+    monkeypatch.setattr(agent, "_check_documents", covered_documents)
+    listing = {**RECIPE["listing"], "next_page": None}
+    recipe = Recipe.model_validate({**RECIPE, "listing": listing, "detail": None, "documents": None})
+    requests = []
+
+    def response(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        requests.append(str(request.url))
+        return httpx.Response(200, html=LIST_2 + link)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            return await agent._test(recipe, fetcher)
+        finally:
+            await fetcher.close()
+
+    report = asyncio.run(run())
+    assert any("likely next-page" in warning for warning in report["warnings"]) == hinted
+    assert requests == ["https://portal.example/list"]
