@@ -71,7 +71,9 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Failed dialogs retain earlier files and allow other tenders to finish. Reviewed by the Codex
   browser guard and recipe reviewers. All 19 backend tests and Ruff passed.
   A fresh NRW attach reached the public listing but gave up validating files across buyer hosts
-  after 19 calls (estimated .099). Public POST search and automatic NRW attach are separate issues.
+  after 19 calls (estimated USD 0.099). A stored-recipe Refresh then delivered 232 files and served
+  the verified PDF through the API with zero model calls. Public POST search is B-18 and automatic
+  NRW attachment is B-20.
 
 ### B-05 Prompt-injection hardening
 - **Status:** open
@@ -196,7 +198,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Bulk exports are tracked under B-03.
 - **Findings:** Split from B-04 after shipping the Düsseldorf document dialog.
 
-### B-19 Attach NRW automatically across buyer platforms
+### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** open
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
