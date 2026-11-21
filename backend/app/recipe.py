@@ -13,6 +13,7 @@ from dateutil import parser as dateparser
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field, model_validator
 
+from . import xml_listing
 from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .fetch import Blocked, Fetcher
 
@@ -38,6 +39,7 @@ KEYWORDS = json.loads((Path(__file__).parent / "keywords.json").read_text(encodi
 PROCEDURES = tuple(KEYWORDS["procedureType"].items())
 NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
+ListingKind = Literal[Kind, "xml"]
 MAX_INDEX_LISTS = 50
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 PAGINATION_PATH = r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+"
@@ -75,7 +77,7 @@ class Selector(BaseModel):
 
 
 class Listing(BaseModel):
-    kind: Kind = "html"
+    kind: ListingKind = "html"
     url: str
     method: Literal["GET", "POST"] = "GET"
     body: dict | None = None
@@ -159,12 +161,12 @@ class Recipe(BaseModel):
             if not re.fullmatch(r"[a-z0-9.-]+", host):
                 raise ValueError("documents_by_host keys must be lowercase hostnames")
         for selector, kind in links:
-            if selector and selector.attribute is None and kind != "json":
+            if selector and selector.attribute is None and kind in ("html", "browser"):
                 selector.attribute = "href"
         if self.detail and not self.detail.url and "url" not in self.listing.fields:
             raise ValueError("detail needs listing.fields.url or detail.url")
-        if self.method.endswith("api") != (self.listing.kind == "json"):
-            raise ValueError("API methods use a json listing, html and browser methods do not")
+        if self.method.endswith("api") != (self.listing.kind in ("json", "xml")):
+            raise ValueError("API methods require a JSON or XML listing. HTML and browser methods use pages.")
         try:
             ZoneInfo(self.timezone)
         except (KeyError, ValueError):
@@ -239,7 +241,15 @@ def _walk(value, parts: list[str]):
     return value
 
 
-def _values(node, selector: Selector, kind: Kind) -> list[str]:
+def _matched_values(values, pattern: str | None) -> list[str]:
+    values = [" ".join(v.split()) for v in values if isinstance(v, str) and v.strip()]
+    if pattern:
+        matches = (re.search(pattern, v) for v in values)
+        values = [m.group(1) if m.re.groups else m.group(0) for m in matches if m]
+    return values
+
+
+def _values(node, selector: Selector, kind: ListingKind, *, links: bool = False) -> list[str]:
     if kind == "json":
         found = _json_path(node, selector.path)
         items = found if isinstance(found, list) else [found]
@@ -250,14 +260,18 @@ def _values(node, selector: Selector, kind: Kind) -> list[str]:
                 picked.extend(result if isinstance(result, list) else [result])
             items = picked
         values = [str(i) for i in items if isinstance(i, (str, int, float)) and not isinstance(i, bool)]
+    elif kind == "xml":
+        values = []
+        for element in xml_listing.nodes(node, selector.path):
+            value = element.get(selector.attribute) if selector.attribute else "".join(element.itertext())
+            for matched in _matched_values([value], selector.pattern):
+                if matched:
+                    values.append(urljoin(element.base, matched) if links else matched)
+        return values
     else:
         elements = [node] if selector.path == "$" else node.select(selector.path)
         values = [e.get(selector.attribute) if selector.attribute else e.get_text(" ") for e in elements]
-    values = [" ".join(v.split()) for v in values if isinstance(v, str) and v.strip()]
-    if selector.pattern:
-        matches = (re.search(selector.pattern, v) for v in values)
-        values = [m.group(1) if m.re.groups else m.group(0) for m in matches if m]
-    return values
+    return _matched_values(values, selector.pattern)
 
 
 def pagination_handler(tag) -> re.Match[str] | None:
@@ -284,7 +298,9 @@ def _public_pagination_path(path: str) -> bool:
     )
 
 
-def _next_link(page, selector: Selector, kind: Kind) -> tuple[str | None, bool]:
+def _next_link(page, selector: Selector, kind: ListingKind) -> tuple[str | None, bool]:
+    if kind == "xml":
+        return next(iter(_values(page, selector, kind, links=True)), None), False
     if kind != "json" and selector.attribute == "onclick":
         unresolved = False
         for tag in [page] if selector.path == "$" else page.select(selector.path):
@@ -320,15 +336,17 @@ def _next_link(page, selector: Selector, kind: Kind) -> tuple[str | None, bool]:
     return None, unresolved
 
 
-def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
+def _extract(node, fields: dict[str, Selector], kind: ListingKind) -> dict:
     out = {}
     for name, selector in fields.items():
-        if values := _values(node, selector, kind):
+        if values := _values(node, selector, kind, links=name == "url"):
             out[name] = " ".join(values) if name == "cpvCodes" else values[0]
     return out
 
 
-async def _load(kind: Kind, url: str, fetcher: Fetcher, body: dict | None = None, click: str | None = None):
+async def _load(
+    kind: ListingKind, url: str, fetcher: Fetcher, body: dict | None = None, click: str | None = None,
+):
     if body is not None:
         resp = await fetcher.post_json(url, body)
         return resp.json(), str(resp.url)
@@ -339,6 +357,8 @@ async def _load(kind: Kind, url: str, fetcher: Fetcher, body: dict | None = None
     resp = await fetcher.get(url)
     if kind == "json":
         return resp.json(), str(resp.url)
+    if kind == "xml":
+        return xml_listing.parse_feed(resp.content, str(resp.url)), str(resp.url)
     return BeautifulSoup(resp.text, "html.parser"), str(resp.url)
 
 
@@ -380,7 +400,10 @@ NEXT_PAGE_LABELS = {"next", "next page", "weiter", "nächste seite", "suivant", 
                     "volgende", "volgende pagina", "siguiente", "nästa", "następna", "seuraava"}
 
 
-def _has_next_page(page, base: str) -> bool:
+def _has_next_page(page, base: str, kind: ListingKind) -> bool:
+    if kind == "xml":
+        next_links = ("link[@rel='next'][@href]", "channel/link[@rel='next'][@href]")
+        return any(xml_listing.nodes(page, path) for path in next_links)
     current = urlsplit(base)
     original = sorted(parse_qsl(current.query, keep_blank_values=True))
     for link in page.select("a[href], link[rel][href]"):
@@ -424,7 +447,7 @@ async def apply(
     starts = [listing.url]
     if listing.index:
         page, base = await _load(listing.kind, listing.url, fetcher)
-        links = [urljoin(base, u) for u in _values(page, listing.index, listing.kind)]
+        links = [urljoin(base, u) for u in _values(page, listing.index, listing.kind, links=True)]
         starts = list(dict.fromkeys(links))[:MAX_INDEX_LISTS]
         budget -= 1
     complete = bool(starts)
@@ -442,25 +465,32 @@ async def apply(
                     raise
                 log.info("listing paging stopped at page %d: HTTP %d", page_number + 1, exc.response.status_code)
                 break
-            rows = _json_path(page, listing.records) if listing.kind == "json" else page.select(listing.records)
+            if listing.kind == "xml":
+                rows = xml_listing.nodes(page, listing.records)
+            elif listing.kind == "json":
+                rows = _json_path(page, listing.records)
+            else:
+                rows = page.select(listing.records)
             if not isinstance(rows, list):
                 raise TypeError(f"records {listing.records!r} did not give a list")
             if not rows:
                 finished = True
                 break
             if (warnings is not None and listing.kind != "json" and not listing.page_param
-                    and not listing.next_page and _has_next_page(page, base)):
+                    and not listing.next_page and _has_next_page(page, base, listing.kind)):
                 warning = "Listing has a likely next-page link but no next_page or page_param is configured."
                 if warning not in warnings:
                     warnings.append(warning)
             for row in rows:
-                raw = _extract(row, listing.fields, listing.kind) | {"_base": base}
+                raw = _extract(row, listing.fields, listing.kind)
+                raw["_base"] = row.base if listing.kind == "xml" else base
                 if indexed_sample:
                     raw["_categoryIndex"] = index
                 if raw.get("url"):
                     raw["url"] = urljoin(base, raw["url"])
                 if recipe.documents and not recipe.detail and not recipe.documents_url:
-                    raw["_docs"] = [urljoin(base, u) for u in _values(row, recipe.documents, listing.kind)]
+                    links = _values(row, recipe.documents, listing.kind, links=True)
+                    raw["_docs"] = [urljoin(base, u) for u in links]
                 raws.append(raw)
             if listing.page_param and body is not None:
                 body = _with_body_param(listing.body, listing.page_param, page_number + 1)
