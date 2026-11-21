@@ -364,11 +364,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-28 Follow HTML refresh redirects during initial portal discovery
 - **Priority:** high (a public portal address can stop before listing discovery)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:10
-- **Last seen:** 2026-11-21 05:10
+- **Status:** in review (PR #9)
 - **Problem:** A fresh attach of https://vergabe.niedersachsen.de/ failed before finding a listing. The homepage returns HTTP 200 with an 89-byte HTML document and no links. Its only navigation is a standard HTML meta refresh to the procurement application. The agent spent 16 calls and $0.0234 without reaching the listings.
 - **Idea:** Recognize HTML refresh redirects generically, with a bounded chain and the existing URL, rate-limit, robots and access checks. Verify a fresh unassisted attach from a homepage using that mechanism.
-- **Findings:**
+- **Findings:** PR #9 follows standard meta refresh with explicit-hop robots/public URL/rate/access checks, bounded hops and delay, and cycle detection. Two Codex reviewers, 62 offline tests including Chromium, and Ruff passed. Fresh unassisted real-portal attach remains to be verified.
 
 ### B-29 Same file listed twice per tender (archive ZIP plus single files)
 - **Priority:** high (document lists are wrong)
