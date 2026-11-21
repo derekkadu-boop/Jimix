@@ -328,11 +328,11 @@ class Fetcher:
         request = self.client.build_request("GET", url)
         if not shareable_request(url, request.headers):
             return (await self.get(url)).text
-        if asset := PUBLIC_ASSETS.get(url, "script"):
+        if asset := PUBLIC_ASSETS.get(url, "script", request.headers):
             return httpx.Response(200, headers=asset.response_headers(), content=asset.body).text
         response = await self.get(url, headers={"Accept-Encoding": "identity"})
         if response.status_code == 200 and not response.history and shareable_request(url, response.request.headers):
-            PUBLIC_ASSETS.save(url, "script", response.headers, response.content)
+            PUBLIC_ASSETS.save(url, "script", response.headers, response.content, response.request.headers)
         return response.text
 
     async def download(self, url: str, folder: Path) -> tuple[Path, str]:

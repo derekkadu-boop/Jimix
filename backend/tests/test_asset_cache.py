@@ -24,6 +24,18 @@ def test_public_asset_cache_ignores_unshareable_responses(headers):
     assert cache.get("https://portal.example/static.js", "script") is None
 
 
+@pytest.mark.parametrize("field", ["origin", "access-control-request-method", "access-control-request-headers"])
+def test_cors_vary_only_reuses_the_absent_header_variant(field):
+    cache = asset_cache.AssetCache()
+    url = "https://portal.example/static.js"
+    headers = {"content-type": "application/javascript", "cache-control": "max-age=60", "vary": field}
+    alternate = {field: "example"}
+    cache.save(url, "script", headers, b"default", {})
+    cache.save(url, "script", headers, b"variant", alternate)
+    assert cache.get(url, "script", alternate) is None
+    assert cache.get(url, "script", {}).body == b"default"
+
+
 def test_asset_cache_expires_and_evicts_old_entries(monkeypatch):
     now = 10
     monkeypatch.setattr(asset_cache, "time", SimpleNamespace(monotonic=lambda: now))

@@ -205,7 +205,7 @@ async def render(
                     if not await fetcher.allowed(request.url):
                         await route.abort()
                         return
-                    asset = PUBLIC_ASSETS.get(request.url, request.resource_type)
+                    asset = PUBLIC_ASSETS.get(request.url, request.resource_type, current_headers)
                     if asset:
                         await route.fulfill(status=200, headers=asset.response_headers(), body=asset.body)
                         return
@@ -232,7 +232,7 @@ async def render(
                 body = await response.body()
                 fetcher.assets[request.url] = (200, response.headers, body)
                 if headers is not None:
-                    PUBLIC_ASSETS.save(request.url, request.resource_type, response.headers, body)
+                    PUBLIC_ASSETS.save(request.url, request.resource_type, response.headers, body, headers)
             except PlaywrightError:
                 pass
         await route.fulfill(response=response)
