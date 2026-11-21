@@ -1,0 +1,76 @@
+import asyncio
+import hashlib
+import logging
+import os
+import shutil
+import uuid
+import zipfile
+from pathlib import Path
+
+import httpx
+
+from .fetch import MAX_FILE_BYTES, MAX_RUN_DOWNLOAD_BYTES, Blocked, BudgetExceeded, Fetcher
+
+log = logging.getLogger("watchtower.documents")
+FILES_DIR = Path(os.environ.get("JIMIX_FILES", "data/files"))
+MAX_DOCUMENTS = int(os.environ.get("WATCHTOWER_MAX_DOCS_PER_TENDER", "30"))
+
+
+def _store(part: Path, name: str) -> dict:
+    digest = hashlib.sha256()
+    with part.open("rb") as file:
+        while chunk := file.read(1 << 20):
+            digest.update(chunk)
+    sha = digest.hexdigest()
+    target = FILES_DIR / sha
+    if target.exists():
+        part.unlink()
+    else:
+        part.replace(target)
+    log.info("stored %s as %s", name, sha)
+    return {"fileName": name, "sizeBytes": target.stat().st_size, "sha256": sha, "path": f"/files/{sha}"}
+
+
+def _unzip(archive: Path, budget: int) -> tuple[list[dict], int]:
+    documents, unpacked = [], 0
+    with zipfile.ZipFile(archive) as zf:
+        for info in zf.infolist():
+            if info.is_dir() or info.file_size > MAX_FILE_BYTES:
+                continue
+            if unpacked + info.file_size > budget:
+                archive.unlink()
+                raise BudgetExceeded
+            unpacked += info.file_size
+            part = FILES_DIR / f".part-{uuid.uuid4().hex}"
+            try:
+                with zf.open(info) as src, part.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            except (RuntimeError, NotImplementedError, zipfile.BadZipFile):
+                part.unlink(missing_ok=True)
+                continue
+            documents.append(_store(part, Path(info.filename).name))
+    archive.unlink()
+    return documents, unpacked
+
+
+def _save(part: Path, name: str, budget: int) -> tuple[list[dict], int]:
+    return _unzip(part, budget) if zipfile.is_zipfile(part) else ([_store(part, name)], 0)
+
+
+async def fetch_documents(urls: list[str], fetcher: Fetcher) -> tuple[list[dict], bool, str | None]:
+    FILES_DIR.mkdir(parents=True, exist_ok=True)
+    documents, complete, blocked = [], True, None
+    for url in urls[:MAX_DOCUMENTS]:
+        try:
+            if downloaded := await fetcher.download(url, FILES_DIR):
+                budget = MAX_RUN_DOWNLOAD_BYTES - fetcher.downloaded
+                saved, unpacked = await asyncio.to_thread(_save, *downloaded, budget)
+                documents.extend(saved)
+                fetcher.downloaded += unpacked
+        except BudgetExceeded:
+            return documents, False, None
+        except Blocked as exc:
+            complete, blocked = False, str(exc)
+        except (httpx.HTTPError, ValueError, OSError, zipfile.BadZipFile):
+            complete = False
+    return documents, complete, blocked
