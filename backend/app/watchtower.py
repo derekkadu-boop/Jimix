@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import socket
 import sqlite3
 import uuid
 from collections import Counter
@@ -12,9 +13,10 @@ import httpx
 from . import db
 from .agent import Failed, Usage, explore
 from .documents import fetch_documents, has_unpacked_office
-from .fetch import OVERSIZE_SKIP, Blocked, Deleted, Fetcher
+from .fetch import OVERSIZE_SKIP, RETRY_STATUS, Blocked, Deleted, Fetcher
 from .recipe import Recipe, apply, check
 
+UNREACHABLE_READS = 3
 RUN_TIMEOUT = float(os.environ.get("WATCHTOWER_RUN_TIMEOUT", "3600"))
 MAX_DETAILS = int(os.environ["WATCHTOWER_MAX_DETAILS"]) if os.environ.get("WATCHTOWER_MAX_DETAILS") else None
 log = logging.getLogger("watchtower")
@@ -99,8 +101,20 @@ def _fail_open_runs(portal_id: str, reason: str) -> None:
         log.exception("could not record failure for portal %s", portal_id)
 
 
-def _rate_limited(exc: Exception) -> bool:
-    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429
+def _unreachable(portal_id: str) -> bool:
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT result FROM run WHERE portal_id = ? AND kind = 'read' AND finished_at IS NOT NULL"
+            " ORDER BY started_at DESC, rowid DESC LIMIT ?",
+            (portal_id, UNREACHABLE_READS),
+        ).fetchall()
+    return len(rows) == UNREACHABLE_READS and all(row["result"] == "failed" for row in rows)
+
+
+def _transient(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in RETRY_STATUS
+    return isinstance(exc, (httpx.TransportError, socket.gaierror))
 
 
 def _describe(exc: Exception) -> str:
@@ -230,6 +244,9 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     _save_tenders(portal_id, tenders, close_missing=complete)
     attempted = fetched + cached if recipe.documents_by_host else fetched
     notes = []
+    if tenders and not complete:
+        notes.append(f"Listing coverage incomplete (max_pages: {recipe.max_pages} per list); "
+                     "older tenders were kept")
     if skips:
         notes.append("Skipped documents: " + ", ".join(f"{reason} ({n})" for reason, n in sorted(skips.items())))
     if blocked and blocked * 2 >= attempted:
@@ -291,8 +308,11 @@ async def _read(portal_id: str, run_id: str, fetcher: Fetcher) -> None:
         _finish(run_id, "failed", problem, usage)
         if fresh:
             _set_state(portal_id, "failed", f"Could not attach: {problem}")
-        elif _rate_limited(exc):
-            _set_state(portal_id, None, "Last read was rate limited (HTTP 429)")
+        elif _transient(exc) and not _unreachable(portal_id):
+            _set_state(portal_id, None, f"Last read failed on a temporary error ({problem}); retry later")
+        elif _transient(exc):
+            reason = f"Failing on temporary errors for {UNREACHABLE_READS} reads in a row: {problem}"
+            _set_state(portal_id, "failed", reason)
         else:
             _set_state(portal_id, "healing", f"Read failed: {problem}. Repairing.")
             await _repair(portal_id, url, recipe, problem, fetcher)

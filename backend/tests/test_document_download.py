@@ -10,6 +10,7 @@ from app.fetch import Fetcher
 @pytest.fixture(autouse=True)
 def no_rate_limit(monkeypatch):
     monkeypatch.setattr(fetch, "INTERVAL", 0)
+    monkeypatch.setattr(fetch, "RETRY_DELAYS", (0, 0))
 
 
 def test_download_samples_html_only_to_probe_limit(monkeypatch, tmp_path):

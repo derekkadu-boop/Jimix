@@ -9,6 +9,7 @@ requires-python = ">=3.13"
 dependencies = [
     "beautifulsoup4>=4.13,<5",
     "certifi>=2025.1.31",
+    "cryptography>=43",
     "fastapi>=0.115.0",
     "geonamescache>=3,<4",
     "httpx>=0.28,<0.29",
