@@ -2,6 +2,8 @@ import asyncio
 import io
 import json
 import zipfile
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -711,7 +713,7 @@ def test_category_pagination_uses_the_public_get_path():
         f"""onclick="setTargetAndSubmit('{next_page}'); untrusted()">next</a>"""
     )
     listing = LIST_1.replace('<a class="next" href="/list?page=2">next</a>', control)
-    simplified, hint = agent.simplify(listing)
+    simplified, hint, _ = agent.simplify(listing)
     assert "pageIndex=2" in simplified
     assert hint == next_page
     assert "untrusted()" not in simplified
@@ -760,10 +762,10 @@ def test_category_pagination_uses_the_public_get_path():
             page = page.replace("/t/1", "/t/4").replace("/t/2", "/t/5").replace("/t/3", "/t/6")
         return httpx.Response(200, html=page)
 
-    async def run():
+    async def run(max_pages=None):
         fetcher = Fetcher(transport=httpx.MockTransport(response))
         try:
-            return await apply(recipe, fetcher)
+            return await apply(recipe, fetcher, max_pages=max_pages)
         finally:
             await fetcher.close()
 
@@ -771,6 +773,102 @@ def test_category_pagination_uses_the_public_get_path():
     assert [tender["id"] for tender in tenders] == ["1", "2", "3", "4", "5", "6"]
     assert complete
     assert requested.count(httpx.URL(f"https://portal.example{next_page}")) == 2
+    requested.clear()
+    sampled, complete = asyncio.run(run(max_pages=3))
+    assert [tender["id"] for tender in sampled] == ["1", "2", "4", "5"]
+    assert not complete
+    assert len([url for url in requested if url.path != "/robots.txt"]) == 3
+
+
+def test_category_index_hint_surfaces_same_site_category_links_before_truncated_markup():
+    categories = "".join(
+        f'<a href="/notices?language=en&amp;classificationId={index}#access_token=fragment">Category</a>'
+        for index in range(4)
+    )
+    unrelated = "".join(
+        f'<a href="//other.example/search?category={index}">Other</a>'
+        f'<a href="/notices?category={index}&amp;token=private">Skip</a>'
+        f'<a href="/tender?id={index}">Tender</a>'
+        for index in range(8)
+    )
+    html = f"<p>{'x' * agent.PAGE_CHARS}</p>{categories}{unrelated}"
+    hint = agent._page_content(html, base="https://portal.example/categories").splitlines()[0]
+    assert hint.startswith("Possible category index: 4 links share path '/notices'")
+    assert "classificationId" in hint and "listing.index" in hint
+    assert "token" not in hint and "fragment" not in hint and "other.example" not in hint
+    assert "Selector matching this group" in hint
+    hint = agent._page_content(
+        html + '<noscript><a href="/other?classificationId=9">Other category</a></noscript>',
+        base="https://portal.example/categories",
+    ).splitlines()[0]
+    assert "Selector matching this group" not in hint
+
+
+def test_document_page_hint_surfaces_public_links_before_truncated_markup():
+    html = f"""
+    <p>{'x' * agent.PAGE_CHARS}</p>
+    <a href="/files/notice.pdf">Tender documents</a>
+    <a href="/portal;jsessionid=hidden/notice/documents#access_token=hidden">Vergabeunterlagen</a>
+    <a href="/private?token=hidden">Tender documents</a>
+    <a href="/download?X-Amz-Signature=hidden">Tender documents</a>
+    <a href="">Tender documents</a>
+    """
+    lines = agent._page_content(html, base="https://portal.example/tender").splitlines()
+    hints = [line for line in lines if line.startswith("Possible document-page link:")]
+    assert hints == [
+        "Possible document-page link: 'vergabeunterlagen' -> 'https://portal.example/portal/notice/documents'"
+    ]
+
+
+def test_public_netserver_control_surfaces_supported_modal_before_truncated_markup():
+    control = '<a class="zipFileContents" data-oid="fixture-oid" data-token="fixture-token">Files</a>'
+    html = f"<p>{'x' * agent.PAGE_CHARS}</p>{control}"
+
+    hint = agent._page_content(html, base="https://portal.example/notice").splitlines()[0]
+
+    assert "modal=netserver_file_tree" in hint
+    assert "a.filenameEllipsis[href]" in hint
+    assert "fixture-oid" not in hint and "fixture-token" not in hint
+
+
+@pytest.mark.parametrize("indexed_open_count", [30, 20])
+def test_agent_compares_open_tender_coverage_of_validated_index_and_plain_list(monkeypatch, indexed_open_count):
+    indexed = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {"index": {"path": "a.category"}},
+    })
+    narrow = Recipe.model_validate(RECIPE | {"listing": RECIPE["listing"] | {"next_page": None}})
+
+    def completion(recipe):
+        function = SimpleNamespace(name="submit_recipe", arguments=json.dumps({"recipe": recipe.model_dump()}))
+        message = SimpleNamespace(
+            tool_calls=[SimpleNamespace(id="call", function=function)],
+            model_dump=lambda **_: {"role": "assistant"},
+        )
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+
+    async def validate(_, args, _fetcher):
+        recipe = Recipe.model_validate(args["recipe"])
+        report = {"tenderCount": 20, "openTenderCount": 20, "warnings": ["some details are pending"]}
+        if recipe.listing.index:
+            report.update(tenderCount=40, openTenderCount=indexed_open_count)
+        return json.dumps(report), recipe
+
+    create = AsyncMock(side_effect=[completion(indexed), completion(narrow), completion(indexed)])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(agent, "AsyncOpenAI", lambda **_: client)
+    monkeypatch.setattr(agent, "discover", AsyncMock(return_value=""))
+    monkeypatch.setattr(agent, "_call", validate)
+
+    found = asyncio.run(agent.explore("https://portal.example/", None, agent.Usage()))
+
+    if indexed_open_count > 20:
+        assert found == indexed
+        assert create.await_count == 3
+        notice = create.call_args.kwargs["messages"][-2]["content"]
+        assert "NOT ACCEPTED" in notice and "30" in notice and "20" in notice
+    else:
+        assert found == narrow
+        assert create.await_count == 2
 
 
 def test_recipe_validation_checks_open_bidding_after_advance_notices():
@@ -843,3 +941,111 @@ def test_capped_detail_sample_uses_first_valid_tender_occurrences():
     assert tenders[0]["title"] == "First occurrence"
     assert tenders[0]["_documentDetailPending"]
     assert tenders[2]["_documentUrls"] == ["https://portal.example/files/2.zip"]
+
+
+def test_indexed_validation_samples_details_across_categories():
+    recipe = Recipe.model_validate(RECIPE | {
+        "listing": RECIPE["listing"] | {
+            "index": {"path": "a.category"},
+            "next_page": None,
+            "fields": RECIPE["listing"]["fields"] | {"id": {"path": "$", "attribute": "data-id"}},
+        },
+    })
+    future = "20.12.2099 10:00"
+    rows = {
+        "/a": [("expired", "expired", "20.12.2000 10:00"), ("1", "a1", future),
+               ("2", "a2", future), ("3", "a3", future)],
+        "/b": [("1", "duplicate", future), ("4", "b1", future), ("5", "b2", future)],
+    }
+    checked, downloaded = [], []
+
+    def response(request):
+        path = request.url.path
+        if path == "/list":
+            return httpx.Response(200, html='<a class="category" href="/a">A</a><a class="category" href="/b">B</a>')
+        if path in rows:
+            table = "".join(
+                f'<tr class="t" data-id="{number}"><td><a href="/t/{name}">{name}</a></td>'
+                f'<td class="due">{deadline}</td></tr>'
+                for number, name, deadline in rows[path]
+            )
+            return httpx.Response(200, html=f"<table>{table}</table>")
+        if path.startswith("/t/"):
+            checked.append(path)
+            link = '<a class="doc" href="/spec.pdf">Specification</a>' if path == "/t/b1" else ""
+            return httpx.Response(200, html=link)
+        if path == "/spec.pdf":
+            downloaded.append(path)
+            return httpx.Response(200, content=b"%PDF-1.4", headers={"content-type": "application/pdf"})
+        return httpx.Response(404)
+
+    async def run(validation: bool):
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            if validation:
+                return await agent._test(recipe, fetcher)
+            return await apply(recipe, fetcher, max_details=3)
+        finally:
+            await fetcher.close()
+
+    report = asyncio.run(run(validation=True))
+    assert checked[:3] == ["/t/a1", "/t/b1", "/t/a2"]
+    assert report["problem"] is None
+    assert report["openTenderCount"] == 5
+    assert report["withDocumentLinks"] == 1
+    assert downloaded == ["/spec.pdf"]
+
+    checked.clear()
+    asyncio.run(run(validation=False))
+    assert checked == ["/t/a1", "/t/a2", "/t/a3"]
+
+
+@pytest.mark.parametrize(("html", "urls"), [
+    (
+        (
+            '<a class="zipFileContents" data-oid="row" data-token="public">Files</a>'
+            '<a class="doc" href="/spec.pdf">Specification</a>'
+        ),
+        ["https://portal.example/spec.pdf"],
+    ),
+    ('<a class="zipFileContents" data-oid="row">Files</a>', []),
+    ('<a class="zipFileContents" data-oid="row" data-token="">Files</a>', []),
+])
+def test_netserver_fallback_preserves_configured_links_and_requires_complete_control(monkeypatch, html, urls):
+    async def unexpected_render(*args, **kwargs):
+        raise AssertionError("Expected HTML extraction without a modal")
+
+    monkeypatch.setattr(recipes, "render", unexpected_render)
+    recipe = Recipe.model_validate(RECIPE)
+    page = BeautifulSoup(html, "html.parser")
+    assert asyncio.run(recipes._document_links(recipe, page, "https://portal.example/notice", None)) == urls
+
+
+def test_blocked_automatic_modal_keeps_other_tenders_accessible(monkeypatch, tmp_path):
+    async def blocked_render(url, _fetcher, *, netserver_files):
+        assert url == "https://portal.example/t/1" and netserver_files
+        raise Blocked("robots.txt disallows the file list")
+
+    def respond(request):
+        if request.url.path == "/t/1":
+            control = '<a class="zipFileContents" data-oid="row" data-token="public">Files</a>'
+            return httpx.Response(200, html=control)
+        return portal(request)
+
+    monkeypatch.setattr(recipes, "render", blocked_render)
+    recipe = Recipe.model_validate(RECIPE | {"listing": RECIPE["listing"] | {"next_page": None}})
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(respond))
+        try:
+            tenders, complete = await apply(recipe, fetcher)
+            first, second = tenders
+            assert complete
+            assert first["_documentPageError"] and not first["_documentUrls"]
+            saved, downloaded, _ = await fetch_documents(second["_documentUrls"], fetcher)
+            assert downloaded
+            assert (tmp_path / saved[0]["sha256"]).read_bytes().startswith(b"%PDF")
+        finally:
+            await fetcher.close()
+
+    asyncio.run(run())

@@ -12,7 +12,7 @@ from dateutil import parser as dateparser
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field, model_validator
 
-from .browser import render
+from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .fetch import Blocked, Fetcher
 
 TENDER_FIELDS = (
@@ -37,6 +37,10 @@ PROCEDURES = tuple(KEYWORDS["procedureType"].items())
 NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
 MAX_INDEX_LISTS = 50
+
+
+class _AutomaticModalBlocked(Blocked):
+    pass
 
 
 class Selector(BaseModel):
@@ -180,6 +184,7 @@ async def apply(
     recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None
 ) -> tuple[list[dict], bool]:
     listing, raws = recipe.listing, []
+    indexed_sample = listing.index is not None and max_pages is not None and max_details is not None
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
     starts = [listing.url]
     if listing.index:
@@ -188,10 +193,11 @@ async def apply(
         starts = list(dict.fromkeys(links))[:MAX_INDEX_LISTS]
         budget -= 1
     complete = bool(starts)
-    for start in starts:
+    for index, start in enumerate(starts):
         seen: set[str] = set()
         url, finished = start, False
-        for page_number in range(min(recipe.max_pages, budget)):
+        reserved = min(len(starts) - index - 1, max(0, budget - 1)) if max_pages is not None else 0
+        for page_number in range(min(recipe.max_pages, budget - reserved)):
             budget -= 1
             seen.add(url)
             page, base = await _load(listing.kind, url, fetcher)
@@ -203,6 +209,8 @@ async def apply(
                 break
             for row in rows:
                 raw = _extract(row, listing.fields, listing.kind) | {"_base": base}
+                if indexed_sample:
+                    raw["_categoryIndex"] = index
                 if recipe.documents and not recipe.detail:
                     raw["_docs"] = [urljoin(base, u) for u in _values(row, recipe.documents, listing.kind)]
                 raws.append(raw)
@@ -219,19 +227,27 @@ async def apply(
         complete = complete and finished
     attempted, blocked = 0, []
     details = raws
-    if recipe.detail and max_details is not None and "submissionDeadline" in listing.fields:
+    if recipe.detail and max_details is not None and (indexed_sample or "submissionDeadline" in listing.fields):
         now, tz = datetime.now(UTC), ZoneInfo(recipe.timezone)
         first_rows = {}
         for raw in raws:
             if tender_id := raw.get("id"):
                 first_rows.setdefault(tender_id, raw)
 
-        def has_upcoming_deadline(raw):
+        category_positions = {}
+
+        def detail_priority(raw):
             deadline = _datetime(raw.get("submissionDeadline"), recipe.dayfirst, tz)
-            return deadline is not None and deadline >= now
+            upcoming = deadline is not None and deadline >= now
+            position = 0
+            if indexed_sample:
+                group = (raw["_categoryIndex"], upcoming)
+                position = category_positions.get(group, 0)
+                category_positions[group] = position + 1
+            return not upcoming, position
 
         candidates = (raw for raw in first_rows.values() if raw.get("url"))
-        details = sorted(candidates, key=has_upcoming_deadline, reverse=True)
+        details = sorted(candidates, key=detail_priority)
     for raw in details[:max_details]:
         if not recipe.detail or not raw.get("url"):
             continue
@@ -248,6 +264,8 @@ async def apply(
         if recipe.documents or recipe.documents_by_host:
             try:
                 raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+            except _AutomaticModalBlocked:
+                raw["_documentPageError"] = True
             except Blocked as exc:
                 if not recipe.documents_by_host:
                     raise
@@ -292,11 +310,20 @@ async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> 
             return []
         page, base = result
         kind = "html"
-    if source and source.modal == "netserver_file_tree":
-        html, _, base = await render(base, fetcher, netserver_files=True)
-        page, kind = BeautifulSoup(html, "html.parser"), "html"
     selector = source.files if source else recipe.documents
-    return [urljoin(base, u) for u in _link_values(page, selector, kind)] if selector else []
+    explicit_modal = source is not None and source.modal == "netserver_file_tree"
+    links = _link_values(page, selector, kind) if selector and not explicit_modal else []
+    if explicit_modal or (not links and kind != "json" and page.select_one(NETSERVER_FILE_CONTROL)):
+        try:
+            html, _, base = await render(base, fetcher, netserver_files=True)
+        except Blocked as exc:
+            if explicit_modal:
+                raise
+            raise _AutomaticModalBlocked(str(exc)) from exc
+        if not explicit_modal:
+            selector = Selector(path=NETSERVER_FILE_LINK, attribute="href")
+        links = _link_values(BeautifulSoup(html, "html.parser"), selector, "html")
+    return [urljoin(base, link) for link in links]
 
 
 def _datetime(text: str | None, dayfirst: bool, tz: ZoneInfo) -> datetime | None:

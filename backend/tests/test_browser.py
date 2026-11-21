@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
 import httpx
+import pytest
 
 from app import browser, fetch
 from app.fetch import Fetcher
@@ -39,7 +40,8 @@ for (const control of document.querySelectorAll(".zipFileContents")) control.onc
 """
 
 
-def test_netserver_modal_reads_links_without_other_actions(monkeypatch):
+@pytest.mark.parametrize("explicit_modal", [True, False], ids=["explicit", "automatic"])
+def test_netserver_modal_reads_links_without_other_actions(monkeypatch, explicit_modal):
     calls = []
 
     class Site(BaseHTTPRequestHandler):
@@ -81,6 +83,11 @@ def test_netserver_modal_reads_links_without_other_actions(monkeypatch):
         worker = Thread(target=site.serve_forever, daemon=True)
         worker.start()
         try:
+            documents = {"documents": {"path": "a.direct-download[href]"}}
+            if explicit_modal:
+                documents = {"documents_by_host": {
+                    "127.0.0.1": {"modal": "netserver_file_tree", "files": {"path": "a.filenameEllipsis[href]"}},
+                }}
             recipe = Recipe.model_validate({
                 "method": "html",
                 "listing": {
@@ -93,9 +100,7 @@ def test_netserver_modal_reads_links_without_other_actions(monkeypatch):
                     },
                 },
                 "detail": {},
-                "documents_by_host": {
-                    "127.0.0.1": {"modal": "netserver_file_tree", "files": {"path": "a.filenameEllipsis[href]"}},
-                },
+                **documents,
             })
 
             async def read():
