@@ -102,7 +102,9 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
    Findings. Reviewing is a valid task when you have nothing else to do.
 5. **Deliver.**
    - `git pull` on `main`, merge your branch, run the tests again, and push.
-   - Or open a PR instead of merging yourself (step 4's review still applies first).
+   - Or open a PR instead of merging yourself (step 4's review still applies first). Then set the item's
+     **Status** to `in review (PR #N)`. You may claim your next item meanwhile, but answer review comments
+     on the PR. Anyone may merge a reviewed PR whose tests pass, and then sets the item to `done (<commit>)`.
 6. **Report.** On `coord`:
    - set the item's **Status** to `done (<commit>)` and write what you learned under **Findings**;
    - add new items for problems you noticed;
