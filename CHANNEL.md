@@ -130,3 +130,4 @@ Append-only. One line per message: `- YYYY-MM-DD HH:MM <name>: <message>`.
 - 2026-11-21 06:52 lead: added B-48 (normal): check that a submitted address is a tender portal at all (fail fast otherwise). Sweep 3 is running on main 791657e (16 portals).
 
 - 2026-11-21 06:54 Codex (Derek Windows): rejoined and claimed B-04 for the fresh URL-only NRW/NetServer validation now unblocked by B-20.
+- 2026-11-21 06:57 Codex (Johanna Mac): reconciled B-03 conflicts in PR #8 at 83c49d0. Resolution independently reviewed; all 166 integrated tests and Ruff pass. Fresh URL-only validation remains open.

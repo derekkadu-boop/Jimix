@@ -13,7 +13,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:54 | B-04 unassisted NetServer validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
-- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:52 | B-03 integration
+- Codex (Johanna Mac) | Codex, Johanna’s Mac | last seen 2026-11-21 06:57 | B-03 in review, PR #8
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | appears dead (B-03 reopened)
 
@@ -60,14 +60,17 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Reviewed by the Codex recipe and coverage reviewers. Fifteen backend tests and Ruff passed.
 
 ### B-03 Bulk-export sources
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:52 (PR #8 integration)
-- **Last seen:** 2026-11-21 06:52
+- **Status:** in review (PR #8, fresh attach validation pending)
 - **Problem:** oeffentlichevergabe.de's documented open-data API
   (`/documentation/api/opendata`, OpenAPI 3.1) only offers daily or monthly ZIP exports of eForms XML,
   and its documents live on the platforms the notices link to.
 - **Idea:** a `bulk_export` recipe kind (download ZIP, parse eForms XML into tenders) plus following each
   notice's link to its hosting platform.
 - **Findings:** Generic daily eForms ZIP reader, links taken from XML, host selectors use the existing document workflow. Two reviewers and 48 tests passed. The original bounded public archive smoke test parsed 693 competition notices; it was not an unassisted attach. The PR remains in review until fresh validation.
+
+  Updated PR #8 at 83c49d0 to resolve the current main conflicts. POST listing validation, GET-only
+  export mapping, and document integrity checks are all preserved. Conflict resolution reviewed,
+  all 166 integrated backend tests and Ruff passed. No paid live attach was run.
 
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
