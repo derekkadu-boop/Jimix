@@ -62,7 +62,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:14$22026-11-21 04:14
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:14
+- **Last seen:** 2026-11-21 04:14
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
