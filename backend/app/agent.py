@@ -18,6 +18,7 @@ from .recipe import (
     KEYWORDS,
     SENSITIVE_KEY,
     TENDER_FIELDS,
+    MissingTenderIds,
     Recipe,
     apply,
     bad_json_path,
@@ -526,9 +527,13 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
                            " e.g. $.items[*].links.href", "warnings": [], "tenderCount": 0, "sample": []}
     max_pages = 3
     pagination_warnings = []
-    tenders, complete = await apply(
-        recipe, fetcher, max_pages=max_pages, max_details=3, warnings=pagination_warnings
-    )
+    try:
+        tenders, complete = await apply(
+            recipe, fetcher, max_pages=max_pages, max_details=3, warnings=pagination_warnings
+        )
+    except MissingTenderIds as exc:
+        return {"problem": str(exc), "warnings": pagination_warnings, "tenderCount": 0,
+                "openTenderCount": 0, "withDocumentLinks": 0, "sample": []}
     sample = tenders
     if recipe.detail and (recipe.documents or recipe.documents_by_host):
         sample = [t for t in tenders if not t.get("_documentDetailPending")] or tenders
