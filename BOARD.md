@@ -183,7 +183,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:** Windows Docker Desktop verified the linux/amd64 root build and healthy Compose stack. Installed libatomic1 before Playwright, and normalized the executable startup script inside the root image. Chromium opened the dashboard and reached the API on 8080. Health, portal list and a synthetic document download worked, and the database and file persisted through container replacement. 17 backend tests passed. Pre-commit review: Codex B-16 reviewer.
 
 ### B-17 Bound failed document downloads and clear partial files
-- **Status:** in review (PR #7)
+- **Status:** done (b693cee, merged PR #7)
 - **Problem:** Fetcher reads HTML document responses in full before applying the byte limit, and
   an interrupted streamed download can leave a partial file on disk.
 - **Idea:** Bound the HTML used for access checks and clean partial files on interruption.
