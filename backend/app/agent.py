@@ -33,6 +33,7 @@ REFUSE_BLOCKED = (
     " Keep looking (e.g. the broadest HTML list available) or give_up with blocked=false."
 )
 PAGING_PARAMS = {"page", "p", "offset", "start", "size", "limit", "rows", "pagesize", "method"}
+DOCUMENT_LISTS = ("documents", "documenten", "dokumente", "documentos", "attachments", "files")
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
 
 INSTRUCTIONS = f"""You connect a public procurement portal so that its open tenders can be read without you.
@@ -52,7 +53,8 @@ a page's scripts call, then try the promising ones with fetch_json.
 Long results are cut into chunks: pass offset to read further.
 Links in notices often lead to a summary page rather than the tender list. Find the actual list.
 The listing must cover every open tender the portal has: no category, region, CPV or search filter.
-Prefer the broadest list (all current notices) and paginate through it. If the portal only offers lists
+Prefer the broadest list (all current notices) and paginate through it, with the largest page size the
+API accepts (keep e.g. size=50 in listing.url). If the portal only offers lists
 split by category, set listing.url to the page linking to all of them and index to those links:
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
 If you find no list of open tenders, keep searching before giving up:
@@ -66,7 +68,8 @@ Documents are required. Find the actual files (PDF, ZIP, DOCX...) for each tende
 separate page linked from the tender page (e.g. "Vergabeunterlagen", "Documents", "DCE", "pliegos"),
 use documents_page. If a tender's documents or details sit at a URL built from its id (common for JSON
 APIs, e.g. /tenders/{{id}}/documents), use documents_url or detail.url templates. Prefer the full list of
-tender documents over a single notice PDF. If listing tenders or downloading documents needs a login or a captcha,
+tender documents over a single notice PDF: render_page one tender's own page to see which JSON calls load
+its documents (e.g. .../{{id}}/documents, /attachments, /documenten). If listing tenders or downloading documents needs a login or a captcha,
 call give_up with blocked=true.
 
 A recipe is JSON:
@@ -195,6 +198,22 @@ async def _document_problem(recipe: Recipe, tenders: list[dict], fetcher: Fetche
     return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links"
 
 
+async def _document_lists(tenders: list[dict], fetcher: Fetcher) -> list[str]:
+    url = next((t["_documentUrls"][0] for t in tenders if t["_documentUrls"]), None)
+    if not url:
+        return []
+    parent = url.split("?")[0].rsplit("/", 1)[0]
+    for name in DOCUMENT_LISTS:
+        try:
+            resp = await fetcher.get(f"{parent}/{name}")
+        except Exception:  # noqa: BLE001, S112
+            continue
+        if "json" in resp.headers.get("content-type", ""):
+            hint = f"{parent}/{name} returns JSON ({resp.text[:300]}...): if it lists the tender's files, read it"
+            return [hint + " with documents_url and documents"]
+    return []
+
+
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
     problem = check(tenders) or await _document_problem(recipe, tenders, fetcher)
@@ -202,6 +221,10 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     if (recipe.documents or recipe.documents_url) and not any(t["_documentUrls"] for t in tenders):
         warnings.append("no document links found in the sample: check documents/documents_page")
+    if recipe.documents_url and not recipe.documents:
+        warnings.append("documents_url gives one file per tender: if it is only the notice, render one tender's"
+                        " page and use the documents list it loads (documents_url plus documents)")
+        warnings += await _document_lists(tenders, fetcher)
     return {
         "problem": problem,
         "warnings": warnings,
