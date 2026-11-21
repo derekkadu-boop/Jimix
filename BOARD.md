@@ -882,6 +882,27 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Script: add 2-3 portals (one serving with files, one blocked with a clear reason, one repairing), show the dashboard, a refresh with 0 model calls, a repair after a recipe break, the cost per portal. Needs the B-08 live logs to look good. Record on the Docker image.
 - **Findings:**
 
+### B-67 Learn external document platforms automatically
+- **Priority:** high (documents on buyer platforms, e.g. Doffin)
+- **Status:** open
+- **Problem:** On national notice portals (Doffin, also TED-style aggregators) each tender's documents live on whatever platform the buyer uses (tendsign, artifik, hyyr, Mercell, EU-Supply...). The notice links to a page on that platform, not to files. B-02/B-20 handle per-host rules the agent writes up front, but the set of hosts is open-ended and unknown at attach time.
+- **Idea:** When sampled document links lead to HTML pages on another host: (1) group them by host; (2) for each host, have the agent learn a small sub-recipe (find the file links or the platform's documents API on that page, using B-43 tab clicks and B-18 POST capture if needed), stored per host and reused for every tender and every portal linking there (see B-37); (3) respect robots.txt and logins per host, record a per-tender reason when a host can't be read (B-62); (4) cap hosts learned per attach by cost. Validate on Doffin unassisted.
+- **Findings:**
+
+### B-68 Opt-in generated extraction code as a last resort
+- **Priority:** normal (off by default)
+- **Status:** open
+- **Problem:** Some portals need logic that declarative recipes can't express. Generated code would handle them quickly, but it runs model output written from untrusted pages.
+- **Idea:** A setting (default off): when the declarative path fails, the agent may write a small extraction function. It runs in a sandbox (separate process, no network except a pipe to the rate-limited Fetcher, no filesystem, CPU and time limits) and returns the same tender/document structure, which passes the same validation (B-22/B-48 checks) before anything is saved. The code is stored like a recipe, shown to operators, and logged. Security review needed.
+- **Findings:**
+
+### B-69 Settings in the dashboard, stored in the database
+- **Priority:** normal
+- **Status:** open
+- **Problem:** Limits and constants (model, cost and turn caps, download limits, timeouts, max details, render timeout, user agent, ...) are environment variables or hard-coded; the dashboard's agent settings only live in browser storage. The OpenAI key can only come from the environment.
+- **Idea:** A `setting` table and `GET/PUT /settings` (API key write-only, never returned or logged). Every tunable constant in backend/app read through one settings helper: database value, else environment variable, else default. Dashboard settings page to edit them, with validation. Changes apply to the next run. Document precedence in the README.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
