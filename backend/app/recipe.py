@@ -1,7 +1,8 @@
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
@@ -13,6 +14,7 @@ from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field, model_validator
 
 from .browser import render
+from .eforms import read_notices
 from .fetch import Blocked, Fetcher
 
 TENDER_FIELDS = (
@@ -35,7 +37,7 @@ TENDER_FIELDS = (
 KEYWORDS = json.loads((Path(__file__).parent / "keywords.json").read_text(encoding="utf-8"))
 PROCEDURES = tuple(KEYWORDS["procedureType"].items())
 NATURES = tuple(KEYWORDS["contractNature"].items())
-Kind = Literal["html", "json", "browser"]
+Kind = Literal["html", "json", "browser", "eforms_zip"]
 MAX_INDEX_LISTS = 50
 
 
@@ -57,11 +59,12 @@ class Selector(BaseModel):
 class Listing(BaseModel):
     kind: Kind = "html"
     url: str
-    records: str
-    fields: dict[str, Selector]
+    records: str = ""
+    fields: dict[str, Selector] = Field(default_factory=dict)
     next_page: Selector | None = None
     page_param: str | None = None
     index: Selector | None = None
+    lookback_days: int = Field(1, ge=1, le=7)
 
 
 class Detail(BaseModel):
@@ -76,7 +79,7 @@ class DocumentSource(BaseModel):
 
 
 class Recipe(BaseModel):
-    method: Literal["documented_api", "discovered_api", "html", "browser"]
+    method: Literal["documented_api", "discovered_api", "html", "browser", "bulk_export"]
     listing: Listing
     detail: Detail | None = None
     documents: Selector | None = None
@@ -93,6 +96,28 @@ class Recipe(BaseModel):
             raise ValueError(f"unknown fields {sorted(unknown)}, use only {TENDER_FIELDS}")
         if not re.match(r"https?://[^/]+", self.listing.url):
             raise ValueError("listing.url must be an absolute http(s) URL")
+        if self.method == "bulk_export" or self.listing.kind == "eforms_zip":
+            if self.method != "bulk_export" or self.listing.kind != "eforms_zip":
+                raise ValueError("bulk_export requires an eforms_zip listing")
+            if (self.listing.records or self.listing.fields or self.listing.index
+                or self.listing.next_page or self.listing.page_param or self.detail
+                or self.documents or self.documents_page):
+                raise ValueError("bulk_export uses built-in eForms mapping and document links")
+            if any(not re.fullmatch(r"[a-z0-9.-]+", host) for host in self.documents_by_host):
+                raise ValueError("documents_by_host keys must be lowercase hostnames")
+            endpoint = urlsplit(self.listing.url)
+            if endpoint.scheme != "https" or endpoint.netloc not in (
+                "oeffentlichevergabe.de", "www.oeffentlichevergabe.de"
+            ) or endpoint.path != "/api/notice-exports":
+                raise ValueError("eforms_zip supports only the documented German publication service endpoint")
+            query = dict(parse_qsl(endpoint.query))
+            if query.get("format") != "eforms.zip" or "pubMonth" in query or "pubDay" in query:
+                raise ValueError("bulk export URL must set format=eforms.zip and omit pubDay/pubMonth")
+            return self
+        if not self.listing.records:
+            raise ValueError("listing.records is required")
+        if self.detail and self.detail.kind == "eforms_zip":
+            raise ValueError("eforms_zip is supported only as a bulk export listing")
         if "id" not in self.listing.fields:
             raise ValueError("listing.fields needs id")
         if "id" in detail_fields:
@@ -179,6 +204,8 @@ def _with_param(url: str, name: str, step: int) -> str:
 async def apply(
     recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None
 ) -> tuple[list[dict], bool]:
+    if recipe.method == "bulk_export":
+        return await _apply_bulk_export(recipe, fetcher, max_pages, max_details), False
     listing, raws = recipe.listing, []
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
     starts = [listing.url]
@@ -248,6 +275,56 @@ async def apply(
         if (tender := normalize(raw, recipe)) and tender["id"] not in tenders:
             tenders[tender["id"]] = tender
     return list(tenders.values()), complete
+
+
+async def _apply_bulk_export(
+    recipe: Recipe, fetcher: Fetcher, max_pages: int | None, max_details: int | None
+) -> list[dict]:
+    listing = recipe.listing
+    parts = urlsplit(listing.url)
+    query = parse_qsl(parts.query)
+    today = datetime.now(ZoneInfo("Europe/Berlin")).date()
+    tenders = {}
+    with TemporaryDirectory() as folder:
+        for age in range(1, min(listing.lookback_days, max_pages or listing.lookback_days) + 1):
+            published = (today - timedelta(days=age)).isoformat()
+            url = parts._replace(query=urlencode([*query, ("pubDay", published)])).geturl()
+            path, _ = await fetcher.download(url, Path(folder))
+            for notice in read_notices(path, listing.url, published):
+                tenders.setdefault(notice["id"], notice)
+            path.unlink()
+    notices = list(tenders.values())
+    if not recipe.documents_by_host:
+        return notices
+    for index, notice in enumerate(notices):
+        if max_details is not None and index >= max_details:
+            if any(urlsplit(url).hostname in recipe.documents_by_host for url in notice["_documentUrls"]):
+                notice["_documentDetailPending"] = True
+            continue
+        resolved = []
+        for url in notice["_documentUrls"]:
+            source = recipe.documents_by_host.get(urlsplit(url).hostname)
+            if not source:
+                resolved.append(url)
+                continue
+            try:
+                page, base = await _load("html", url, fetcher)
+                if source.page:
+                    linked = await _follow_document_page(source.page, page, base, "html", fetcher)
+                    if linked is None:
+                        notice["_documentPageError"] = True
+                        continue
+                    page, base = linked
+                if source.modal == "netserver_file_tree":
+                    html, _, base = await render(base, fetcher, netserver_files=True)
+                    page = BeautifulSoup(html, "html.parser")
+                resolved.extend(urljoin(base, u) for u in _link_values(page, source.files, "html"))
+            except Blocked as exc:
+                notice["_documentBlock"] = str(exc)
+            except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
+                notice["_documentPageError"] = True
+        notice["_documentUrls"] = list(dict.fromkeys(resolved))
+    return notices
 
 
 def _link_values(node, selector: Selector, kind: Kind) -> list[str]:

@@ -124,7 +124,7 @@ def _save_recipe(portal_id: str, run_id: str, recipe: Recipe) -> None:
         )
 
 
-def _save_tenders(portal_id: str, tenders: list[dict], close_missing: bool) -> None:
+def _save_tenders(portal_id: str, tenders: list[dict], close_missing: bool, *, expire: bool = False) -> None:
     now = db.now()
     rows = [(portal_id, t["id"], json.dumps(t, separators=(",", ":")), now) for t in tenders]
     ids = [t["id"] for t in tenders]
@@ -148,13 +148,25 @@ def _save_tenders(portal_id: str, tenders: list[dict], close_missing: bool) -> N
                 (now, portal_id, *ids),
             )
 
+        if expire:
+            conn.execute(
+                """
+                UPDATE tender SET data = json_set(data, '$.status', 'closed'), last_changed_at = ?
+                WHERE portal_id = ? AND json_extract(data, '$.status') = 'open'
+                    AND julianday(json_extract(data, '$.submissionDeadline')) < julianday(?)
+                """,
+                (now, portal_id, now),
+            )
+
 
 async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[int, str | None, str]:
     tenders, complete = await apply(recipe, fetcher, max_details=MAX_DETAILS)
     with db.connect() as conn:
         rows = conn.execute("SELECT id, data FROM tender WHERE portal_id = ?", (portal_id,)).fetchall()
     known = {row["id"]: json.loads(row["data"]) for row in rows}
-    if problem := check(tenders, sum(t["status"] == "open" for t in known.values())):
+    previous = sum(t["status"] == "open" for t in known.values()) if recipe.method != "bulk_export" else 0
+    problem = check(tenders, previous)
+    if problem and not (recipe.method == "bulk_export" and not tenders):
         raise Broken(problem)
     fetched = cached = blocked = blocked_pages = failed_pages = missing = pending = 0
     skips: Counter[str] = Counter()
@@ -217,7 +229,7 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         fetched += bool(urls)
         if why:
             blocked, reason = blocked + 1, why
-    _save_tenders(portal_id, tenders, close_missing=complete)
+    _save_tenders(portal_id, tenders, close_missing=complete, expire=recipe.method == "bulk_export")
     attempted = fetched + cached if recipe.documents_by_host else fetched
     notes = []
     if skips:

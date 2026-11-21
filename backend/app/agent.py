@@ -70,7 +70,7 @@ If you find no list of open tenders, keep searching before giving up:
 - a search or "all notices" page (Suche, Bekanntmachungen, recherche, búsqueda, zoeken, wyszukiwarka...),
   tried with an empty query: a GET search URL works as a listing URL;
 - render_page on JavaScript apps, then use the JSON search endpoint they call (discovered_api);
-- sitemap.xml, RSS/Atom feeds, and list or search endpoints in API documentation (bulk exports don't fit);
+- sitemap.xml, RSS/Atom feeds, and list or search endpoints in API documentation (see bulk-export recipe below);
 - if the site only has notices that link to the platform hosting each tender, use the notice list as the
   listing and reach the files with detail/documents_page on that platform, even if it is another site.
 Documents are required. Find the actual files (PDF, ZIP, DOCX...) for each tender. If they sit on a
@@ -78,13 +78,20 @@ separate page linked from the tender page (e.g. "Vergabeunterlagen", "Documents"
 use documents_page. If listing tenders or downloading documents needs a login or a captcha,
 call give_up with blocked=true.
 
+For the German publication service at oeffentlichevergabe.de, its documented
+/api/notice-exports eForms daily ZIP supports the bulk_export recipe below. Set listing.url to the documented endpoint with format=eforms.zip
+but omit dates. The reader requests the previous day in Europe/Berlin, up to lookback_days (1–7).
+Use documents_by_host for HTML document pages referenced in the XML, otherwise the XML links
+are treated as file URLs. Prefer a current complete listing when the portal offers one.
+
 A recipe is JSON:
 {{
-  "method": "documented_api" | "discovered_api" | "html" | "browser",
+  "method": "documented_api" | "discovered_api" | "html" | "browser" | "bulk_export",
   "listing": {{
-    "kind": "json" for the API methods, otherwise "html" or "browser",
-    "url": "first page of the list",
-    "records": "CSS selector of one tender row, or dot path to the JSON list ($ is the root)",
+    "kind": "json" for the API methods, "eforms_zip" for bulk_export, otherwise "html" or "browser",
+    "url": "list URL, or a documented daily export endpoint with format=eforms.zip",
+    "lookback_days": 1,
+    "records": "CSS selector or JSON dot path ($ = root); omit records and fields for bulk_export",
     "fields": {{"<field>": {{"path": "CSS selector inside the row ($ is the row) or dot path",
                             "attribute": null, "pattern": "optional regex; group 1 (or the match) is kept"}}}},
     "next_page": {{"path": "selector or dot path of the next page link", "attribute": "href"}} or null,
@@ -196,7 +203,7 @@ def _chunk(text: str, offset: int) -> str:
 
 
 async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
-    if not (recipe.documents or recipe.documents_by_host):
+    if not (recipe.documents or recipe.documents_by_host or recipe.method == "bulk_export"):
         return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
     urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
     warnings = []

@@ -567,3 +567,85 @@ def test_cosinex_category_pagination_uses_the_public_get_path():
     assert [tender["id"] for tender in tenders] == ["1", "2", "3", "4", "5", "6"]
     assert complete
     assert requested.count(httpx.URL(f"https://portal.example{next_page}")) == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_export_refresh_resolves_documents_and_expires_older_notices(monkeypatch, tmp_path):
+    monkeypatch.setattr(fetch, "INTERVAL", 0)
+    notice = """<ContractNotice xmlns="urn:oasis:names:specification:ubl:schema:xsd:ContractNotice-2"
+      xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+      xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+      <cbc:ID>notice-1</cbc:ID><cbc:VersionID>02</cbc:VersionID><cbc:IssueDate>2026-01-01</cbc:IssueDate>
+      <cac:ProcurementProject><cbc:Name>Road works</cbc:Name></cac:ProcurementProject>
+      <cac:TenderingProcess><cac:TenderSubmissionDeadlinePeriod>
+        <cbc:EndDate>2099-04-01+02:00</cbc:EndDate><cbc:EndTime>10:00:00</cbc:EndTime>
+      </cac:TenderSubmissionDeadlinePeriod></cac:TenderingProcess>
+      <cac:TenderingTerms><cac:CallForTendersDocumentReference><cac:Attachment><cac:ExternalReference>
+        <cbc:URI>https://files.example/document-list</cbc:URI>
+      </cac:ExternalReference></cac:Attachment></cac:CallForTendersDocumentReference></cac:TenderingTerms>
+    </ContractNotice>"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("notice-02.xml", notice)
+        archive.writestr("notice-01.xml", notice.replace(">02<", ">01<").replace("Road works", "Old title"))
+    requested = []
+    pages_available = True
+
+    async def respond(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        if request.url.path == "/api/notice-exports":
+            requested.append(request.url.params["pubDay"])
+            assert request.url.params["format"] == "eforms.zip"
+            return httpx.Response(200, content=buffer.getvalue())
+        if request.url.path == "/works.pdf":
+            return httpx.Response(200, content=b"%PDF-1.4 works")
+        assert request.url == "https://files.example/document-list"
+        if not pages_available:
+            return httpx.Response(503)
+        return httpx.Response(200, text='<a class="file" href="/works.pdf">Works</a>')
+
+    recipe = Recipe(
+        method="bulk_export",
+        listing={"kind": "eforms_zip", "url": "https://oeffentlichevergabe.de/api/notice-exports?format=eforms.zip"},
+        documents_by_host={"files.example": {"files": {"path": "a.file"}}},
+    )
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "bulk.sqlite")
+    monkeypatch.setattr(documents, "FILES_DIR", tmp_path / "files")
+    monkeypatch.setattr(watchtower, "MAX_DETAILS", None)
+    db.init()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('bulk', ?, ?)",
+                     (recipe.listing.url, db.now()))
+        for identifier, deadline in (("expired", "2000-01-01T10:00:00+00:00"),
+                                     ("still-open", "2099-01-01T10:00:00+00:00")):
+            conn.execute(
+                "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('bulk', ?, ?, ?)",
+                (identifier, json.dumps({"status": "open", "submissionDeadline": deadline}), db.now()),
+            )
+
+    def stored():
+        with db.connect() as conn:
+            return {row["id"]: json.loads(row["data"]) for row in conn.execute("SELECT id, data FROM tender")}
+
+    fetcher = Fetcher(transport=httpx.MockTransport(respond))
+    try:
+        await watchtower._deliver("bulk", recipe, fetcher)
+        first = stored()
+        assert first["expired"]["status"] == "closed"
+        assert first["still-open"]["status"] == "open"
+        latest = first["notice-1"]
+        assert latest["title"] == "Road works"
+        assert latest["publicationDate"] == requested[0]
+        assert latest["submissionDeadline"] == "2099-04-01T10:00:00+02:00"
+        assert latest["_documentUrls"] == ["https://files.example/works.pdf"]
+        assert latest["documents"][0]["fileName"] == "works.pdf"
+        pages_available = False
+        _, _, note = await watchtower._deliver("bulk", recipe, fetcher)
+        assert "Could not read document pages" in note
+        retry = stored()["notice-1"]
+        assert retry["documents"] == latest["documents"]
+        assert retry["_documentUrls"] == latest["_documentUrls"]
+        assert not retry["_documentsComplete"]
+    finally:
+        await fetcher.close()
