@@ -139,7 +139,7 @@ class Recipe(BaseModel):
 
 
 def _check_template(name: str, template: str, fields) -> None:
-    if not re.match(r"(https?://[^/]+|/)", template):
+    if not re.match(r"(https?://[^/{}]+(/|$)|/(?!/))", template):
         raise ValueError(f"{name} must be an absolute http(s) URL or start with /")
     if missing := set(PLACEHOLDER.findall(template)) - set(fields):
         raise ValueError(f"{name} uses {sorted(missing)}, which are not mapped fields")
@@ -149,7 +149,7 @@ def _fill(template: str, raw: dict) -> str | None:
     names = PLACEHOLDER.findall(template)
     if not all(raw.get(name) for name in names):
         return None
-    url = PLACEHOLDER.sub(lambda m: raw[m[1]] if m[1] == "url" else quote(raw[m[1]], safe=""), template)
+    url = PLACEHOLDER.sub(lambda m: quote(raw[m[1]], safe=""), template)
     return urljoin(raw["_base"], url)
 
 
@@ -275,7 +275,7 @@ async def apply(
                 except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
                     raw["_documentPageError"] = True
         if recipe.documents_url and recipe.documents:
-            raw["_docs"] = await _listed_documents(recipe, raw, fetcher)
+            await _listed_documents(recipe, raw, fetcher)
     if attempted and len(blocked) == attempted:
         raise Blocked(f"detail pages: {blocked[0]}")
     tenders = {}
@@ -322,16 +322,18 @@ async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> 
     return [urljoin(base, u) for u in _link_values(page, selector, kind)] if selector else []
 
 
-async def _listed_documents(recipe: Recipe, raw: dict, fetcher: Fetcher) -> list[str]:
+async def _listed_documents(recipe: Recipe, raw: dict, fetcher: Fetcher) -> None:
     if not (url := _fill(recipe.documents_url.template, raw)):
-        return []
+        return
     try:
         page, base = await _load(recipe.documents_url.kind, url, fetcher)
-    except Blocked:
-        return [url]
+    except Blocked as exc:
+        raw["_docs"], raw["_documentBlock"] = [], str(exc)
+        return
     except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
-        return []
-    return [urljoin(base, u) for u in _values(page, recipe.documents, recipe.documents_url.kind)]
+        raw["_documentPageError"] = True
+        return
+    raw["_docs"] = [urljoin(base, u) for u in _values(page, recipe.documents, recipe.documents_url.kind)]
 
 
 def _datetime(text: str | None, dayfirst: bool, tz: ZoneInfo) -> datetime | None:
@@ -394,7 +396,7 @@ def normalize(raw: dict, recipe: Recipe) -> dict | None:
         tender["_documentBlock"] = raw["_documentBlock"]
     elif raw.get("_documentPageError"):
         tender["_documentPageError"] = True
-    elif recipe.detail and (recipe.documents or recipe.documents_by_host) and "_docs" not in raw:
+    elif "_docs" not in raw and (recipe.documents_url or (recipe.detail and (recipe.documents or recipe.documents_by_host))):
         tender["_documentDetailPending"] = True
     for name in ("referenceNumber", "description"):
         if raw.get(name):

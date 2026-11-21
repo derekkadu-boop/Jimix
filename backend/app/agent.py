@@ -3,7 +3,8 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, urljoin, urlsplit
+from weakref import WeakKeyDictionary
 
 import httpx
 from bs4 import BeautifulSoup, Comment
@@ -34,10 +35,8 @@ REFUSE_BLOCKED = (
     " Keep looking (e.g. the broadest HTML list available) or give_up with blocked=false."
 )
 PAGING_PARAMS = {"page", "p", "offset", "start", "size", "limit", "rows", "pagesize", "method"}
-DOCUMENT_LISTS = (
-    "documents", "attachments", "files", "dokumente", "unterlagen", "documenten", "bijlagen", "documentos",
-    "anexos", "documenti", "allegati", "dokumenty", "zalaczniki", "dokument", "bilagor",
-)
+PROBED: WeakKeyDictionary = WeakKeyDictionary()
+DOCUMENT_LISTS = ("documents", "attachments", "files", "dokumente", "documenten", "documentos", "documenti")
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
 DOCUMENT_PAGE = re.compile(r"\b(" + "|".join(map(re.escape, KEYWORDS["documentsPage"])) + r")\b")
 FILE_SUFFIX = re.compile(r"\.(pdf|zip|7z|rar|docx?|xlsx?|odt|ods|rtf|txt|xml|[dpx]8\d)$", re.IGNORECASE)
@@ -264,19 +263,48 @@ async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher
     return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links", warnings
 
 
-async def _document_lists(tenders: list[dict], fetcher: Fetcher) -> list[str]:
-    url = next((t["_documentUrls"][0] for t in tenders if t["_documentUrls"]), None)
-    if not url:
+def _list_parents(recipe: Recipe, tenders: list[dict]) -> list[tuple[str, str]]:
+    tender = next((t for t in tenders if t.get("id")), None)
+    if not tender:
         return []
-    parent = url.split("?")[0].rsplit("/", 1)[0]
+    tid, parents = quote(str(tender["id"]), safe=""), []
+    if recipe.listing.kind == "json":
+        parents.append(f"{recipe.listing.url.split('?')[0].rstrip('/')}/{tid}")
+    if recipe.detail and recipe.detail.kind == "json" and recipe.detail.url:
+        parents.append(recipe.detail.url.replace("{id}", tid).split("?")[0].rstrip("/"))
+    if recipe.documents_url and not recipe.documents and tender["_documentUrls"]:
+        parents.append(tender["_documentUrls"][0].split("?")[0].rsplit("/", 1)[0])
+    return [(parent, tid) for parent in dict.fromkeys(parents) if tid in parent][:2]
+
+
+async def _document_lists(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> list[str]:
+    probed = PROBED.setdefault(fetcher, {})
+    hints = []
+    for parent, tid in _list_parents(recipe, tenders):
+        if parent not in probed:
+            probed[parent] = await _probe(parent, tid, fetcher)
+        hints += probed[parent]
+    return hints[:1]
+
+
+async def _probe(parent: str, tid: str, fetcher: Fetcher) -> list[str]:
+    blocks = len(fetcher.blocks)
     for name in DOCUMENT_LISTS:
+        url = f"{parent}/{name}"
         try:
-            resp = await fetcher.get(f"{parent}/{name}")
+            resp = await fetcher.get(url)
+            body = resp.json() if "json" in resp.headers.get("content-type", "") else None
+        except Blocked:
+            del fetcher.blocks[blocks:]
+            return []
         except Exception:  # noqa: BLE001, S112
             continue
-        if "json" in resp.headers.get("content-type", ""):
-            hint = f"{parent}/{name} returns JSON ({resp.text[:300]}...): if it lists the tender's files, read it"
-            return [hint + " with documents_url and documents"]
+        if body:
+            shape = f"keys {list(body)[:10]}" if isinstance(body, dict) else f"a list of {len(body)} items"
+            template = url.replace(tid, "{id}")
+            return [(f"{url} returns JSON with {shape}. If it lists this tender's files, fetch_json it and set"
+                     f' documents_url {{"template": "{template}", "kind": "json"}} with documents selecting'
+                     " the file links (attribute may be a dot path)")]
     return []
 
 
@@ -319,13 +347,14 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
         problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
         if not problem and (hint := await _document_page_hint(recipe, tenders, fetcher)):
             document_warnings.append(hint)
+        if problem or (recipe.documents_url and not recipe.documents):
+            document_warnings += await _document_lists(recipe, tenders, fetcher)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
     warnings.extend(document_warnings)
-    if recipe.documents_url and not recipe.documents:
+    if recipe.documents_url and not recipe.documents and not problem:
         warnings.append("documents_url gives one file per tender: if it is only the notice, render one tender's"
                         " page and use the documents list it loads (documents_url plus documents)")
-        warnings += await _document_lists(tenders, fetcher)
     return {
         "problem": problem,
         "warnings": warnings,

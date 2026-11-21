@@ -492,13 +492,18 @@ def test_single_file_documents_url_suggests_a_sibling_document_list():
     async def run():
         fetcher = Fetcher(transport=httpx.MockTransport(api))
         try:
+            recipe = Recipe.model_validate(API_RECIPE | {"detail": None, "documents": None,
+                                                         "documents_url": {"template": "/api/pub/{id}/pdf"}})
             tenders = [{"id": "7", "_documentUrls": ["https://api.example/api/pub/7/pdf"]}]
-            return await agent._document_lists(tenders, fetcher)
+            return await agent._document_lists(recipe, tenders, fetcher), await agent._document_lists(
+                recipe, tenders, fetcher)
         finally:
             await fetcher.close()
 
-    hints = asyncio.run(run())
-    assert len(hints) == 1 and hints[0].startswith("https://api.example/api/pub/7/attachments returns JSON")
+    first, again = asyncio.run(run())
+    assert len(first) == 1 and first == again
+    assert first[0].startswith("https://api.example/api/pub/7/attachments returns JSON with keys ['documenten']")
+    assert '"template": "https://api.example/api/pub/{id}/attachments"' in first[0]
 
 
 def test_templates_must_use_mapped_fields():
@@ -507,6 +512,9 @@ def test_templates_must_use_mapped_fields():
         Recipe.model_validate(bad)
     with pytest.raises(ValueError, match="absolute"):
         Recipe.model_validate(API_RECIPE | {"documents_url": {"template": "javascript:{id}"}})
+    for template in ("//other.example/{id}", "https://{id}.example/x"):
+        with pytest.raises(ValueError, match="absolute"):
+            Recipe.model_validate(API_RECIPE | {"documents_url": {"template": template}})
 
 
 @pytest.mark.parametrize("unchecked", ["capped", "no-url", "503", "blocked"])
