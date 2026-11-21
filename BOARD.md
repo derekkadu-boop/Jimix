@@ -847,7 +847,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-60 Documents split by lot or folder
 - **Priority:** normal
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 07:52
+- **Last seen:** 2026-11-21 07:52
 - **Problem:** Tender documents are often grouped by lot or folder (lot pages, folder trees, "show more" lists), so one documents page shows only part of the files.
 - **Idea:** Allow a documents selector to follow up to N levels of folder or lot links (same site, bounded), deduplicating by sha256.
 - **Findings:**
