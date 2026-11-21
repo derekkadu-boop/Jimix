@@ -471,6 +471,18 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   triggering a repair (retry later). An unnecessary repair or recipe rebuild is a bug: file it.
 - **Findings:**
 
+### B-37 Reuse recipes across portals running the same software
+- **Priority:** low (later; no caching layer needed)
+- **Status:** open
+- **Problem:** The PDF notes that many portals run the same software under different addresses (Cosinex,
+  NetServer, EPPS, ...), and judges how well the approach scales to many more portals. Today each attach
+  starts from scratch, so sibling portals pay for the same discovery again.
+- **Idea:** When attaching, detect the software from generic signals (URL path patterns, generator tags,
+  footers). If an active recipe exists for another portal with the same software, give the agent that
+  recipe as a starting point, with host-specific parts replaced. It still goes through test_recipe and
+  submit as usual. Measure model cost and calls with and without the starting point.
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
 - Postgres and a job queue instead of SQLite and in-process tasks.
