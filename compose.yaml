@@ -1,0 +1,22 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+      args:
+        JIMIX_API_URL: ${JIMIX_API_URL:-http://host.docker.internal:8000}
+    init: true
+    ports:
+      - "127.0.0.1:${JIMIX_FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3000/', { signal: AbortSignal.timeout(2000) })
+          .then(response => { if (!response.ok) process.exitCode = 1; })
+          .catch(() => { process.exitCode = 1; });
+      interval: 5s
+      timeout: 3s
+      retries: 12

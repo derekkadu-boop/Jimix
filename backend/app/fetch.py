@@ -63,13 +63,19 @@ async def wait_turn(url: str) -> None:
         gate.last = time.monotonic()
 
 
+async def resolve_public(host: str, port: int) -> str:
+    infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    addresses = {info[4][0] for info in infos}
+    if not addresses or not all(ipaddress.ip_address(a).is_global for a in addresses):
+        raise ValueError(f"{host} is not a public address")
+    return min(addresses, key=lambda a: (":" in a, a))
+
+
 async def check_public(url: str) -> None:
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise ValueError(f"not an http(s) URL: {url}")
-    infos = await asyncio.get_running_loop().getaddrinfo(parts.hostname, None, type=socket.SOCK_STREAM)
-    if not all(ipaddress.ip_address(info[4][0]).is_global for info in infos):
-        raise ValueError(f"{parts.hostname} is not a public address")
+    await resolve_public(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80))
 
 
 def block_reason(status: int, headers, requested: str, final: str, html: str | None) -> str | None:

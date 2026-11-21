@@ -1,17 +1,56 @@
 # Jimix
 
-## Run locally
+## Run with Docker Compose
 
-Start the FastAPI backend from `backend/`.
+With Docker Desktop in Linux container mode or Docker Engine with the Compose
+plugin, run this from the repository root.
+
+```sh
+docker compose up --build --wait
+```
+
+Compose starts the Next.js frontend at `http://127.0.0.1:3000/`. If port 3000
+is busy, set `JIMIX_FRONTEND_PORT` before starting and open that port instead.
+
+Use `docker compose logs -f frontend` to follow startup and `docker compose down`
+to stop the frontend.
+
+### Connect the backend
+
+On Docker Desktop, run FastAPI on the host from `backend/` in a
+second terminal. Install uv first if needed.
 
 ```sh
 cd backend
-python -m pip install -e ".[dev]"
-python -m playwright install chromium
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv run playwright install chromium --only-shell
+uv run python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Start Next.js in a second terminal with Node.js 20.9 or later.
+The frontend proxies API requests to `http://host.docker.internal:8000`.
+Verify the connection through the frontend's [OpenAPI response](http://127.0.0.1:3000/openapi.json).
+To use a different reachable API, set `JIMIX_API_URL` before rebuilding the frontend.
+[Docker Desktop host networking](https://docs.docker.com/desktop/features/networking/networking-how-tos/#connect-a-container-to-a-service-on-the-host)
+
+## Local setup
+
+### FastAPI backend
+
+Install uv before running the Python commands below. uv manages the project
+environment and can download a compatible Python version (3.13 or newer).
+[uv installation guide](https://docs.astral.sh/uv/getting-started/installation/)
+
+From `backend/`, use uv to install the backend dependencies, Chromium, and start FastAPI.
+
+```sh
+cd backend
+uv run playwright install chromium --only-shell
+uv run python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+### Next.js frontend
+
+Install Node.js 20.9 or later with npm. Node.js 24 matches the Docker image.
+From the repository root, run these commands in a second terminal.
 
 ```sh
 cd frontend
@@ -19,9 +58,63 @@ npm ci
 npm run dev
 ```
 
-Open [the dashboard](http://127.0.0.1:3000/). Next.js forwards portal requests
-to FastAPI on port 8000. Set `JIMIX_API_URL` before starting development
-or building for production to use another backend origin.
+Open [the dashboard](http://127.0.0.1:3000/). Next.js forwards API requests
+to `http://127.0.0.1:8000` by default. To build and serve the frontend locally
+in production mode, run `npm run build` and `npm start` from `frontend`.
+Set `JIMIX_API_URL` before starting development or building for production to
+use a different API origin.
+
+Jimix saves new portals immediately and looks up public registration data in
+the background through RDAP or WHOIS. The radar refreshes automatically and
+uses city coordinates from [GeoNames](https://www.geonames.org/) (CC BY 4.0).
+It skips identifiable privacy proxies and falls back to a country marker when
+the registration or country-code domain provides a usable country.
+
+## Manual frontend Docker setup
+
+Run these PowerShell commands from the repository root with Docker Desktop in
+Linux container mode. To start FastAPI on your host, follow the connection
+instructions above.
+
+Both targets use Node.js 24 and install dependencies from `package-lock.json`
+during the build. The frontend reaches the host API at
+`http://host.docker.internal:8000`. [Docker Desktop networking](https://docs.docker.com/desktop/features/networking/networking-how-tos/)
+
+### Development with hot reload
+
+```powershell
+docker build --target development -t jimix-frontend:dev ./frontend
+$frontend = (Resolve-Path .\frontend).Path
+docker run --rm --init -p 127.0.0.1:3000:3000 `
+  --mount "type=bind,source=$frontend\app,target=/app/app,readonly" `
+  --mount "type=bind,source=$frontend\public,target=/app/public,readonly" `
+  --mount "type=bind,source=$frontend\world-map.svg,target=/app/world-map.svg,readonly" `
+  -e JIMIX_API_URL=http://host.docker.internal:8000 `
+  jimix-frontend:dev
+```
+
+Edits to the mounted files are visible in the container. Rebuild the development
+image after changing dependencies or `next.config.mjs`.
+
+### Production build
+
+The production image runs the Next.js standalone server as the `node` user.
+
+```powershell
+docker build --target production -t jimix-frontend:prod `
+  --build-arg JIMIX_API_URL=http://host.docker.internal:8000 `
+  ./frontend
+docker run --rm --init -p 127.0.0.1:3000:3000 jimix-frontend:prod
+```
+
+Set `JIMIX_API_URL` to a reachable API origin in the development `docker run`
+command or the production `docker build` command. Next.js writes the production
+rewrites at build time, so changing the backend origin requires a new image.
+
+Open [the dashboard](http://127.0.0.1:3000/) and check that the frontend can
+reach FastAPI at [the proxied OpenAPI document](http://127.0.0.1:3000/openapi.json).
+If port 3000 is in use, change the port mapping to `127.0.0.1:3001:3000` and
+open [port 3001](http://127.0.0.1:3001/).
 
 ## How Watchtower works
 
@@ -73,5 +166,5 @@ Regular reads make no model call.
 
 ```sh
 cd backend
-python -m pytest -q
+uv run --extra dev python -m pytest -q
 ```

@@ -7,6 +7,15 @@ CREATE TABLE IF NOT EXISTS portal (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS portal_location (
+    portal_id    TEXT PRIMARY KEY NOT NULL REFERENCES portal(id) ON DELETE CASCADE,
+    city         TEXT,
+    country      TEXT,
+    country_code TEXT,
+    latitude     REAL,
+    longitude    REAL
+);
+
 CREATE TABLE IF NOT EXISTS run (
     id            TEXT PRIMARY KEY,
     portal_id     TEXT NOT NULL REFERENCES portal(id) ON DELETE CASCADE,
