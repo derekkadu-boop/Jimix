@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:31 | B-55 cursor pagination; monitoring B-56 UK
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:34 | B-55 cursor pagination
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -158,6 +158,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - https://udbud.dk/ (DK)
   - https://www.vergabe.metropoleruhr.de/ (DE, Cosinex; scouted by lead-w2 for B-09, so not unseen)
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
+  - 2026-11-21 | UK Find a Tender | Derek-Codex-B, B-56 | failed | 0 | 0 | USD 0.1149 (23 calls) | Fresh attach reached public search pages but accepted no broad listing with document files.
   - 2026-11-21 | Spain | Derek-Codex-B, B-56 | failed | 0 | 0 | USD 0.0250 (20 calls) | Fresh URL-only attach reported that robots.txt denied the attempted pages.
   - 2026-11-21 | oeffentlichevergabe.de | Derek-Codex-B, B-71 | failed | 0 | 0 | USD 0.0599 (28 calls) | Fresh URL-only attach found a date-based bulk notice archive but no verified listing with documents. No ID error confirmed.
   - 2026-11-21 | Finland Hilma | Derek-Codex-B, B-43 + B-21 integration | failed | 0 | 0 | USD 0.1324 (22 calls) | Fresh URL-only attach found the public JSON listing. Sampled details did not yield procurement documents, so validation failed. No confirmed access block.
@@ -825,7 +826,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-55 Cursor and token pagination
 - **Priority:** high (reusable declarative scraping capability)
 - **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 08:31
-- **Last seen:** 2026-11-21 08:31
+- **Last seen:** 2026-11-21 08:34
 - **Problem:** APIs often page with a cursor from the previous response (`nextPageToken`, `cursor`, `after`, a `Link: rel=next` header) rather than page numbers or next links.
 - **Idea:** Listing `next_from`: JSON path (or header name) of the next cursor in the response, and where to put it (query parameter or body path). Stop when absent.
 - **Findings:**
@@ -837,7 +838,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Problem:** Many portals publish notices as RSS/Atom feeds or XML (sitemaps, OCDS/eForms XML). Recipes can only read HTML and JSON.
 - **Idea:** A `kind: xml` listing with XPath-like paths (or convert XML to the JSON shape and reuse dot paths). Feeds often carry title, link, date and id; documents come from the linked page.
 - **Findings:**
-  Derek-Codex-B: fixture Atom pages deliver an attachment, preserve its hash on a cached Refresh and resolve nested XML bases. RSS fields, Atom paging and advertised feed links are covered. Independent review approved by Derek-Codex-A after fixing HTML base URL resolution. The Fetcher confirmed robots.txt disallows the Spanish Dev root. All 174 backend tests and Ruff passed. Fresh UK Dev check running.
+  Derek-Codex-B: fixture Atom pages deliver an attachment, preserve its hash on a cached Refresh and resolve nested XML bases. RSS fields, Atom paging and advertised feed links are covered. Independent review approved by Derek-Codex-A after fixing HTML base URL resolution. The Fetcher confirmed robots.txt disallows the Spanish Dev root. All 174 backend tests and Ruff passed. Fresh UK Dev attach reached public search pages but did not validate a broad listing or documents (USD 0.1149, 23 calls). No live XML delivery verified.
 
 ### B-57 ASP.NET WebForms postback paging
 - **Priority:** high (reusable declarative scraping capability)
