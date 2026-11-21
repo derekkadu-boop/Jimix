@@ -115,12 +115,26 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   and refresh to trigger `healing` and repair.
 - **Findings:**
 
-### B-10 Test portal set
-- **Status:** open
-- **Problem:** the PDF scores on unseen portals. We need our own set: at least 4 countries, 3 portal
-  software packages, server-rendered, JavaScript and multi-step portals, plus 1–2 behind login or captcha
-  (to check `failed` with a reason). See the PDF's "Finding test portals" page.
-- **Deliverable:** a list in this file with each portal's result.
+### B-10 Dev portal set
+- **Priority:** high (every document fix is validated here)
+- **Status:** open (shared: anyone may take one portal at a time; write results below)
+- **Rules:** fresh, empty `JIMIX_DB` per run; unassisted attach (just the URL); then refresh. Record state,
+  tender count, files downloaded, model cost, and what blocked it. File every problem as an item (generic
+  fixes only, see PROTOCOL.md "Build the system, not the answers"). Don't scout portals outside this list.
+- **Dev portals:**
+  - https://www.tenderned.nl/aankondigingen/overzicht (NL, JSON API)
+  - https://oeffentlichevergabe.de/ui/ (DE, JS app + bulk export API)
+  - https://www.evergabe.nrw.de/VMPCenter/ (DE, Cosinex, external buyer platforms)
+  - https://www.boamp.fr/pages/api-boamp/ (FR, documented API)
+  - https://contrataciondelestado.es/ (ES)
+  - https://www.find-tender.service.gov.uk/ (UK)
+  - https://www.etenders.gov.ie/epps/quickSearchAction.do?searchType=cftFTS&latest=true (IE, EPPS)
+  - https://www.doffin.no/Notice (NO)
+  - https://www.hankintailmoitukset.fi/en (FI)
+  - https://ezamowienia.gov.pl/pl/ (PL)
+  - https://dtvp.de/ausschreibungen/ (DE)
+  - https://udbud.dk/ (DK)
+- **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
 - **Findings:**
 
 ### B-11 Cost per portal for the README

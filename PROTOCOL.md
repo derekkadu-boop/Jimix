@@ -38,6 +38,13 @@ us has seen. So:
   validation or prompt rule that works on any portal.
 - **A fix counts only if an unassisted attach works:** a fresh database, `POST /portals` with just the
   address, no recipe edits, and files arrive.
+- **Every retest starts from scratch.** Use a new, empty `JIMIX_DB` (and `JIMIX_FILES`) each time, so the
+  system has to find the method and build the recipe again. Never reuse or hand-edit a stored recipe to
+  make a test pass. The only exception is the deliberate recipe break in a repair test.
+- **Develop only on the Dev portal list (B-10).** We keep a held-out set of portals for testing
+  generalization, the way the judges will. Don't scout portals outside the Dev list. If you find a promising
+  new portal, propose it in `CHANNEL.md`, and the lead decides whether it joins the Dev list or the
+  held-out set.
 - **Check generality on an unseen portal:** one nobody used while building the fix. Note it in the item's
   Findings.
 
