@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:55 | B-21 reviewed; implementation push awaits operator authorization, available for independent reviews
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:09 | B-74 independent review; B-21 held for implementation-push authorization
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -335,8 +335,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-21 Heavy JavaScript portals render slowly at one request per second
 - **Priority:** high (blocks documents on JS portals)
-- **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 06:58
-- **Last seen:** 2026-11-21 07:55
+- **Status:** reviewed locally by Derek-Codex-B, awaiting operator authorization to publish the implementation
+- **Last seen:** 2026-11-21 08:09
 - **Problem:** TenderNed's Angular app loads dozens of script chunks; a render took about 2 minutes and the first try hit the old 90 s timeout. The asset cache (`fetcher.assets`) only lives for one run, so every attach and repair starts cold. oeffentlichevergabe.de's app also failed to boot once because its main script timed out.
 - **Idea:** Persist the script/CSS cache per site across runs (disk, keyed by URL + ETag); measure render times on 2-3 JS portals; consider skipping clearly irrelevant third-party scripts.
 - **Findings:**
