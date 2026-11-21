@@ -559,4 +559,4 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Rate limit shared across processes; replace `fetch.site()` with `tldextract`.
 - Storage cap and deleting files no tender references.
 - Redaction of secrets as a logging filter.
-- The system proposing fixes to its own recipe format or code as pull requests.
+- Self-improving codebase: when the agent meets a pattern the recipe format can't express (as with POST search APIs before B-18), it writes the missing mechanism as a pull request to this repo, with tests, for human or agent review. Never applied automatically.
