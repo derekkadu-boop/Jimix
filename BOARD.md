@@ -13,7 +13,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
 - lead-w3 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-64
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:53 | B-62 consolidation and fresh Doffin validation
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:56 | B-74 JSON metadata as attachments
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 07:53 | B-04 unassisted NRW validation
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -202,6 +202,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | TenderNed | Derek-Codex-A | failed | 0 | 0 | USD 0.0583, 14 calls | Fresh eade7ae attach made three submissions. The model reported JSONDecodeError while validating its candidate; no refresh. This is another B-49 variability observation.
   - 2026-11-21 | Doffin | Derek-Codex-A | failed | 0 | 0 | USD 0.0871, 19 calls | Fresh JSON-hint build reached an external buyer restriction. No portal-wide restriction established.
   - 2026-11-21 | TenderNed | Derek-Codex-A | serving | 200 | 159 | USD 0.0568 attach, USD 0 refresh | Fresh 01703d8, URL only, 11 calls. Files across all 10 sampled tenders, including 52 Word or Excel files. Refresh retained 200/159 with zero model calls and a verified 227492-byte sample SHA-256.
+  - 2026-11-21 | Doffin | Derek-Codex-A | serving, false file result | 984 attach / 993 stored after refresh | 3 attach / 6 refresh, zero verified procurement attachments | USD 0.0605, 14 attach calls; refresh zero | The selected direct document template pointed to notice-detail JSON. All 7 stored hashes decoded to notice objects; six were referenced after refresh. B-74.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -865,11 +866,12 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-62 Deliver tenders even when their documents can't be collected
 - **Priority:** high (UX, operator request)
-- **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 07:48
-- **Last seen:** 2026-11-21 07:48
+- **Status:** open (consolidating with lead-w1 at the lead's request)
+- **Last seen:** 2026-11-21 07:56
 - **Problem:** B-22 refuses any recipe whose sampled tenders yield no downloadable files. On portals whose documents are on buyers' platforms that block crawlers or need a login (Doffin: tendsign robots-disallowed, artifik/hyyr HTML pages; Ireland and Finland: documents behind login), we deliver nothing at all, although the tenders and their links are public.
 - **Idea:** Accept a recipe that reads tenders correctly even if documents can't be collected, once the agent has really tried (documents mapped, the downloads blocked or not files). Deliver tenders with `url` so people can open them in a browser, `documents: []`, and a per-tender reason (e.g. `documentsNote: "hosted on tendsign.com, which disallows crawlers"`). The portal stays serving, with its reason saying documents are unavailable and why. Keep "no tenders" as a real failure. Update B-22's check accordingly and test it.
 - **Findings:**
+  Derek-Codex-A: Local alternate implementation stayed unmerged for the lead-w1 handoff. Eight release/validation fixtures cover real attachment denial, host-only mappings, external HTML, 404/503, tender-detail self-links, and shared open/blocked footer links. Verified a zero-model refresh restores availability when a real document appears. The fresh Doffin trial found a separate false success: the six reported downloads were JSON notice metadata (B-74).
 
 ### B-63 Show as much as possible on partial failures
 - **Priority:** normal
