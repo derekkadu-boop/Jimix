@@ -13,7 +13,7 @@ from app import agent, db, documents, fetch, watchtower
 from app import recipe as recipes
 from app.documents import fetch_documents
 from app.fetch import Blocked, Fetcher
-from app.recipe import Recipe, apply
+from app.recipe import Recipe, Selector, apply
 
 LIST_1 = """<html><body><table>
 <tr class="t"><td class="ref">A-1</td><td><a href="/t/1">Road works</a></td>
@@ -562,6 +562,32 @@ def test_url_templates_read_detail_and_document_list():
     assert first["submissionDeadline"].startswith("2099-02-15T09:00")
     assert first["cpvCodes"] == ["45232420"]
     assert first["_documentUrls"] == [f"https://api.example/api/pub/7/docs/{i}/content" for i in (1, 2)]
+    assert len(docs) == 2
+
+
+def test_jsonpath_wildcards_and_indexes():
+    data = {"content": [{"a": {"b": [{"h": "x"}, {"h": "y"}]}}, {"a": {"b": [{"h": "z"}]}}], "m": {"k": {"h": "w"}}}
+    assert recipes._json_path(data, "$.content[*].a.b[*].h") == ["x", "y", "z"]
+    assert recipes._json_path(data, "content[1].a.b[0].h") == "z"
+    assert recipes._json_path(data, "$.content[*]") == data["content"]
+    assert recipes._json_path(data, "$.m.*.h") == ["w"]
+    assert recipes._json_path(data, "$.missing[*].h") is None
+    assert recipes._json_path({"a": [{"$id": 1}, None, {"$id": 2}]}, "a[*].$id") == [1, 2]
+    assert recipes._json_path({"a": [None, {"b": 1}]}, "$.a[*]") == [{"b": 1}]
+    assert recipes._json_path({"*": 3}, "*") == 3
+    for bad in ("$..href", "$.a['k']", "$.a[?(@.x)]", "$.a[-1]"):
+        assert recipes._json_path(data, bad) is None
+        assert recipes.bad_json_path(Recipe.model_validate(API_RECIPE | {"documents": {"path": bad}})) == bad
+    assert recipes.bad_json_path(Recipe.model_validate(API_RECIPE)) is None
+    assert recipes._json_path({"k": "a" * 5000 + "'"}, "a" * 5000 + "'") is None
+    files = Selector(path="$.docs", attribute="links[*].href")
+    assert recipes._values({"docs": [{"links": [{"href": "/a"}, {"href": "/b"}]}]}, files, "json") == ["/a", "/b"]
+    redundant = Selector(path="$.docs[*].links[*].href", attribute="href")
+    assert recipes._values({"docs": [{"links": [{"href": "/a"}]}]}, redundant, "json") == ["/a"]
+    recipe = API_RECIPE | {"documents": {"path": "$.documenten[*].links.download.href"},
+                           "listing": API_RECIPE["listing"] | {"records": "$.content[*]"}}
+    tenders, _, docs = _apply(recipe, api)
+    assert tenders[0]["_documentUrls"] == [f"https://api.example/api/pub/7/docs/{i}/content" for i in (1, 2)]
     assert len(docs) == 2
 
 

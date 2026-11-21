@@ -14,7 +14,7 @@ from .browser import render
 from .discovery import discover, scan_scripts
 from .documents import fetch_documents
 from .fetch import Blocked, Fetcher
-from .recipe import KEYWORDS, TENDER_FIELDS, Recipe, apply, check
+from .recipe import KEYWORDS, TENDER_FIELDS, Recipe, apply, bad_json_path, check
 
 log = logging.getLogger("watchtower.agent")
 MODEL = os.environ.get("WATCHTOWER_MODEL", "gpt-5.4-mini")
@@ -130,7 +130,9 @@ A recipe is JSON:
 Documents are read from the documents page, else the detail page when detail is set, else the row.
 With documents_url, documents is read from that URL; without documents, the URL itself is the one file.
 Placeholders are mapped field names ({{id}}, {{referenceNumber}}...), filled per tender.
-"attribute" may be a dot path inside each item, e.g. "links.download.href".
+"attribute" may be a dot path inside each item, e.g. "links.download.href". Dot paths accept [*] to map
+over a list and [0] to index, e.g. "$.files[*].links.download.href". A field keeps its first value
+(cpvCodes keeps all); documents keeps every value.
 Map status to a field naming the notice's state or type when there is one (award notices are closed).
 When listings link to different document platforms, use documents_by_host with exact lowercase hostnames.
 If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
@@ -371,6 +373,9 @@ async def _document_page_hint(recipe: Recipe, tenders: list[dict], fetcher: Fetc
 
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
+    if path := bad_json_path(recipe):
+        return {"problem": f"unsupported JSON path {path!r}: use dot paths with [*] and [N],"
+                           " e.g. $.items[*].links.href", "warnings": [], "tenderCount": 0, "sample": []}
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
     sample = tenders
     if recipe.detail and (recipe.documents or recipe.documents_by_host):
