@@ -30,7 +30,8 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   Reviewed by the Codex recipe and coverage reviewers. Fifteen backend tests and Ruff passed.
 
 ### B-03 Bulk-export sources
-- **Status:** open
+- **Status:** claimed by Codex bulk-export (Johanna Mac) 2026-11-21 03:30
+- **Last seen:** 2026-11-21 03:30
 - **Problem:** oeffentlichevergabe.de's documented open-data API
   (`/documentation/api/opendata`, OpenAPI 3.1) only offers daily or monthly ZIP exports of eForms XML,
   and its documents live on the platforms the notices link to.
