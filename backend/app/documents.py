@@ -14,6 +14,10 @@ from .fetch import MAX_FILE_BYTES, MAX_RUN_DOWNLOAD_BYTES, Blocked, BudgetExceed
 log = logging.getLogger("watchtower.documents")
 FILES_DIR = Path(os.environ.get("JIMIX_FILES", "data/files"))
 MAX_DOCUMENTS = int(os.environ.get("WATCHTOWER_MAX_DOCS_PER_TENDER", "30"))
+OFFICE_CONTENT_TYPES = "[Content_Types].xml"
+OFFICE_PACKAGE_MARKERS = {OFFICE_CONTENT_TYPES, "_rels/.rels"}
+OFFICE_MAIN_PARTS = {"word/document.xml", "xl/workbook.xml", "xl/workbook.bin", "ppt/presentation.xml"}
+OFFICE_MAIN_NAMES = {Path(part).name for part in OFFICE_MAIN_PARTS}
 
 
 def _store(part: Path, name: str) -> dict:
@@ -54,7 +58,17 @@ def _unzip(archive: Path, budget: int) -> tuple[list[dict], int]:
 
 
 def _save(part: Path, name: str, budget: int) -> tuple[list[dict], int]:
-    return _unzip(part, budget) if zipfile.is_zipfile(part) else ([_store(part, name)], 0)
+    if zipfile.is_zipfile(part):
+        with zipfile.ZipFile(part) as archive:
+            members = set(archive.namelist())
+        if not OFFICE_PACKAGE_MARKERS <= members or OFFICE_MAIN_PARTS.isdisjoint(members):
+            return _unzip(part, budget)
+    return [_store(part, name)], 0
+
+
+def has_unpacked_office(documents: list[dict]) -> bool:
+    names = {doc["fileName"] for doc in documents}
+    return OFFICE_CONTENT_TYPES in names and not OFFICE_MAIN_NAMES.isdisjoint(names)
 
 
 async def fetch_documents(
