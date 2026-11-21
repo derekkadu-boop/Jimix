@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:10 | protocol keeper
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:06 | protocol keeper, B-22
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
@@ -234,7 +234,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-22 Agent can submit a recipe whose documents match nothing
 - **Priority:** high (portals end up serving without files)
-- **Status:** open
+- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 04:06
+- **Last seen:** 2026-11-21 04:06
 - **Problem:** `test_recipe` only warns "no document links found in the sample"; the agent may submit again to accept the warning. TenderNed and evergabe.nrw.de both reached `serving` with 0 files this way.
 - **Idea:** Make a working sample document download a hard requirement for `submit_recipe`, unless a login/captcha block on documents was actually detected (then fail with `Blocked: documents ...`). Keep an explicit escape only for portals that publish no files at all.
 - **Findings:**
