@@ -11,8 +11,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:08 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:04 | B-25
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:00 | B-20
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:14 | B-04
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:13 | B-20
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 in review (PR #7)
 
 ### B-01 Document URLs built from tender fields
@@ -62,8 +62,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
-- **Status:** done (4665b28a)
-- **Last seen:** 2026-11-21 03:49
+- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:14
+- **Last seen:** 2026-11-21 04:14
 - **Problem:** NRW notice 1138705 links to Düsseldorf NetServer. Public document links appear only
   after opening the versioned file-list dialog.
 - **Findings:** The NetServer option opens the latest public file-list version and reads its
@@ -74,6 +74,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   after 19 calls (estimated USD 0.099). A stored-recipe Refresh then delivered 232 files and served
   the verified PDF through the API with zero model calls. Public POST search is B-18 and automatic
   NRW attachment is B-20.
+  Code is on main at 4665b28a. Reopened under the revised protocol for an unassisted attach
+  that saves real files on a previously untested NetServer portal.
 
 ### B-05 Prompt-injection hardening
 - **Status:** open
@@ -113,12 +115,26 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   and refresh to trigger `healing` and repair.
 - **Findings:**
 
-### B-10 Test portal set
-- **Status:** open
-- **Problem:** the PDF scores on unseen portals. We need our own set: at least 4 countries, 3 portal
-  software packages, server-rendered, JavaScript and multi-step portals, plus 1–2 behind login or captcha
-  (to check `failed` with a reason). See the PDF's "Finding test portals" page.
-- **Deliverable:** a list in this file with each portal's result.
+### B-10 Dev portal set
+- **Priority:** high (every document fix is validated here)
+- **Status:** open (shared: anyone may take one portal at a time; write results below)
+- **Rules:** fresh, empty `JIMIX_DB` per run; unassisted attach (just the URL); then refresh. Record state,
+  tender count, files downloaded, model cost, and what blocked it. File every problem as an item (generic
+  fixes only, see PROTOCOL.md "Build the system, not the answers"). Don't scout portals outside this list.
+- **Dev portals:**
+  - https://www.tenderned.nl/aankondigingen/overzicht (NL, JSON API)
+  - https://oeffentlichevergabe.de/ui/ (DE, JS app + bulk export API)
+  - https://www.evergabe.nrw.de/VMPCenter/ (DE, Cosinex, external buyer platforms)
+  - https://www.boamp.fr/pages/api-boamp/ (FR, documented API)
+  - https://contrataciondelestado.es/ (ES)
+  - https://www.find-tender.service.gov.uk/ (UK)
+  - https://www.etenders.gov.ie/epps/quickSearchAction.do?searchType=cftFTS&latest=true (IE, EPPS)
+  - https://www.doffin.no/Notice (NO)
+  - https://www.hankintailmoitukset.fi/en (FI)
+  - https://ezamowienia.gov.pl/pl/ (PL)
+  - https://dtvp.de/ausschreibungen/ (DE)
+  - https://udbud.dk/ (DK)
+- **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -183,7 +199,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:** Windows Docker Desktop verified the linux/amd64 root build and healthy Compose stack. Installed libatomic1 before Playwright, and normalized the executable startup script inside the root image. Chromium opened the dashboard and reached the API on 8080. Health, portal list and a synthetic document download worked, and the database and file persisted through container replacement. 17 backend tests passed. Pre-commit review: Codex B-16 reviewer.
 
 ### B-17 Bound failed document downloads and clear partial files
-- **Status:** in review (PR #7)
+- **Status:** done (b693cee, merged PR #7)
 - **Problem:** Fetcher reads HTML document responses in full before applying the byte limit, and
   an interrupted streamed download can leave a partial file on disk.
 - **Idea:** Bound the HTML used for access checks and clean partial files on interruption.
@@ -200,7 +216,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:51
-- **Last seen:** 2026-11-21 04:00
+- **Last seen:** 2026-11-21 04:13
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -212,6 +228,10 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Two categories now returned 80 distinct notices across four sampled pages. Two reviewers and
   25 integrated backend tests passed. A live attach with the new paging hint reached serving and
   read 449 tenders, but saved zero files. Its recipe only mapped Düsseldorf and did not use the modal.
+  Under the updated protocol, the pagination candidate is derived from recognized markup.
+  On NRW it appears at character 21,854, beyond the first 12,000 characters the agent sees.
+  Testing early exposure plus upcoming-deadline sample selection. A fresh Brandenburg attach
+  was blocked by robots.txt. Fresh NRW and previously untested Rheinland-Pfalz runs are underway.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
@@ -254,15 +274,15 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-25 Preserve ZIP-based Office documents as tender files
 - **Priority:** high (deliver the original tender document)
-- **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:03
-- **Last seen:** 2026-11-21 04:04
+- **Status:** done (971451f)
+- **Last seen:** 2026-11-21 04:13
 - **Problem:** Live NRW notice 1138704 links to a public Vergabe-Westfalen specification DOCX.
   Jimix unpacks every ZIP signature, so it exposes the Word file's package XML and loses the
   original DOCX from the tender. Five source links produced 51 stored entries. A two-entry
   synthetic DOCX also reproduces this via documents._save.
 - **Idea:** Keep Office packages intact, still unpack ordinary ZIP bundles, and recheck cached
   results that previously exposed Office package internals. Test on NRW 1138704.
-- **Findings:**
+- **Findings:** Recognizes Office ZIP packages by their internal entries and stores them intact. Ordinary ZIP bundles still unpack, and existing cache records with Office internals are rechecked. Two Codex reviewers approved. All 45 backend tests and Ruff passed after integrating current main. Live NRW notice 1138704 recovered from 51 old entries to five files, including an intact 11,749,325-byte DOCX verified via the file API. Fresh unassisted attach from the previously unused Niedersachsen public listings page (https://vergabe.niedersachsen.de/Satellite/company/welcome.do) reached serving, read 400 tenders, and delivered 10 open-tender files for - **Findings:**.0777. That sample contained no Office files. The bare-domain redirect failure is tracked in B-28.
 
 ### B-26 Listings silently capped at max_pages
 - **Priority:** medium (tenders beyond the cap never get documents)
@@ -283,6 +303,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** generic check in test_recipe: when paging is unset and the first list page has a link whose
   text or class means next (multilingual keywords) or whose URL differs from the listing URL only by a
   numeric parameter, warn.
+- **Findings:**
+
+### B-28 Follow HTML refresh redirects during initial portal discovery
+- **Priority:** high (a public portal address can stop before listing discovery)
+- **Status:** open
+- **Problem:** A fresh attach of https://vergabe.niedersachsen.de/ failed before finding a listing. The homepage returns HTTP 200 with an 89-byte HTML document and no links. Its only navigation is a standard HTML meta refresh to the procurement application. The agent spent 16 calls and $0.0234 without reaching the listings.
+- **Idea:** Recognize HTML refresh redirects generically, with a bounded chain and the existing URL, rate-limit, robots and access checks. Verify a fresh unassisted attach from a homepage using that mechanism.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
