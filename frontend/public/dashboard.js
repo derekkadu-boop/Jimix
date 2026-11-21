@@ -281,11 +281,20 @@
     ]
     const address = tender.address ?? tender.url
     const base = safeUrl(portal.url)?.href
-    const documents = (tender.documents ?? []).filter(Boolean).map(doc => {
+    const documents = (Array.isArray(tender.documents) ? tender.documents : []).filter(Boolean).map(doc => {
       const source = safeUrl(doc.downloadPath ?? doc.path ?? doc.url)
       return source ? `<li><a href="${escape(source.href)}" download target="_blank" rel="noopener noreferrer">Download ${escape(doc.fileName ?? doc.filename ?? 'document')}</a></li>` : ''
     }).filter(Boolean)
-    return `<article class="tender-card" data-key="${key(portal.id,identity)}"><h3>${escape(tender.title || 'Untitled tender')}</h3><div class="tender-overview"><span><small>Buyer</small>${escape(tender.buyerName ?? '—')}</span><span><small>Deadline</small>${escape(deadlineDate(tender.submissionDeadline))}</span><span><small>Status</small>${badge(tender.status ?? '',tender.status ?? '—')}</span></div>${address ? link(address,'Original notice ↗',base) : ''}<details><summary>Tender details</summary><dl class="tender-fields">${fields.map(([label,value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>${tender.description ? `<p>${escape(tender.description)}</p>` : ''}${documents.length ? `<ul>${documents.join('')}</ul>` : '<small>No document records supplied.</small>'}</details></article>`
+    const status = tender.documentsStatus
+    const files = documents.length
+    const fileCount = `${files} ${files === 1 ? 'file' : 'files'}`
+    const documentSummary = status === 'pending' ? (files ? `${fileCount} · More pending` : 'Documents pending')
+      : files ? fileCount
+      : status === 'none' ? 'No document links found'
+      : status === 'unavailable' ? 'Document links found · No files available'
+      : 'No document records supplied'
+    const documentLinks = documents.length ? `<ul>${documents.join('')}</ul>` : ''
+    return `<article class="tender-card" data-key="${key(portal.id,identity)}"><h3>${escape(tender.title || 'Untitled tender')}</h3><div class="tender-overview"><span><small>Buyer</small>${escape(tender.buyerName ?? '—')}</span><span><small>Deadline</small>${escape(deadlineDate(tender.submissionDeadline))}</span><span><small>Status</small>${badge(tender.status ?? '',tender.status ?? '—')}</span></div>${address ? link(address,'Original notice ↗',base) : ''}<details><summary>Tender details · ${escape(documentSummary)}</summary><dl class="tender-fields">${fields.map(([label,value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>${tender.description ? `<p>${escape(tender.description)}</p>` : ''}${documentLinks}</details></article>`
   }
   function renderRun(run, portalName = '') {
     const duration = time(run.finishedAt) - time(run.startedAt)

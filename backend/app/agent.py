@@ -33,8 +33,18 @@ REFUSE_BLOCKED = (
     " Keep looking (e.g. the broadest HTML list available) or give_up with blocked=false."
 )
 PAGING_PARAMS = {"page", "p", "offset", "start", "size", "limit", "rows", "pagesize", "method"}
-DOCUMENT_LISTS = ("documents", "documenten", "dokumente", "documentos", "attachments", "files")
+DOCUMENT_LISTS = (
+    "documents", "attachments", "files", "dokumente", "unterlagen", "documenten", "bijlagen", "documentos",
+    "anexos", "documenti", "allegati", "dokumenty", "zalaczniki", "dokument", "bilagor",
+)
 KEEP_ATTRS = {"id", "class", "href", "name", "type", "value", "action", "datetime", "title"}
+
+COSINEX_PAGE_PATH = (
+    r"(/VMPCenter/company/announcements/categoryOverview[.]do"
+    r"[?]method=showTable&fromSearch=1&selectedTablePagePROJECT_RESULT=[0-9]+)"
+)
+COSINEX_PAGE_LINK = re.compile(r"setTargetAndSubmit\(\s*'" + COSINEX_PAGE_PATH + "'")
+
 
 INSTRUCTIONS = f"""You connect a public procurement portal so that its open tenders can be read without you.
 Find where the portal lists its open tenders, write a recipe that reads all of them with their documents,
@@ -57,6 +67,10 @@ Prefer the broadest list (all current notices) and paginate through it, with the
 API accepts (keep e.g. size=50 in listing.url). If the portal only offers lists
 split by category, set listing.url to the page linking to all of them and index to those links:
 every linked page is then read as a list (with next_page/page_param), and tenders are merged by id.
+On Cosinex category listings, use the overview's links with cpvCode= in index to read every category.
+For a.browseForward with a setTargetAndSubmit path shown in onclick, use next_page with
+path a.browseForward, attribute onclick, and pattern '{COSINEX_PAGE_PATH}'.
+That path supports GET. A javascript:void(0) href is a placeholder and cannot be fetched.
 If you find no list of open tenders, keep searching before giving up:
 - a search or "all notices" page (Suche, Bekanntmachungen, recherche, búsqueda, zoeken, wyszukiwarka...),
   tried with an empty query: a GET search URL works as a listing URL;
@@ -69,8 +83,9 @@ separate page linked from the tender page (e.g. "Vergabeunterlagen", "Documents"
 use documents_page. If a tender's documents or details sit at a URL built from its id (common for JSON
 APIs, e.g. /tenders/{{id}}/documents), use documents_url or detail.url templates. Prefer the full list of
 tender documents over a single notice PDF: render_page one tender's own page to see which JSON calls load
-its documents (e.g. .../{{id}}/documents, /attachments, /documenten). If listing tenders or downloading documents needs a login or a captcha,
-call give_up with blocked=true.
+its documents (e.g. .../{{id}}/documents or /attachments, in the portal's language); the list may only load
+after opening a documents tab, so also try such sibling URLs with fetch_json.
+If listing tenders or downloading documents needs a login or a captcha, call give_up with blocked=true.
 
 A recipe is JSON:
 {{
@@ -92,6 +107,9 @@ A recipe is JSON:
                      "attribute": "href"}} or null,
   "documents_url": {{"template": "URL with {{field}} placeholders, e.g. https://host/api/tenders/{{id}}/files",
                     "kind": "html" | "json" | "browser"}} or null,
+  "documents_by_host": {{"host.example": {{"files": {{"path": "selector of file links"}},
+                        "page": {{"path": "optional selector of a public documents-page link"}},
+                        "modal": "netserver_file_tree" or null}}}},
   "timezone": "IANA zone of the portal's local times, e.g. Europe/Berlin",
   "dayfirst": true when dates are written day first
 }}
@@ -101,6 +119,13 @@ With documents_url, documents is read from that URL; without documents, the URL 
 Placeholders are mapped field names ({{id}}, {{referenceNumber}}...), filled per tender.
 "attribute" may be a dot path inside each item, e.g. "links.download.href".
 Map status to a field naming the notice's state or type when there is one (award notices are closed).
+When listings link to different document platforms, use documents_by_host with exact lowercase hostnames.
+If the detail page host matches, use that rule directly. Otherwise follow documents_page, when set, and
+match its destination host. Each matching rule may follow one public page link before reading files.
+Hosts without a rule use documents.
+On a public NetServer documents page with an a.zipFileContents control, the netserver_file_tree modal
+opens the highest-numbered file list version. The files selector is scoped to the opened dialog, for
+example a.filenameEllipsis[href].
 CSS selectors are BeautifulSoup/soupsieve: use :-soup-contains("text"), not :contains.
 Fields: {", ".join(TENDER_FIELDS)}.
 id is the portal's own stable identifier (often a number in the tender URL, e.g. pattern "pid=(\\d+)").
@@ -168,7 +193,14 @@ def simplify(html: str) -> str:
     for comment in soup.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in soup.find_all(True):
+        pagination = (
+            COSINEX_PAGE_LINK.search(tag.get("onclick", ""))
+            if tag.name == "a" and "browseForward" in tag.get("class", [])
+            else None
+        )
         tag.attrs = {k: v for k, v in tag.attrs.items() if k in KEEP_ATTRS}
+        if pagination:
+            tag["onclick"] = f"setTargetAndSubmit('{pagination[1]}')"
     return re.sub(r"\s+", " ", str(soup))
 
 
@@ -179,23 +211,54 @@ def _chunk(text: str, offset: int) -> str:
     return text[offset:end] + more
 
 
-async def _document_problem(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> str | None:
-    if not (recipe.documents or recipe.documents_url):
-        return "documents is not set: map the document file links (use documents_page if they are on another page)"
-    urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))[:3]
+NO_DOCUMENT_LINKS = (
+    "no document links in the sampled tenders: map the actual file links (documents, documents_page or"
+    " documents_by_host); call give_up with blocked=true only if a login or captcha on documents was detected"
+)
+
+
+async def _check_documents(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> tuple[str | None, list[str]]:
+    if not (recipe.documents or recipe.documents_by_host or recipe.documents_url):
+        return "map file links with documents or documents_by_host (use documents_page for linked pages)", []
+    urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))
+    warnings = []
+    if recipe.documents_by_host:
+        warnings.extend(f"tender {t['id']}: document page unavailable" for t in tenders if t.get("_documentPageError"))
+        checked = [t for t in tenders if t.get("_documentChecked")]
+        for tender in checked:
+            if not tender["_documentUrls"]:
+                reason = tender.get("_documentBlock", "no file links")
+                warnings.append(f"tender {tender['id']}: {reason}")
+        if checked and all(t.get("_documentBlock") for t in checked):
+            return "all sampled tender document pages were blocked", warnings
+        by_host = {}
+        for url in urls:
+            by_host.setdefault(urlsplit(url).hostname, url)
+        if len(by_host) > 1:
+            urls = list(by_host.values())
+    urls = urls[:3]
     if not urls:
-        return None
-    blocked = None
+        if any(t.get("_documentPageError") for t in tenders):
+            return "could not read the sampled document pages", warnings
+        return NO_DOCUMENT_LINKS, warnings
+    blocked, downloaded = None, False
     for url in urls:
         try:
-            docs, _, blocked = await fetch_documents([url], fetcher)
-        except Exception:  # noqa: BLE001, S112
-            continue
+            docs, _, why = await fetch_documents([url], fetcher)
+        except Exception:  # noqa: BLE001
+            docs, why = [], None
         if docs:
-            return None
+            if not recipe.documents_by_host:
+                return None, warnings
+            downloaded = True
+        elif recipe.documents_by_host:
+            warnings.append(f"could not download sampled file from {urlsplit(url).hostname}")
+        blocked = blocked or why
+    if downloaded:
+        return None, warnings
     if blocked:
-        return f"document download blocked ({blocked}); call give_up with blocked=true if that holds for all"
-    return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links"
+        return f"document download blocked ({blocked}); call give_up with blocked=true if that holds for all", warnings
+    return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links", warnings
 
 
 async def _document_lists(tenders: list[dict], fetcher: Fetcher) -> list[str]:
@@ -216,11 +279,13 @@ async def _document_lists(tenders: list[dict], fetcher: Fetcher) -> list[str]:
 
 async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     tenders, _ = await apply(recipe, fetcher, max_pages=3, max_details=3)
-    problem = check(tenders) or await _document_problem(recipe, tenders, fetcher)
+    problem = check(tenders)
+    document_warnings = []
+    if not problem:
+        problem, document_warnings = await _check_documents(recipe, tenders, fetcher)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
-    if (recipe.documents or recipe.documents_url) and not any(t["_documentUrls"] for t in tenders):
-        warnings.append("no document links found in the sample: check documents/documents_page")
+    warnings.extend(document_warnings)
     if recipe.documents_url and not recipe.documents:
         warnings.append("documents_url gives one file per tender: if it is only the notice, render one tender's"
                         " page and use the documents list it loads (documents_url plus documents)")

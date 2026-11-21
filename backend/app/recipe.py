@@ -76,6 +76,12 @@ class DocumentsUrl(BaseModel):
     kind: Kind = "html"
 
 
+class DocumentSource(BaseModel):
+    files: Selector
+    page: Selector | None = None
+    modal: Literal["netserver_file_tree"] | None = None
+
+
 class Recipe(BaseModel):
     method: Literal["documented_api", "discovered_api", "html", "browser"]
     listing: Listing
@@ -83,6 +89,7 @@ class Recipe(BaseModel):
     documents: Selector | None = None
     documents_page: Selector | None = None
     documents_url: DocumentsUrl | None = None
+    documents_by_host: dict[str, DocumentSource] = Field(default_factory=dict)
     timezone: str = "UTC"
     dayfirst: bool = True
     max_pages: int = Field(20, ge=1, le=100)
@@ -98,10 +105,12 @@ class Recipe(BaseModel):
             raise ValueError("listing.fields needs id")
         if "id" in detail_fields:
             raise ValueError("id must come from the listing, not the detail page")
-        if self.documents_page and not (self.detail and self.documents):
-            raise ValueError("documents_page needs detail and documents")
-        if self.documents_page and self.documents_url:
-            raise ValueError("use documents_page or documents_url, not both")
+        if self.documents_page and not (self.detail and (self.documents or self.documents_by_host)):
+            raise ValueError("documents_page needs detail and a document selector")
+        if self.documents_by_host and not self.detail:
+            raise ValueError("documents_by_host needs detail")
+        if (self.documents_page or self.documents_by_host) and self.documents_url:
+            raise ValueError("use documents_url without documents_page and documents_by_host")
         if self.detail and self.detail.url:
             _check_template("detail.url", self.detail.url, self.listing.fields.keys())
         if self.documents_url:
@@ -112,6 +121,9 @@ class Recipe(BaseModel):
             documents_kind = self.documents_url.kind
         links = [(self.listing.next_page, self.listing.kind), (self.listing.index, self.listing.kind),
                  (self.documents_page, self.detail.kind if self.detail else "html"), (self.documents, documents_kind)]
+        for host in self.documents_by_host:
+            if not re.fullmatch(r"[a-z0-9.-]+", host):
+                raise ValueError("documents_by_host keys must be lowercase hostnames")
         for selector, kind in links:
             if selector and selector.attribute is None and kind != "json":
                 selector.attribute = "href"
@@ -199,7 +211,7 @@ def _with_param(url: str, name: str, step: int) -> str:
 async def apply(
     recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None
 ) -> tuple[list[dict], bool]:
-    listing, raws, seen = recipe.listing, [], set()
+    listing, raws = recipe.listing, []
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
     starts = [listing.url]
     if listing.index:
@@ -209,6 +221,7 @@ async def apply(
         budget -= 1
     complete = bool(starts)
     for start in starts:
+        seen: set[str] = set()
         url, finished = start, False
         for page_number in range(min(recipe.max_pages, budget)):
             budget -= 1
@@ -251,8 +264,16 @@ async def apply(
             except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
                 continue
             raw.update(_extract(page, recipe.detail.fields, recipe.detail.kind))
-            if recipe.documents and not recipe.documents_url:
-                raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+            if (recipe.documents or recipe.documents_by_host) and not recipe.documents_url:
+                try:
+                    raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+                except Blocked as exc:
+                    if not recipe.documents_by_host:
+                        raise
+                    raw["_docs"] = []
+                    raw["_documentBlock"] = str(exc)
+                except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
+                    raw["_documentPageError"] = True
         if recipe.documents_url and recipe.documents:
             raw["_docs"] = await _listed_documents(recipe, raw, fetcher)
     if attempted and len(blocked) == attempted:
@@ -266,18 +287,39 @@ async def apply(
     return list(tenders.values()), complete
 
 
+def _link_values(node, selector: Selector, kind: Kind) -> list[str]:
+    if selector.attribute is None and kind != "json":
+        selector = selector.model_copy(update={"attribute": "href"})
+    return _values(node, selector, kind)
+
+
+async def _follow_document_page(selector: Selector, page, base: str, kind: Kind, fetcher: Fetcher):
+    if links := _link_values(page, selector, kind):
+        return await _load("html", urljoin(base, links[0]), fetcher)
+    return None
+
+
 async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> list[str]:
     kind = recipe.detail.kind
-    if recipe.documents_page:
-        links = _values(page, recipe.documents_page, kind)
-        if not links:
+    source = recipe.documents_by_host.get(urlsplit(base).hostname)
+    if not source and recipe.documents_page:
+        result = await _follow_document_page(recipe.documents_page, page, base, kind, fetcher)
+        if result is None:
             return []
-        try:
-            page, base = await _load("html", urljoin(base, links[0]), fetcher)
-        except (httpx.HTTPError, ValueError, OSError):
-            return []
+        page, base = result
         kind = "html"
-    return [urljoin(base, u) for u in _values(page, recipe.documents, kind)]
+        source = recipe.documents_by_host.get(urlsplit(base).hostname)
+    if source and source.page:
+        result = await _follow_document_page(source.page, page, base, kind, fetcher)
+        if result is None:
+            return []
+        page, base = result
+        kind = "html"
+    if source and source.modal == "netserver_file_tree":
+        html, _, base = await render(base, fetcher, netserver_files=True)
+        page, kind = BeautifulSoup(html, "html.parser"), "html"
+    selector = source.files if source else recipe.documents
+    return [urljoin(base, u) for u in _link_values(page, selector, kind)] if selector else []
 
 
 async def _listed_documents(recipe: Recipe, raw: dict, fetcher: Fetcher) -> list[str]:
@@ -346,6 +388,14 @@ def normalize(raw: dict, recipe: Recipe) -> dict | None:
         "documents": [],
         "_documentUrls": list(dict.fromkeys(raw.get("_docs", []))),
     }
+    if recipe.documents_by_host and "_docs" in raw:
+        tender["_documentChecked"] = True
+    if "_documentBlock" in raw:
+        tender["_documentBlock"] = raw["_documentBlock"]
+    elif raw.get("_documentPageError"):
+        tender["_documentPageError"] = True
+    elif recipe.detail and (recipe.documents or recipe.documents_by_host) and "_docs" not in raw:
+        tender["_documentDetailPending"] = True
     for name in ("referenceNumber", "description"):
         if raw.get(name):
             tender[name] = raw[name]

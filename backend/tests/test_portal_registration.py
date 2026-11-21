@@ -242,3 +242,43 @@ def test_delete_portal_removes_its_records_and_leaves_other_portals(backend, mon
             assert not conn.execute("SELECT 1 FROM portal_location").fetchone()
             assert not conn.execute("SELECT 1 FROM tender").fetchone()
             assert not conn.execute("SELECT 1 FROM run").fetchone()
+
+
+def test_tender_document_status(backend, monkeypatch, tmp_path):
+    import json
+
+    from fastapi.testclient import TestClient
+
+    main, _ = backend
+    monkeypatch.setattr(main.db, "DB_PATH", tmp_path / "jimix.db")
+    source = "https://procurement.example.invalid/specification.pdf"
+    metadata = {
+        "pending": {"_documentsComplete": False, "_documentUrls": [source]},
+        "complete": {
+            "_documentsComplete": True, "_documentUrls": [source],
+            "documents": [{"fileName": "specification.pdf", "path": "/files/1234"}],
+        },
+        "unavailable": {"_documentsComplete": True, "_documentUrls": [source]},
+        "none": {"_documentsComplete": True, "_documentUrls": []},
+        "legacy": {},
+    }
+    with TestClient(main.app) as client:
+        now = main.db.now()
+        with main.db.connect() as conn:
+            conn.execute(
+                "INSERT INTO portal (id, url, created_at) VALUES (?, ?, ?)",
+                ("test", "https://procurement.example.invalid/", now),
+            )
+            conn.executemany(
+                "INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES (?, ?, ?, ?)",
+                [("test", name, json.dumps({"id": name, **fields}), now) for name, fields in metadata.items()],
+            )
+        response = client.get("/portals/test/tenders")
+        assert response.status_code == 200
+        tenders = {tender["id"]: tender for tender in response.json()}
+        for status in ("pending", "complete", "unavailable", "none"):
+            assert tenders[status]["documentsStatus"] == status
+        assert "documentSourceUrls" not in tenders["pending"]
+        assert tenders["complete"]["documents"] == metadata["complete"]["documents"]
+        assert "documentsStatus" not in tenders["legacy"]
+        assert all(not field.startswith("_") for tender in tenders.values() for field in tender)
