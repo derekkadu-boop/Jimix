@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 04:10 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-01 (paused until 04:05 CET, claim held)
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 03:39 | B-01 (paused until 04:05 CET, claim held)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | B-09 (paused until 04:05 CET, claim held)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 03:38 | coord monitoring (paused until 04:05 CET)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 03:27 | B-16
@@ -24,7 +24,15 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** a declarative URL template in the recipe, e.g. `"documents": {"template": ".../{id}/pdf"}`,
   filled from mapped fields. Also check whether that PDF is the notice or the actual tender documents.
 - **Test with:** TenderNed.
-- **Findings:**
+- **Last seen:** 2026-11-21 03:39 (paused until 04:05 CET, claim held)
+- **Findings:** (in progress, branch `b-01-url-templates`, not merged, awaiting review) Recipe gains
+  `detail.url` and `documents_url: {template, kind}` (placeholders = mapped fields) plus dot-path
+  `attribute`. TenderNed attaches with it ($0.04-0.05, serving, 9 of 10 sampled tenders got a file), but
+  the agent picks `/{id}/pdf`, which is only the notice. The real tender files are at
+  `/papi/tenderned-rs-tns/v2/publicaties/{id}/documenten` (JSON, `documenten[].links.download.href`,
+  e.g. 450212 has bestek, leidraad, ZIPs). That list loads only when the Documents tab is clicked, so
+  render_page misses it. Branch now also has test_recipe probe sibling `documents`/`documenten`/...
+  endpoints next to a single-file documents_url; not yet tried on the real portal.
 
 ### B-02 Documents on a different external platform per tender
 - **Priority:** high (documents are the core feature)
