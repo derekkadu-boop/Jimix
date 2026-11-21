@@ -23,6 +23,8 @@ MB = 1024 * 1024
 MAX_FILE_BYTES = int(os.environ.get("WATCHTOWER_MAX_FILE_MB", "250")) * MB
 MAX_RUN_DOWNLOAD_BYTES = int(os.environ.get("WATCHTOWER_MAX_RUN_DOWNLOAD_MB", "1000")) * MB
 OVERSIZE_SKIP = "over size limit"
+JSON_METADATA_SKIP = "inline JSON API response"
+JSON_FILE_SUFFIXES = (".json", ".geojson", ".jsonld")
 DOCUMENT_HTML_PROBE_BYTES = 64 * 1024
 TIMEOUT = httpx.Timeout(float(os.environ.get("WATCHTOWER_HTTP_TIMEOUT", "120")), connect=30)
 RETRY_DELAYS = (2.0, 5.0)
@@ -332,6 +334,15 @@ class Fetcher:
                 if reason := block_reason(resp.status_code, resp.headers, url, str(resp.url), None):
                     raise self.blocked(reason)
                 resp.raise_for_status()
+                media = resp.headers.get("content-type", "").partition(";")[0].strip().lower()
+                if media in {"application/json", "text/json"} or media.endswith("+json"):
+                    disposition = Message()
+                    disposition["content-disposition"] = resp.headers.get("content-disposition", "")
+                    named_json = any(path.lower().endswith(JSON_FILE_SUFFIXES)
+                                     for path in (urlsplit(url).path, resp.url.path))
+                    if (disposition.get_content_disposition() != "attachment" and not disposition.get_filename()
+                            and not named_json):
+                        raise DocumentSkipped(JSON_METADATA_SKIP, retryable=True)
                 if is_html:
                     # Bound the wire prefix and avoid decoding compressed HTML into unbounded text.
                     if resp.headers.get("content-encoding", "identity").lower() == "identity":

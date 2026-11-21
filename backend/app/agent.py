@@ -13,7 +13,7 @@ from openai import AsyncOpenAI
 from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .discovery import discover, scan_scripts
 from .documents import fetch_documents
-from .fetch import Blocked, Fetcher
+from .fetch import JSON_METADATA_SKIP, Blocked, Fetcher
 from .recipe import (
     KEYWORDS,
     SENSITIVE_KEY,
@@ -387,9 +387,10 @@ async def _check_documents(
             return "could not read the sampled document pages", warnings
         return NO_DOCUMENT_LINKS, warnings
     blocked, downloaded, attachment = None, False, False
+    skipped = {}
     for url in urls:
         try:
-            docs, _, why = await fetch_documents([url], fetcher)
+            docs, _, why = await fetch_documents([url], fetcher, skipped=skipped)
         except Exception:  # noqa: BLE001
             docs, why = [], None
         if docs:
@@ -408,6 +409,8 @@ async def _check_documents(
         return None, warnings
     if blocked:
         return f"document download blocked ({blocked}); call give_up with blocked=true if that holds for all", warnings
+    if all(skipped.get(url) == JSON_METADATA_SKIP for url in urls):
+        return "document URLs returned inline JSON API data; map the attachment links inside it", warnings
     return f"none of {urls} returned a file (HTML page, error or nothing); point documents at the file links", warnings
 
 

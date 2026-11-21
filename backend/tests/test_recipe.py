@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import io
 import json
 import re
@@ -271,7 +272,7 @@ def test_failed_modal_preserves_previous_files_for_one_tender(monkeypatch, tmp_p
 def test_recipe_validation_samples_each_document_host(monkeypatch):
     tried = []
 
-    async def download(urls, fetcher):
+    async def download(urls, fetcher, *, skipped):
         tried.extend(urls)
         return ([{"fileName": "spec.pdf"}], True, None) if "buyer-one" in urls[0] else ([], False, None)
 
@@ -300,6 +301,108 @@ def test_recipe_validation_requires_document_links():
     problem, warnings = asyncio.run(agent._check_documents(by_host, checked, None))
     assert problem and problem.startswith("no document links in the sampled tenders")
     assert warnings == ["tender 1: no file links"]
+
+
+@pytest.mark.parametrize("second_is_binary", [False, True])
+def test_capped_metadata_recheck_distinguishes_unexamined_metadata_from_real_files(monkeypatch, tmp_path, second_is_binary):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    monkeypatch.setattr(watchtower, "MAX_DETAILS", 1)
+    db.init()
+    recipe = Recipe.model_validate(RECIPE | {"listing": RECIPE["listing"] | {"next_page": None}})
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('test', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        for i in ("1", "2"):
+            data = b"%PDF-1.4 bid" if i == "2" and second_is_binary else b'{"notice": true}'
+            sha = hashlib.sha256(data).hexdigest()
+            (tmp_path / sha).write_bytes(data)
+            old = {"status": "open", "documents": [{"fileName": i, "sha256": sha}],
+                   "_documentUrls": [f"https://portal.example/notice/{i}"], "_documentSkips": {},
+                   "_documentsComplete": True}
+            conn.execute("INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('test', ?, ?, ?)",
+                         (i, json.dumps(old), db.now()))
+
+    def response(request):
+        if request.url.path == "/list":
+            return httpx.Response(200, html=LIST_1)
+        if request.url.path == "/t/1":
+            return httpx.Response(200, html='<a class="doc" href="/notice/1">Notice</a>')
+        if request.url.path == "/notice/1":
+            return httpx.Response(200, json={"notice": True})
+        assert request.url.path == "/robots.txt"
+        return httpx.Response(404)
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            if second_is_binary:
+                count, _, note = await watchtower._deliver("test", recipe, fetcher)
+                assert count == 2 and "inline JSON API response" in note
+                with db.connect() as conn:
+                    saved = conn.execute("SELECT data FROM tender WHERE id = '2'").fetchone()[0]
+                    assert json.loads(saved)["_documentTypesChecked"]
+            else:
+                with pytest.raises(watchtower.Broken, match="inline JSON"):
+                    await watchtower._deliver("test", recipe, fetcher)
+        finally:
+            await fetcher.close()
+    asyncio.run(run())
+
+
+def test_revalidate_legacy_notice_json_without_losing_real_files(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
+    db.init()
+    recipe = Recipe.model_validate(RECIPE | {"listing": RECIPE["listing"] | {"next_page": None}})
+    url = "https://portal.example/notice/3"
+    payload = b'{"title":"published notice"}'
+    sha = hashlib.sha256(payload).hexdigest()
+    (tmp_path / sha).write_bytes(payload)
+    old = {"status": "open", "documents": [{"fileName": "3", "sha256": sha}], "_documentUrls": [url],
+           "_documentSkips": {}, "_documentsComplete": True, "_officePackagesChecked": True}
+    with db.connect() as conn:
+        conn.execute("INSERT INTO portal (id, url, created_at) VALUES ('test', 'https://portal.example/list', ?)",
+                     (db.now(),))
+        conn.execute("INSERT INTO tender (portal_id, id, data, last_changed_at) VALUES ('test', '3', ?, ?)",
+                     (json.dumps(old), db.now()))
+    mode = "error"
+
+    def response(request):
+        if request.url.path == "/list":
+            return httpx.Response(200, html=LIST_2)
+        if request.url.path == "/t/3":
+            return httpx.Response(200, html=f'<a class="doc" href="{url}">Notice</a>')
+        if str(request.url) == url:
+            if mode == "error":
+                return httpx.Response(503)
+            if mode == "metadata":
+                return httpx.Response(200, json={"title": "published notice"})
+            return httpx.Response(200, headers={"content-disposition": 'attachment; filename="terms.json"'},
+                                  json={"terms": ["delivery"]})
+        return httpx.Response(404)
+
+    async def run():
+        nonlocal mode
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            await watchtower._deliver("test", recipe, fetcher)
+            with db.connect() as conn:
+                assert json.loads(conn.execute("SELECT data FROM tender").fetchone()[0])["documents"] == old["documents"]
+            mode = "metadata"
+            validation, _ = await agent._check_documents(recipe, [{"_documentUrls": [url]}], fetcher)
+            assert "attachment links inside" in validation
+            with pytest.raises(watchtower.Broken, match="inline JSON"):
+                await watchtower._deliver("test", recipe, fetcher)
+            with db.connect() as conn:
+                assert json.loads(conn.execute("SELECT data FROM tender").fetchone()[0])["documents"] == []
+            mode = "attachment"
+            await watchtower._deliver("test", recipe, fetcher)
+            with db.connect() as conn:
+                record = json.loads(conn.execute("SELECT data FROM tender").fetchone()[0])
+                assert [doc["fileName"] for doc in record["documents"]] == ["terms.json"]
+        finally:
+            await fetcher.close()
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize("template_status", [200, 404, 410, 503])

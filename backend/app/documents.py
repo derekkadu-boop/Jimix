@@ -2,14 +2,24 @@ import asyncio
 import hashlib
 import logging
 import os
+import re
 import shutil
 import uuid
 import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
-from .fetch import MAX_FILE_BYTES, MAX_RUN_DOWNLOAD_BYTES, Blocked, BudgetExceeded, DocumentSkipped, Fetcher
+from .fetch import (
+    JSON_FILE_SUFFIXES,
+    MAX_FILE_BYTES,
+    MAX_RUN_DOWNLOAD_BYTES,
+    Blocked,
+    BudgetExceeded,
+    DocumentSkipped,
+    Fetcher,
+)
 
 log = logging.getLogger("watchtower.documents")
 FILES_DIR = Path(os.environ.get("JIMIX_FILES", "data/files"))
@@ -69,6 +79,30 @@ def _save(part: Path, name: str, budget: int) -> tuple[list[dict], int]:
 def has_unpacked_office(documents: list[dict]) -> bool:
     names = {doc["fileName"] for doc in documents}
     return OFFICE_CONTENT_TYPES in names and not OFFICE_MAIN_NAMES.isdisjoint(names)
+
+
+def legacy_json_downloads(documents: list[dict], urls: list[str]) -> dict[str, set[str]]:
+    by_name: dict[str, set[str]] = {}
+    for url in urls:
+        name = unquote(urlsplit(url).path.rsplit("/", 1)[-1]) or "document"
+        if not name.lower().endswith(JSON_FILE_SUFFIXES):
+            by_name.setdefault(name, set()).add(url)
+    candidates = {}
+    for doc in documents:
+        sources = by_name.get(doc["fileName"])
+        if not sources and len(urls) == 1 and not doc["fileName"].lower().endswith(JSON_FILE_SUFFIXES):
+            sources = set(urls)
+        sha = doc.get("sha256", "")
+        if not sources or not re.fullmatch(r"[0-9a-f]{64}", sha):
+            continue
+        try:
+            with (FILES_DIR / sha).open("rb") as file:
+                prefix = file.read(4096).removeprefix(b"\xef\xbb\xbf").lstrip()
+        except OSError:
+            continue
+        if prefix.startswith((b"{", b"[")):
+            candidates[sha] = sources
+    return candidates
 
 
 async def fetch_documents(
