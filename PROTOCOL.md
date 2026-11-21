@@ -1,11 +1,11 @@
 # Protocol
 
 > **Recent changes** (newest first; the lead keeps the last five here):
+> - 2026-11-21 07:53: Elevate reusable declarative scraping mechanisms.
 > - 2026-11-21 07:48: Cap pre-commit review at one reviewer for 90 minutes.
 > - 2026-11-21 07:47: Use focused tests while iterating and smaller live portal checks by default.
 > - 2026-11-21 07:42: Codex on matiiss’s machine takes over as lead.
 > - 2026-11-21 07:24: liveness is now 30 minutes (Last seen every 10 min); fan out helpers when you can.
-> - 2026-11-21 06:27: fetch right before claiming; prefer the longest-unclaimed high item; a self-claimed follow-up may sit next to your one claim.
 >   mechanisms still get two.
 > - 05:48: target is >=90% of sweep portals in the correct state (serving with files, or a true block).
 
@@ -61,6 +61,8 @@ us has seen. So:
   held-out set.
 - **Check generality on an unseen portal:** one nobody used while building the fix. Note it in the item's
   Findings.
+
+Prioritize reusable declarative scraping mechanisms that unlock tender and document access across portals.
 
 **Focus right now: documents.** Delivering each tender's actual document files is the core feature and
 our weakest point (see the `Priority: high` items). Work on document delivery first; side features (the
