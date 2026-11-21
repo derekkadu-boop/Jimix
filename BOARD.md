@@ -7,7 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
-- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:47 | protocol keeper, B-18
+- lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:06 | B-40
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:07 | B-43
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:11 | coord monitoring (every 20-30 min)
@@ -250,14 +250,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-18 Read public listings backed by POST search
 - **Priority:** high (sweep 2: the main blocker for JS portals now that rendering works)
-- **Status:** claimed by lead (main Claude session, matiiss machine) 2026-11-21 05:47
-- **Last seen:** 2026-11-21 05:47
+- **Status:** done (04f7cd5)
 - **Problem:** On https://www.oeffentlichevergabe.de/, the search page returns only region data
   before a search action. Listing recipes currently use GET and cannot read a public POST search.
 - **Idea:** Verify the site's unfiltered public search and add narrowly scoped listing support.
   Bulk exports are tracked under B-03.
 - **Evidence (sweep 2, main 46e634a):** renders now load real data (Doffin rendered in 15 s with 4 JSON responses), but Doffin's tender data comes from `POST https://api.doffin.no/webclient/api/v2/search-api/search`; recipes only do GET, so the agent can't use it. Several other JS portals look similar. Needs a declarative POST JSON body (and paging inside the body) for json listings, validated against the request the page itself made (render_page could report method + body of captured JSON calls).
-- **Findings:** Split from B-04 after shipping the Düsseldorf document dialog.
+- **Findings:** Listings of kind json can use `method: POST` + `body`, with page_param as a dot path in the body. Only requests the site's own page made can be repeated: same site, JSON 2xx, same keys and non-number values (numbers such as page and size may change, bools are strict), no sensitive keys, at most 8 KB. `fetch_json` can explore them, and `render_page` lists POST calls first with requestBody. A 4xx on a later page ends paging (listing incomplete) instead of failing. On Doffin (fresh DB, unassisted) the agent built a POST recipe that was accepted and the read paged 11 x 100 tenders; documents are B-42. Reviewed by a security and a correctness reviewer, then a follow-up review.
 
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
@@ -558,8 +557,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-42 Document discovery when the listing already works
 - **Priority:** high (sweep 2: the next blocker after POST listings)
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:05 (public HTML hint slice)
-- **Last seen:** 2026-11-21 06:05
+- **Status:** open (HTML hint slice in PR #15; broad validation and JS discovery open)
 - **Problem:** On several Dev portals the agent finds and validates the tender listing, but no document
   links in the sampled tenders, so B-22 correctly refuses the recipe:
   - etenders.gov.ie: detail pages have no file links;
@@ -579,7 +577,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
      links (documents_page), including links to external buyer platforms (B-02).
   4. Extend B-01's per-tender JSON probe to POST endpoints observed on detail pages.
   - Validate with fresh, unassisted attaches on the Dev portals above. Count tenders with real files.
-- **Findings:**
+- **Findings:** PR #15 broadens existing HTML hints to accessible names and direct file links without fetching candidate URLs. Seven local fixtures, 105 backend tests, Ruff and pre-commit review passed. No fresh live trial; broader JS-dependent discovery and delivery remain open.
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
