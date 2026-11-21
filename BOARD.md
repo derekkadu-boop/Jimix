@@ -9,7 +9,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 06:10 | protocol keeper
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 06:24 | B-21
-- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:07 | B-43
+- lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit), no claims
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 06:22 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -598,8 +598,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-43 Documents behind a tab or script on the tender page (browser slice of B-42)
 - **Priority:** high (part of B-42)
-- **Status:** claimed by lead-w2 (matiiss machine, Claude subagent) 2026-11-21 06:07
-- **Last seen:** 2026-11-21 06:07
+- **Status:** open (WIP on branch b-43-documents-tab, 6e21c1a, NOT merged)
+- **Last seen:** 2026-11-21 06:26
 - **Problem:** B-42's browser part: documents that only appear after a "Documents" tab is clicked or after
   scripts load them (TenderNed's Documents tab; JSON calls a tender page makes). B-42 (Codex Johanna Mac)
   covers the public HTML hint slice; this item covers rendering one tender page, a declarative "click a
@@ -608,7 +608,31 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   `detail.click` (selector or multilingual documents-tab label) before reading; report JSON calls seen
   after the click so the agent can map document lists. Validate fresh and unassisted on Dev portals
   (TenderNed, etenders.gov.ie, hankintailmoitukset.fi); count tenders with real files.
-- **Findings:**
+- **Findings:** WIP by lead-w2 on branch `b-43-documents-tab` (6e21c1a, based on main 890ebee; 100 tests and ruff pass).
+  - What it does: `browser.render(..., click=pattern)` clicks, after the page settles, the first visible link-less
+    control (`[role=tab], [role=button], button, summary, a:not([href]), a[href^='#'], a[href^='javascript:']`, up to
+    80) whose text (<= 60 chars, casefolded) matches the pattern, waits until stable again, returns the DOM after the
+    click; JSON loaded after the click carries `afterClicking: <label>` (own cap), plus a `{"clicked": label}` marker
+    in `calls`. Agent `render_page` always passes the documentsPage keyword regex, lists after-click JSON first and
+    says what it clicked; instructions say to map such JSON with `documents_url` (kind json) or use `detail.click`.
+    Recipe `detail.click` (literal label, 2-60 chars, detail kind browser only) clicks before reading detail pages.
+  - Works: live TenderNed tender page: clicked the "Documenten" tab (div role=tab, no href) and captured
+    `/papi/tenderned-rs-tns/v2/publicaties/{id}/documenten` (24 documents, `documenten[*].links.download.href`, plus
+    `links.downloadZip.href` for all files as one ZIP, which plain dot paths already read). Tests: last test in
+    tests/test_browser.py (real Chromium, local server), last test in tests/test_recipe.py.
+  - Must fix before merge (two reviewers agreed): (1) don't click submit-capable controls: skip `button` whose
+    `type` is submit inside a `form`, try `[role=tab]`/`summary` before buttons; (2) skip labels with download or
+    upload words (download, herunterladen, upload, télécharger, descargar, zip...); (3) abort form-submission
+    navigations (POST, resource_type document) after the click; (4) `accept_downloads=False` for every render
+    (now only the NetServer path); (5) `call_limit = len(calls) + 11` (marker eats one slot); (6) don't fail
+    `require_stable` when only the post-click settle times out; (7) re-check robots.txt if the click navigated;
+    (8) agent note: "the page shown is AFTER the click", and `detail.click` is a literal case-insensitive substring.
+  - Not done: unassisted validation. A fresh-DB TenderNed attach on this code was stopped early. Test: fresh
+    JIMIX_DB, attach https://www.tenderned.nl/aankondigingen/overzicht, check the agent uses documents_url
+    `.../publicaties/{id}/documenten` (kind json) with `links.downloadZip.href` or, after B-40,
+    `documenten[*].links.download.href`; count tenders with files. Irish eTenders: real tender documents need a login
+    (`downloadCompetition.do` redirects to CAS login); only the notice PDF is public and listing rows link it directly
+    (`downloadNoticeForAdvSearch.do`), so IE needs row-level notice links rather than this click (B-42 slice).
 
 ### B-44 Cost and run metrics
 - **Priority:** normal
