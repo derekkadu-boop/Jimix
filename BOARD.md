@@ -57,7 +57,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 - **Findings:**
 
 ### B-06 Docker: backend image, compose entry, single root Dockerfile
-- **Status:** done (700f08b), verification split out as B-13
+- **Status:** done (700f08b), verification split out as B-16
 - **Problem:** the PDF wants one root `Dockerfile` serving API and dashboard on port 8080. Only the
   frontend has a Dockerfile.
 - **Findings:** `backend/Dockerfile` + compose `backend` service (frontend waits for its /health); root `Dockerfile` builds the dashboard (standalone Next.js) and backend with Chromium into one image; `docker/start.sh` runs uvicorn on 127.0.0.1:8000 and the dashboard on 0.0.0.0:8080, which proxies /portals, /files, /openapi.json, /health. No nginx or Docker-in-Docker (DinD would need --privileged). Builds untested: Docker Hub DNS failed on the build machine.
@@ -140,7 +140,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   files on failure and retry on a later refresh. Test with a mock transport.
 - **Findings:** PR #6 preserves previous files and retries after linked document-page errors. Covered shared and per-host page selectors through mock HTTP 503, recovery, and genuinely empty pages. Two Codex reviewers and 17 backend tests passed. Detail-page failures and skipped details can still produce an empty result before link following; track separately.
 
-### B-13 Verify the root and backend images build and run
+### B-16 Verify the root and backend images build and run
 - **Status:** open
 - **Problem:** `docker build .` (root) and `docker compose up --build --wait` were never run successfully;
   the build machine couldn't reach Docker Hub. Check: build on linux/amd64 reasonably fast, `docker run -p
