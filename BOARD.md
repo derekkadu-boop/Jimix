@@ -367,7 +367,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-26 Listings silently capped at max_pages
 - **Priority:** medium (tenders beyond the cap never get documents)
-- **Status:** in review (PR #12)
+- **Status:** done (791657e, merged PR #12 by lead after resolving conflicts with B-40)
 - **Problem:** `Recipe.max_pages` defaults to 20 and the agent leaves it. On https://www.vergabe.metropoleruhr.de/
   (20 rows per page, about 41 pages) a repaired recipe read 400 tenders and stopped; `complete` is false,
   but no run reason or test warning says the listing was cut.
@@ -377,7 +377,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-27 test_recipe doesn't flag a listing without pagination
 - **Priority:** medium
-- **Status:** in review (PR #11)
+- **Status:** done (791657e, merged PR #11 by lead after resolving conflicts with B-40)
 - **Problem:** the first attach of https://www.vergabe.metropoleruhr.de/ submitted a recipe with no
   next_page/page_param although the list page has a forward link (`a.browseForward`, page links with a
   numeric parameter): 20 of ~800 tenders. A later repair found the link by itself.
