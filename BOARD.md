@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:30 | B-31
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:42 | B-23 (reviewed, committed locally; UK retest running)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:21 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:41 | B-33 branch published
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:43 | idle; B-33 merged
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 05:15 | B-28 in review (PR #9)
 
@@ -359,15 +359,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-27 test_recipe doesn't flag a listing without pagination
 - **Priority:** medium
-- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 05:40
-- **Last seen:** 2026-11-21 05:40
+- **Status:** in review (PR #11)
 - **Problem:** the first attach of https://www.vergabe.metropoleruhr.de/ submitted a recipe with no
   next_page/page_param although the list page has a forward link (`a.browseForward`, page links with a
   numeric parameter): 20 of ~800 tenders. A later repair found the link by itself.
 - **Idea:** generic check in test_recipe: when paging is unset and the first list page has a link whose
   text or class means next (multilingual keywords) or whose URL differs from the listing URL only by a
   numeric parameter, warn.
-- **Findings:**
+- **Findings:** PR #11 warns on ordinary same-origin next links or advancing numeric paging parameters in loaded listings without paging configured. No additional requests. Two reviewers, 86 backend tests and Ruff passed. No fresh real-portal attach was run.
 
 ### B-28 Follow HTML refresh redirects during initial portal discovery
 - **Priority:** high (a public portal address can stop before listing discovery)
@@ -427,13 +426,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-33 Agent gives up too early
 - **Priority:** high
-- **Status:** claimed by Codex (Derek Windows) (Derek's Windows/Codex) 2026-11-21 05:19
-- **Last seen:** 2026-11-21 05:41
+- **Status:** done (72e313c)
+- **Last seen:** 2026-11-21 05:43
 - **Problem:** Wide test: across 14 portals the agent called test_recipe only 6 times and never submit_recipe. It spent $0.47 of a $14 budget, giving up after 5-19 calls with reasons like "without guessing" or "within the tool constraints".
 - **Idea:** Refuse give_up(blocked=false) until the agent has made a real attempt, e.g. at least one test_recipe and a minimum share of its turns or budget. Prompt: encourage trying candidate recipes and listing pages; it's cheap. Add a unit test with a fake model.
 - **Findings:** Derek Windows local branch b-33-prevent-early-give-up at 29a5a72 has a reviewed early-exit guard. It counts actual validation reports, preserves confirmed access blocks and accepted recipes, and stays within the turn and cost budgets. All 56 tests and Ruff passed. A fresh NRW run made two recipe attempts but extracted zero tenders and failed after 19 model calls (USD 0.0986). Local combined NRW trial b-33-nrw-trial at 119146e preserves B-20 and B-33 and passed 78 tests. No live result was confirmed for that combination or for the UK check before stopping.
   Fresh uv-tested branch on current main: 57 tests and Ruff passed. NRW URL-only attach made 23 calls (USD 0.1284), but no files; combined B-20/B-33 trial passed 79 tests and Ruff, then gave up after 16 calls (USD 0.0883) on the NetServer document modal. Both used new empty stores and the ten-detail limit. Next: count validation attempts and refine the agent decision.
   Branch b-33-prevent-early-give-up is published at 11cb6bc, merged with main 46e634a for the lead to merge separately; 83 tests and Ruff pass via uv. A fresh combined B-20/B-33 NRW attach reached serving (1449 tenders, 153 files, 14 calls, USD 0.0596); Refresh kept the same counts with zero calls, and /files returned a SHA-256-verified file. That successful run made three recipe tests and did not exercise the B-33 deferral, so its direct live effect remains unmeasured.
+  The reviewed guard was merged separately into main at 72e313c after 83 post-merge backend tests and Ruff passed through uv. It keeps confirmed block and accepted-recipe exits fast while deferring ordinary untested early exits within the existing turn and cost caps. The successful fresh NRW integration did not exercise a deferral, so broad live impact still needs the lead's wide sweep.
 
 ### B-34 Check block decisions for false positives
 - **Priority:** medium
@@ -485,6 +485,35 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   footers). If an active recipe exists for another portal with the same software, give the agent that
   recipe as a starting point, with host-specific parts replaced. It still goes through test_recipe and
   submit as usual. Measure model cost and calls with and without the starting point.
+- **Findings:**
+
+### B-38 Structured failure reasons for operators
+- **Priority:** normal
+- **Status:** open
+- **Problem:** `portal.reason` and `run.reason` are free text, often written by the agent. Operators can't
+  filter or count failures by cause, and the evidence (which robots.txt rule, which captcha marker, which
+  HTTP status, which URL) isn't stored. Example: a portal whose robots.txt allows only named search
+  engines (`User-agent: *` / `Disallow: /`) shows up only as a sentence.
+- **Idea:** Add a `failure_kind` (robots, captcha, login, access_denied, tls, network, no_listing,
+  no_documents, agent_gave_up, internal) plus a short `evidence` (rule line, marker, status code and URL)
+  to portal and run. Set them where the block is detected (fetch.py and the watchtower states), not by the
+  model. Return them in `GET /portals` and `/runs` (extra fields are fine), and show them in the dashboard.
+- **Findings:**
+
+### B-39 Operator-supplied API access per portal
+- **Priority:** low
+- **Status:** open
+- **Problem:** Some portals block crawlers in robots.txt (e.g. `User-agent: *` / `Disallow: /`) but offer a
+  dedicated API, sometimes behind a free key. Today the system can only use what it discovers anonymously.
+- **Idea:**
+  1. An optional per-portal config, given by the operator (e.g. `POST /portals` with extra fields, or a
+     settings endpoint): API base URL or endpoints, and credentials (API key or header). Stored securely,
+     never logged or returned in API responses.
+  2. The agent uses that config to map the API once into a recipe. Regular reads then reuse it without
+     model calls.
+  3. Agent hint (generic): when robots.txt broadly disallows the website, look for an official API or
+     open-data host (its own robots.txt applies) before giving up, and say in the failure reason if one
+     exists but needs a key.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
