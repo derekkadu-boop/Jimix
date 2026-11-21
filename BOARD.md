@@ -156,6 +156,15 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.1604 | A recipe proposed a linked document page without a file selector; its fallback matched zero rows.
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0968 | Indexed validation found 37 open tenders but zero document links; the agent stopped at the public file modal.
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0409 | After the modal fix, the fresh run stopped earlier: the recipe selected a JavaScript placeholder instead of the literal public pagination URL visible in its handler.
+  - 2026-11-21 | boamp.fr | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | reported captcha on pages + dataset API disallowed by robots
+  - 2026-11-21 | contrataciondelestado.es | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | robots.txt disallowed all tried paths
+  - 2026-11-21 | find-tender.service.gov.uk | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | JS-heavy search; no list endpoint found
+  - 2026-11-21 | etenders.gov.ie | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | listing readable; no document links on sampled tenders
+  - 2026-11-21 | doffin.no | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | render returned an empty shell; script API paths 404
+  - 2026-11-21 | hankintailmoitukset.fi | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | render returned an empty shell; only CMS API found
+  - 2026-11-21 | ezamowienia.gov.pl | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | render returned an empty app-root
+  - 2026-11-21 | dtvp.de | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | HTML archive found, agent gave up on completeness
+  - 2026-11-21 | udbud.dk | lead (wide test, main 533643e) | failed | 0 | 0 | ~$0.01-0.09 | render returned an empty #app
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -383,6 +392,34 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   site- or software-specific code. Compare it with `main` on the same Dev portals with fresh databases:
   portals reaching `serving` with files, files per portal, and model cost per attach. Report the numbers
   and keep whichever generalizes better.
+- **Findings:**
+
+### B-32 Rendering returns before JavaScript apps load their data
+- **Priority:** high (dominant failure in the wide test)
+- **Status:** open
+- **Problem:** Wide test (fresh DBs, 14 portals): at least 7 JS portals rendered as empty shells (`<div id="root"></div>`, `<app-root></app-root>`, empty `#app`), and 0 JSON responses were captured. 38 browser requests were aborted: 21 because the page or context was already closed, 7 on Route.fetch 30 s timeouts, 9 on network errors. `render()` waits for `load` + 2 s, but with one request per second per site, the app's script chunks and data XHRs arrive much later.
+- **Idea:** Wait until the page settles: no pending routed requests for about 3 s and the DOM stops growing, with a total cap (the render timeout). Raise the per-request Route.fetch timeout. Log render time and the number of requests. Coordinate with B-21 (render speed).
+- **Findings:**
+
+### B-33 Agent gives up too early
+- **Priority:** high
+- **Status:** open
+- **Problem:** Wide test: across 14 portals the agent called test_recipe only 6 times and never submit_recipe. It spent $0.47 of a $14 budget, giving up after 5-19 calls with reasons like "without guessing" or "within the tool constraints".
+- **Idea:** Refuse give_up(blocked=false) until the agent has made a real attempt, e.g. at least one test_recipe and a minimum share of its turns or budget. Prompt: encourage trying candidate recipes and listing pages; it's cheap. Add a unit test with a fake model.
+- **Findings:**
+
+### B-34 Check block decisions for false positives
+- **Priority:** medium
+- **Status:** open
+- **Problem:** Wide test: one Dev portal was reported as captcha-blocked although its documented open-data API is public; another as robots.txt-disallowed on every path. Either may be correct, but a false block is fatal.
+- **Idea:** For each reported block, log the exact trigger (status, marker, robots rule). Check the captcha markers against pages that merely embed a captcha script, and the robots evaluation against the real file (user agent, wildcards). Fix generically and add unit tests.
+- **Findings:**
+
+### B-35 Servers with an incomplete TLS certificate chain
+- **Priority:** medium
+- **Status:** open
+- **Problem:** Wide test: one portal failed on every request with SSL certificate verification errors; browsers usually fill in missing intermediates.
+- **Idea:** Fill in a missing intermediate via the certificate's AIA URL (fetched once, cached, verified), or another standard approach. Keep verification on; never disable it.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
