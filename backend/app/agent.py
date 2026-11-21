@@ -64,7 +64,9 @@ If you find no list of open tenders, keep searching before giving up:
   listing and reach the files with detail/documents_page on that platform, even if it is another site.
 Documents are required. Find the actual files (PDF, ZIP, DOCX...) for each tender. If they sit on a
 separate page linked from the tender page (e.g. "Vergabeunterlagen", "Documents", "DCE", "pliegos"),
-use documents_page. If listing tenders or downloading documents needs a login or a captcha,
+use documents_page. If a tender's documents or details sit at a URL built from its id (common for JSON
+APIs, e.g. /tenders/{{id}}/documents), use documents_url or detail.url templates. Prefer the full list of
+tender documents over a single notice PDF. If listing tenders or downloading documents needs a login or a captcha,
 call give_up with blocked=true.
 
 A recipe is JSON:
@@ -80,15 +82,22 @@ A recipe is JSON:
     "page_param": "query parameter to increment instead of next_page" or null,
     "index": {{"path": "selector of links on url to the actual list pages", "attribute": "href"}} or null
   }},
-  "detail": {{"kind": "html" | "json" | "browser", "fields": {{...read from the page at the listing's url field...}}}} or null,
+  "detail": {{"kind": "html" | "json" | "browser", "url": "optional URL template, e.g. https://host/api/tenders/{{id}}",
+              "fields": {{...read from detail.url, else from the page at the listing's url field...}}}} or null,
   "documents": {{"path": "selector or dot path matching every document file link", "attribute": "href"}} or null,
   "documents_page": {{"path": "selector of the link from the tender page to its documents page",
                      "attribute": "href"}} or null,
+  "documents_url": {{"template": "URL with {{field}} placeholders, e.g. https://host/api/tenders/{{id}}/files",
+                    "kind": "html" | "json" | "browser"}} or null,
   "timezone": "IANA zone of the portal's local times, e.g. Europe/Berlin",
   "dayfirst": true when dates are written day first
 }}
 "attribute" reads an HTML attribute, or a key of each item when the dot path gives a list.
 Documents are read from the documents page, else the detail page when detail is set, else the row.
+With documents_url, documents is read from that URL; without documents, the URL itself is the one file.
+Placeholders are mapped field names ({{id}}, {{referenceNumber}}...), filled per tender.
+"attribute" may be a dot path inside each item, e.g. "links.download.href".
+Map status to a field naming the notice's state or type when there is one (award notices are closed).
 CSS selectors are BeautifulSoup/soupsieve: use :-soup-contains("text"), not :contains.
 Fields: {", ".join(TENDER_FIELDS)}.
 id is the portal's own stable identifier (often a number in the tender URL, e.g. pattern "pid=(\\d+)").
@@ -168,7 +177,7 @@ def _chunk(text: str, offset: int) -> str:
 
 
 async def _document_problem(recipe: Recipe, tenders: list[dict], fetcher: Fetcher) -> str | None:
-    if not recipe.documents:
+    if not (recipe.documents or recipe.documents_url):
         return "documents is not set: map the document file links (use documents_page if they are on another page)"
     urls = list(dict.fromkeys(u for t in tenders for u in t["_documentUrls"]))[:3]
     if not urls:
@@ -191,7 +200,7 @@ async def _test(recipe: Recipe, fetcher: Fetcher) -> dict:
     problem = check(tenders) or await _document_problem(recipe, tenders, fetcher)
     query = {k for k, _ in parse_qsl(urlsplit(recipe.listing.url).query)} - PAGING_PARAMS
     warnings = [f"listing URL has parameters {sorted(query)}: make sure they do not filter tenders"] if query else []
-    if recipe.documents and not any(t["_documentUrls"] for t in tenders):
+    if (recipe.documents or recipe.documents_url) and not any(t["_documentUrls"] for t in tenders):
         warnings.append("no document links found in the sample: check documents/documents_page")
     return {
         "problem": problem,

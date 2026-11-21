@@ -3,7 +3,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -37,6 +37,7 @@ PROCEDURES = tuple(KEYWORDS["procedureType"].items())
 NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
 MAX_INDEX_LISTS = 50
+PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 
 class Selector(BaseModel):
@@ -66,7 +67,13 @@ class Listing(BaseModel):
 
 class Detail(BaseModel):
     kind: Kind = "html"
+    url: str | None = None
     fields: dict[str, Selector] = {}
+
+
+class DocumentsUrl(BaseModel):
+    template: str
+    kind: Kind = "html"
 
 
 class Recipe(BaseModel):
@@ -75,6 +82,7 @@ class Recipe(BaseModel):
     detail: Detail | None = None
     documents: Selector | None = None
     documents_page: Selector | None = None
+    documents_url: DocumentsUrl | None = None
     timezone: str = "UTC"
     dayfirst: bool = True
     max_pages: int = Field(20, ge=1, le=100)
@@ -92,14 +100,23 @@ class Recipe(BaseModel):
             raise ValueError("id must come from the listing, not the detail page")
         if self.documents_page and not (self.detail and self.documents):
             raise ValueError("documents_page needs detail and documents")
+        if self.documents_page and self.documents_url:
+            raise ValueError("use documents_page or documents_url, not both")
+        if self.detail and self.detail.url:
+            _check_template("detail.url", self.detail.url, self.listing.fields.keys())
+        if self.documents_url:
+            _check_template("documents_url.template", self.documents_url.template,
+                            self.listing.fields.keys() | detail_fields.keys())
         documents_kind = "html" if self.documents_page else (self.detail or self.listing).kind
+        if self.documents_url:
+            documents_kind = self.documents_url.kind
         links = [(self.listing.next_page, self.listing.kind), (self.listing.index, self.listing.kind),
                  (self.documents_page, self.detail.kind if self.detail else "html"), (self.documents, documents_kind)]
         for selector, kind in links:
             if selector and selector.attribute is None and kind != "json":
                 selector.attribute = "href"
-        if self.detail and "url" not in self.listing.fields:
-            raise ValueError("detail needs listing.fields.url")
+        if self.detail and not self.detail.url and "url" not in self.listing.fields:
+            raise ValueError("detail needs listing.fields.url or detail.url")
         if self.method.endswith("api") != (self.listing.kind == "json"):
             raise ValueError("API methods use a json listing, html and browser methods do not")
         try:
@@ -107,6 +124,21 @@ class Recipe(BaseModel):
         except (KeyError, ValueError):
             raise ValueError(f"unknown timezone {self.timezone}") from None
         return self
+
+
+def _check_template(name: str, template: str, fields) -> None:
+    if not re.match(r"(https?://[^/]+|/)", template):
+        raise ValueError(f"{name} must be an absolute http(s) URL or start with /")
+    if missing := set(PLACEHOLDER.findall(template)) - set(fields):
+        raise ValueError(f"{name} uses {sorted(missing)}, which are not mapped fields")
+
+
+def _fill(template: str, raw: dict) -> str | None:
+    names = PLACEHOLDER.findall(template)
+    if not all(raw.get(name) for name in names):
+        return None
+    url = PLACEHOLDER.sub(lambda m: raw[m[1]] if m[1] == "url" else quote(raw[m[1]], safe=""), template)
+    return urljoin(raw["_base"], url)
 
 
 def _json_path(value, path: str):
@@ -126,7 +158,7 @@ def _values(node, selector: Selector, kind: Kind) -> list[str]:
         found = _json_path(node, selector.path)
         items = found if isinstance(found, list) else [found]
         if selector.attribute:
-            items = [item.get(selector.attribute) if isinstance(item, dict) else None for item in items]
+            items = [_json_path(item, selector.attribute) if isinstance(item, dict) else None for item in items]
         values = [str(i) for i in items if isinstance(i, (str, int, float)) and not isinstance(i, bool)]
     else:
         elements = [node] if selector.path == "$" else node.select(selector.path)
@@ -190,7 +222,9 @@ async def apply(
                 break
             for row in rows:
                 raw = _extract(row, listing.fields, listing.kind) | {"_base": base}
-                if recipe.documents and not recipe.detail:
+                if raw.get("url"):
+                    raw["url"] = urljoin(base, raw["url"])
+                if recipe.documents and not recipe.detail and not recipe.documents_url:
                     raw["_docs"] = [urljoin(base, u) for u in _values(row, recipe.documents, listing.kind)]
                 raws.append(raw)
             if listing.page_param:
@@ -206,24 +240,27 @@ async def apply(
         complete = complete and finished
     attempted, blocked = 0, []
     for raw in raws[:max_details]:
-        if not recipe.detail or not raw.get("url"):
-            continue
-        raw["url"] = urljoin(raw["_base"], raw["url"])
-        attempted += 1
-        try:
-            page, base = await _load(recipe.detail.kind, raw["url"], fetcher)
-        except Blocked as exc:
-            blocked.append(str(exc))
-            continue
-        except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
-            continue
-        raw.update(_extract(page, recipe.detail.fields, recipe.detail.kind))
-        if recipe.documents:
-            raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+        detail_url = recipe.detail and (_fill(recipe.detail.url, raw) if recipe.detail.url else raw.get("url"))
+        if detail_url:
+            attempted += 1
+            try:
+                page, base = await _load(recipe.detail.kind, detail_url, fetcher)
+            except Blocked as exc:
+                blocked.append(str(exc))
+                continue
+            except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
+                continue
+            raw.update(_extract(page, recipe.detail.fields, recipe.detail.kind))
+            if recipe.documents and not recipe.documents_url:
+                raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+        if recipe.documents_url and recipe.documents:
+            raw["_docs"] = await _listed_documents(recipe, raw, fetcher)
     if attempted and len(blocked) == attempted:
         raise Blocked(f"detail pages: {blocked[0]}")
     tenders = {}
     for raw in raws:
+        if recipe.documents_url and not recipe.documents and (url := _fill(recipe.documents_url.template, raw)):
+            raw["_docs"] = [url]
         if (tender := normalize(raw, recipe)) and tender["id"] not in tenders:
             tenders[tender["id"]] = tender
     return list(tenders.values()), complete
@@ -241,6 +278,18 @@ async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> 
             return []
         kind = "html"
     return [urljoin(base, u) for u in _values(page, recipe.documents, kind)]
+
+
+async def _listed_documents(recipe: Recipe, raw: dict, fetcher: Fetcher) -> list[str]:
+    if not (url := _fill(recipe.documents_url.template, raw)):
+        return []
+    try:
+        page, base = await _load(recipe.documents_url.kind, url, fetcher)
+    except Blocked:
+        return [url]
+    except (httpx.HTTPError, ValueError, OSError, PlaywrightError):
+        return []
+    return [urljoin(base, u) for u in _values(page, recipe.documents, recipe.documents_url.kind)]
 
 
 def _datetime(text: str | None, dayfirst: bool, tz: ZoneInfo) -> datetime | None:

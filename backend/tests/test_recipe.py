@@ -1,5 +1,6 @@
 import asyncio
 import io
+import re
 import zipfile
 
 import httpx
@@ -108,6 +109,89 @@ def test_captcha_is_reported_as_blocked():
 
     with pytest.raises(Blocked, match="captcha"):
         asyncio.run(run())
+
+
+def api(request: httpx.Request) -> httpx.Response:
+    path = request.url.path
+    if path == "/robots.txt":
+        return httpx.Response(404)
+    if path == "/api/pub" and request.url.params.get("page") == "0":
+        rows = [{"publicatieId": n, "naam": f"Tender {n}", "link": {"href": f"/view/{n}"}} for n in (7, 8)]
+        return httpx.Response(200, json={"content": rows})
+    if path == "/api/pub":
+        return httpx.Response(200, json={"content": []})
+    if match := re.fullmatch(r"/api/pub/(\d+)", path):
+        return httpx.Response(200, json={"sluitingsDatum": "2099-02-15T09:00:00", "cpv": [{"code": "45232420"}]})
+    if match := re.fullmatch(r"/api/pub/(\d+)/docs", path):
+        n = match[1]
+        docs = [{"links": {"download": {"href": f"/api/pub/{n}/docs/{i}/content"}}} for i in (1, 2)]
+        return httpx.Response(200, json={"documenten": docs})
+    if re.fullmatch(r"/api/pub/\d+/(docs/\d+/content|pdf)", path):
+        return httpx.Response(200, content=b"%PDF-1.4 " + path.encode(), headers={"content-type": "application/pdf"})
+    return httpx.Response(404)
+
+
+API_RECIPE = {
+    "method": "documented_api",
+    "listing": {
+        "kind": "json",
+        "url": "https://api.example/api/pub?page=0&size=50",
+        "records": "content",
+        "fields": {
+            "id": {"path": "publicatieId"},
+            "title": {"path": "naam"},
+            "url": {"path": "link.href"},
+        },
+        "page_param": "page",
+    },
+    "detail": {
+        "kind": "json",
+        "url": "https://api.example/api/pub/{id}",
+        "fields": {"submissionDeadline": {"path": "sluitingsDatum"}, "cpvCodes": {"path": "cpv", "attribute": "code"}},
+    },
+    "documents": {"path": "documenten", "attribute": "links.download.href"},
+    "documents_url": {"template": "https://api.example/api/pub/{id}/docs", "kind": "json"},
+}
+
+
+def _apply(recipe: dict, handler, **limits):
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(handler))
+        try:
+            tenders, complete = await apply(Recipe.model_validate(recipe), fetcher, **limits)
+            docs, _, _ = await fetch_documents(tenders[0]["_documentUrls"], fetcher)
+            return tenders, complete, docs
+        finally:
+            await fetcher.close()
+
+    return asyncio.run(run())
+
+
+def test_url_templates_read_detail_and_document_list():
+    tenders, complete, docs = _apply(API_RECIPE, api)
+    assert complete and [t["id"] for t in tenders] == ["7", "8"]
+    first = tenders[0]
+    assert first["url"] == "https://api.example/view/7"
+    assert first["submissionDeadline"].startswith("2099-02-15T09:00")
+    assert first["cpvCodes"] == ["45232420"]
+    assert first["_documentUrls"] == [f"https://api.example/api/pub/7/docs/{i}/content" for i in (1, 2)]
+    assert len(docs) == 2
+
+
+def test_documents_url_without_documents_is_the_file():
+    recipe = API_RECIPE | {"detail": None, "documents": None,
+                           "documents_url": {"template": "/api/pub/{id}/pdf"}}
+    tenders, _, docs = _apply(recipe, api, max_details=0)
+    assert [t["_documentUrls"] for t in tenders] == [[f"https://api.example/api/pub/{n}/pdf"] for n in (7, 8)]
+    assert len(docs) == 1
+
+
+def test_templates_must_use_mapped_fields():
+    bad = API_RECIPE | {"documents_url": {"template": "https://api.example/x/{secret}", "kind": "json"}}
+    with pytest.raises(ValueError, match="not mapped"):
+        Recipe.model_validate(bad)
+    with pytest.raises(ValueError, match="absolute"):
+        Recipe.model_validate(API_RECIPE | {"documents_url": {"template": "javascript:{id}"}})
 
 
 def test_index_reads_every_linked_list():
