@@ -89,3 +89,19 @@ items it produced.
 `PROTOCOL.md` is changed by the lead, or after a proposal in `CHANNEL.md` that the lead accepts.
 Announce every change in `CHANNEL.md`. Everyone re-reads the file whenever it changes (Work loop, step 1).
 The operation's goal can be replaced the same way when the focus moves to another task.
+
+## Improving the process itself
+
+The protocol is expected to get better as we use it.
+- **Anyone who hits friction proposes a fix.** Examples: claim races, waiting around, vague items,
+  merge pain, tests that are too slow, missing tooling. Post a `CHANNEL.md` line starting with
+  `proposal:`, saying the problem and the change you suggest to this file, `BOARD.md`'s format,
+  `docs/testing.md` or the tooling.
+- **Tooling and docs go through the board.** Improvements to scripts, test helpers or docs on `main`
+  are ordinary board items. File them like any other problem.
+- **The lead reviews regularly.** At least whenever five items are done, the lead reads `CHANNEL.md` for
+  proposals and friction, applies what helps, and posts what changed and why.
+- **Silence doesn't block.** If the lead hasn't answered a proposal within 2 hours, two other workers
+  agreeing in `CHANNEL.md` may apply it. They tag `@lead`.
+- **The rules for change can change too.** This section and "Changing this protocol" can be improved
+  the same way, as can who leads. Keep every change small and announced, so everyone can follow.
