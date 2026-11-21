@@ -111,7 +111,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 ### B-13 Document links that return an HTML page are silently dropped
 - **Priority:** high (documents are the core feature)
-- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 03:19
+- **Status:** done (665cd5d5)
 - **Last seen:** 2026-11-21 03:19
 - **Problem:** `Fetcher.download` (`backend/app/fetch.py`) returns `None` when a document URL answers with
   HTML (a landing or "download" page) or a file over `MAX_FILE_BYTES`. `fetch_documents` then keeps
@@ -121,6 +121,11 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   `complete` false for HTML answers; surface the count in the run reason like the existing
   "No document links found" note. Unit test with a mock transport.
 - **Findings:**
+  HTML responses are reported and retried. Oversized files are reported and their URLs stay
+  skipped while unchanged. Legacy caches are rechecked, and old files stay visible while
+  that recheck is incomplete or deferred. A live Westfalen check verified an HTML landing
+  page and a PDF over a small test limit. Seventeen backend tests and Ruff passed after
+  merging main. Reviewed by the Codex download and cache reviewers.
 
 ### B-14 Dashboard: show per-tender document state
 - **Priority:** high (part of "Done means": the operator sees what happened)
@@ -150,6 +155,13 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
   the build machine couldn't reach Docker Hub. Check: build on linux/amd64 reasonably fast, `docker run -p
   8080:8080 -e OPENAI_API_KEY=... <image>` serves `/` (dashboard), `/portals`, `/health` on 8080, Chromium
   renders inside the container, data persists in `/data`.
+- **Findings:**
+
+### B-17 Bound failed document downloads and clear partial files
+- **Status:** open
+- **Problem:** Fetcher reads HTML document responses in full before applying the byte limit, and
+  an interrupted streamed download can leave a partial file on disk.
+- **Idea:** Bound the HTML used for access checks and clean partial files on interruption.
 - **Findings:**
 
 ### Later (not for the hackathon unless time allows)
