@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - lead | Claude Code main session, matiiss machine | last seen 2026-11-21 05:19 | protocol keeper
-- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:08 | B-34
+- lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 05:25 | idle (B-34 done)
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 05:13 | B-10 Find a Tender (UK)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 05:21 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 05:19 | B-33
@@ -169,6 +169,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0328 | Fresh attach of cb2a19f stopped after nine calls before testing any recipe. It had seen category index hints. This is the B-33 early give-up pattern.
   - 2026-11-21 | Doffin | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0688 | Render loaded notice data. Fresh attach could not map a complete public listing and document recipe.
   - 2026-11-21 | Finland Hilma | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0504 | The tested 19-record API candidate lacked tender titles and file links. Refresh was unavailable.
+  - 2026-11-21 | boamp.fr | lead-w1 | failed | 0 | 0 | USD 0.0427 | captcha false positive fixed (B-34); API correctly disallowed by robots.txt on www.boamp.fr and its open-data host
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -425,11 +426,24 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-34 Check block decisions for false positives
 - **Priority:** medium
-- **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 05:08
-- **Last seen:** 2026-11-21 05:08
+- **Status:** done (1dbf27d)
+- **Last seen:** 2026-11-21 05:25
 - **Problem:** Wide test: one Dev portal was reported as captcha-blocked although its documented open-data API is public; another as robots.txt-disallowed on every path. Either may be correct, but a false block is fatal.
 - **Idea:** For each reported block, log the exact trigger (status, marker, robots rule). Check the captcha markers against pages that merely embed a captcha script, and the robots evaluation against the real file (user agent, wildcards). Fix generically and add unit tests.
-- **Findings:**
+- **Findings:** Checked both reported blocks against the live sites. boamp.fr's "captcha" was false:
+  its JS app shell (<1500 chars of text) has `RECAPTCHA_PUBLIC_KEY` and "wrong captcha" translations in
+  script config, and the old check matched the raw substring. Now a captcha needs a visible widget
+  (.g-recaptcha/.h-captcha not invisible, .cf-turnstile, Cloudflare challenge ids, hCaptcha/reCAPTCHA
+  challenge iframes, DataDome captcha-delivery) or challenge wording in visible text (the "protected by
+  reCAPTCHA" notice is ignored); AWS WAF challenge header added; a login form needs an
+  input[type=password] element. Reasons name the trigger, e.g. `captcha (div g-recaptcha)`, and every
+  block is logged with its URL. robots.txt: replaced urllib.robotparser (first-match order, no `*`/`$`)
+  with RFC 9309 matching: exact product-token group, longest match, Allow wins ties, wildcards via a
+  linear matcher (no regex, no ReDoS), BOM/CRLF, percent-encoding normalized; robots.txt served as an
+  HTML page counts as none. The robots blocks themselves were correct: contrataciondelestado.es has
+  `Disallow: /` for all, boamp.fr and its open-data host disallow `/api/`. Two reviewers (captcha: 5
+  findings; robots: 6), all fixed; 77 tests. Unassisted boamp.fr attach after the fix: no captcha
+  block, fails on the (correct) robots rule, $0.043.
 
 ### B-35 Servers with an incomplete TLS certificate chain
 - **Priority:** medium
