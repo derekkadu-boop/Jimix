@@ -690,7 +690,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-47 Status mapped to a field that never changes
 - **Priority:** medium (correct fields)
-- **Status:** open
+- **Status:** claimed by Codex (Johanna Mac) 2026-11-21 06:44
+- **Last seen:** 2026-11-21 06:44
 - **Problem:** TenderNed (fresh unassisted attach, 1000 tenders): the agent mapped `status` to
   `publicatiestatus.omschrijving`, which is "Gepubliceerd" for every notice, so award and prior-information
   notices (e.g. "Aankondiging gegunde opdracht") count as open: 774 of 1000 open.
