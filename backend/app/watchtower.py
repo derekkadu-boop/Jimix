@@ -12,8 +12,8 @@ import httpx
 
 from . import db
 from .agent import Failed, Usage, explore
-from .documents import fetch_documents, has_unpacked_office
-from .fetch import OVERSIZE_SKIP, RETRY_STATUS, Blocked, Deleted, Fetcher
+from .documents import fetch_documents, has_unpacked_office, legacy_json_downloads
+from .fetch import JSON_METADATA_SKIP, OVERSIZE_SKIP, RETRY_STATUS, Blocked, Deleted, Fetcher
 from .recipe import Recipe, apply, check
 
 UNREACHABLE_READS = 3
@@ -172,6 +172,7 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         raise Broken(problem)
     fetched = cached = blocked = blocked_pages = failed_pages = missing = pending = 0
     skips: Counter[str] = Counter()
+    metadata_only = 0
     reason = None
     for tender in tenders:
         old = known.get(tender["id"])
@@ -182,6 +183,8 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
             if old:
                 tender["documents"] = old.get("documents", [])
                 tender["_documentUrls"] = old.get("_documentUrls", [])
+                if old.get("_documentTypesChecked"):
+                    tender["_documentTypesChecked"] = True
                 if "_documentSkips" in old:
                     tender["_documentSkips"] = old["_documentSkips"]
             tender["_documentsComplete"] = False
@@ -199,14 +202,19 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         urls = tender["_documentUrls"]
         missing += not urls
         same_urls = old and old.get("_documentUrls") == urls
+        legacy_json = {}
+        if same_urls and old.get("documents") and not old.get("_documentTypesChecked"):
+            legacy_json = await asyncio.to_thread(legacy_json_downloads, old["documents"], urls)
         if (
-            same_urls and old.get("_documentsComplete")
+            same_urls and old.get("_documentsComplete") and not legacy_json
             and (not urls or "_documentSkips" in old)
             and (
                 not urls or old.get("_officePackagesChecked") or not has_unpacked_office(old["documents"])
             )
         ):
             tender["documents"], tender["_documentsComplete"] = old["documents"], True
+            if old["documents"] or old.get("_documentTypesChecked"):
+                tender["_documentTypesChecked"] = True
             if old.get("_officePackagesChecked"):
                 tender["_officePackagesChecked"] = True
             if "_documentSkips" in old:
@@ -218,6 +226,8 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         if all_blocked or (MAX_DETAILS is not None and fetched >= MAX_DETAILS):
             if same_urls:
                 tender["documents"] = old["documents"]
+                if old.get("_documentTypesChecked"):
+                    tender["_documentTypesChecked"] = True
                 if "_documentSkips" in old:
                     tender["_documentSkips"] = old["_documentSkips"]
             tender["_documentsComplete"] = False
@@ -225,23 +235,48 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
         previous_skips = old.get("_documentSkips", {}) if old else {}
         tender_skips = {url: OVERSIZE_SKIP for url in urls if previous_skips.get(url) == OVERSIZE_SKIP}
         docs, done, why = await fetch_documents(urls, fetcher, skipped=tender_skips)
+        metadata = {url for url, skip in tender_skips.items() if skip == JSON_METADATA_SKIP}
+        if urls and metadata == set(urls):
+            metadata_only += 1
         if not done and same_urls:
+            previous = [
+                doc for doc in old.get("documents", [])
+                if doc["sha256"] not in legacy_json or not legacy_json[doc["sha256"]] <= metadata
+            ]
             kept = {
                 (doc["sha256"], doc["fileName"]): doc
-                for doc in [*old.get("documents", []), *docs]
+                for doc in [*previous, *docs]
             }
             docs = list(kept.values())
         tender["documents"], tender["_documentsComplete"] = docs, done
         if urls:
             if done:
                 tender["_officePackagesChecked"] = True
+                tender["_documentTypesChecked"] = True
             tender["_documentSkips"] = tender_skips
             skips.update(tender_skips.values())
         pending += not done
         fetched += bool(urls)
         if why:
             blocked, reason = blocked + 1, why
+    repair_metadata = False
+    if metadata_only and metadata_only == fetched:
+        for tender in tenders:
+            docs = tender["documents"]
+            if not docs:
+                continue
+            if tender.get("_documentTypesChecked"):
+                break
+            suspects = await asyncio.to_thread(legacy_json_downloads, docs, tender["_documentUrls"])
+            if not suspects:
+                tender["_documentTypesChecked"] = True
+            if any(doc.get("sha256") not in suspects for doc in docs):
+                break
+        else:
+            repair_metadata = True
     _save_tenders(portal_id, tenders, close_missing=complete)
+    if repair_metadata:
+        raise Broken("document links returned inline JSON API data; map links to the actual files")
     attempted = fetched + cached if recipe.documents_by_host else fetched
     notes = []
     if tenders and not complete:

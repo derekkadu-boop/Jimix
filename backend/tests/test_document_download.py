@@ -13,6 +13,41 @@ def no_rate_limit(monkeypatch):
     monkeypatch.setattr(fetch, "RETRY_DELAYS", (0, 0))
 
 
+@pytest.mark.parametrize(("path", "media", "disposition", "accepted"), [
+    ("/notices/123", "application/json; charset=utf-8", "", False),
+    ("/notices/123", "application/vnd.api+json", "inline", False),
+    ("/files/boundary.geojson", "application/geo+json", "", True),
+    ("/files/list.JSON", "application/json", "", True),
+    ("/files/redirected.json", "application/json", "", True),
+    ("/download/123", "application/json", 'attachment; filename="requirements.json"', True),
+    ("/download/123", "application/json", "attachment", True),
+    ("/download/123", "application/json", "inline; filename*=UTF-8''requirements.json", True),
+])
+def test_inline_json_endpoints_and_published_json_files(tmp_path, path, media, disposition, accepted):
+    def response(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        if request.url.path == "/files/redirected.json":
+            return httpx.Response(302, headers={"location": "/objects/42"})
+        return httpx.Response(200, headers={"content-type": media, "content-disposition": disposition},
+                              content=b'{"example":true}')
+
+    async def run():
+        fetcher = Fetcher(transport=httpx.MockTransport(response))
+        try:
+            if accepted:
+                part, _ = await fetcher.download("https://portal.example" + path, tmp_path)
+                assert part.read_bytes() == b'{"example":true}'
+            else:
+                with pytest.raises(fetch.DocumentSkipped, match=fetch.JSON_METADATA_SKIP):
+                    await fetcher.download("https://portal.example" + path, tmp_path)
+                assert fetcher.downloaded == 0 and not list(tmp_path.iterdir())
+        finally:
+            await fetcher.close()
+
+    asyncio.run(run())
+
+
 def test_download_samples_html_only_to_probe_limit(monkeypatch, tmp_path):
     monkeypatch.setattr(fetch, "DOCUMENT_HTML_PROBE_BYTES", 8)
 
