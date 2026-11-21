@@ -188,7 +188,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** Bound the HTML used for access checks and clean partial files on interruption.
 - **Findings:**
 
-###  Read public listings backed by POST search
+### B-18 Read public listings backed by POST search
 - **Status:** open
 - **Problem:** On https://www.oeffentlichevergabe.de/, the search page returns only region data
   before a search action. Listing recipes currently use GET and cannot read a public POST search.
