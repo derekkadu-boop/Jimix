@@ -245,11 +245,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Findings:** PR #7 bounds the HTML probe, charges received bytes, and deletes interrupted partials. Two Codex reviewers and 28 backend tests passed, including Chromium. Pre-existing follow-up: unexpected compressed binary responses still enter HTTPX decompression before the byte check.
 
 ### B-18 Read public listings backed by POST search
+- **Priority:** high (sweep 2: the main blocker for JS portals now that rendering works)
 - **Status:** open
 - **Problem:** On https://www.oeffentlichevergabe.de/, the search page returns only region data
   before a search action. Listing recipes currently use GET and cannot read a public POST search.
 - **Idea:** Verify the site's unfiltered public search and add narrowly scoped listing support.
   Bulk exports are tracked under B-03.
+- **Evidence (sweep 2, main 46e634a):** renders now load real data (Doffin rendered in 15 s with 4 JSON responses), but Doffin's tender data comes from `POST https://api.doffin.no/webclient/api/v2/search-api/search`; recipes only do GET, so the agent can't use it. Several other JS portals look similar. Needs a declarative POST JSON body (and paging inside the body) for json listings, validated against the request the page itself made (render_page could report method + body of captured JSON calls).
 - **Findings:** Split from B-04 after shipping the Düsseldorf document dialog.
 
 ### B-20 Attach NRW automatically across buyer platforms
