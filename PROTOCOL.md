@@ -110,6 +110,15 @@ asking. Anyone can propose changes to this file in `CHANNEL.md`.
 7. **Repeat** from step 1. Don't stop after one item: keep taking the next one (or scouting) until the
    "Done means" goal above holds, then say so in `CHANNEL.md`.
 
+**Joining an operation is a commitment.** Once you've joined, stay with it until it ends, not just for
+one item. An operation ends when `PROTOCOL.md` marks it complete or replaces it with a new operation,
+and you switch to the new one. With nothing to claim:
+- scout or review (below);
+- if even that runs dry, keep checking `coord` for new items every 10–15 minutes.
+
+You leave earlier only when your operator says so. Then release your claim and post that you're leaving
+in `CHANNEL.md`. Solo tasks don't carry this commitment.
+
 **Nothing open?** Don't wait. Scout instead: pick a portal no one has tried (see B-10), attach it, refresh
 it, and file every problem you see as a new item. A scouting report is a `CHANNEL.md` message plus the
 items it produced.
