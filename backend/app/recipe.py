@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,9 +13,10 @@ from dateutil import parser as dateparser
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, Field, model_validator
 
-from .browser import render
+from .browser import NETSERVER_FILE_CONTROL, NETSERVER_FILE_LINK, render
 from .fetch import Blocked, Fetcher
 
+log = logging.getLogger("watchtower.recipe")
 TENDER_FIELDS = (
     "id",
     "url",
@@ -38,6 +40,23 @@ NATURES = tuple(KEYWORDS["contractNature"].items())
 Kind = Literal["html", "json", "browser"]
 MAX_INDEX_LISTS = 50
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
+PAGINATION_PATH = r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*[?][A-Za-z0-9_=&.+-]+"
+PAGINATION_HANDLER = re.compile(
+    r"""\s*(?:return\s+)?setTargetAndSubmit\(\s*(?P<quote>['"])"""
+    rf"(?P<path>{PAGINATION_PATH})"
+    r"(?P=quote)\s*(?=[,)])"
+)
+PAGINATION_KEY = re.compile(
+    r"page(?:index|number|num|no)?|offset|cursor|start|selectedTablePage\w+", re.IGNORECASE
+)
+SENSITIVE_KEY = re.compile(
+    r"token|session|secret|auth|key|password|csrf|signature|credential|^(sid|sig)$", re.IGNORECASE
+)
+PAGINATION_PLACEHOLDERS = {"", "#", "javascript:void(0)"}
+
+
+class _AutomaticModalBlocked(Blocked):
+    pass
 
 
 class Selector(BaseModel):
@@ -58,6 +77,8 @@ class Selector(BaseModel):
 class Listing(BaseModel):
     kind: Kind = "html"
     url: str
+    method: Literal["GET", "POST"] = "GET"
+    body: dict | None = None
     records: str
     fields: dict[str, Selector]
     next_page: Selector | None = None
@@ -69,6 +90,13 @@ class Detail(BaseModel):
     kind: Kind = "html"
     url: str | None = None
     fields: dict[str, Selector] = {}
+    click: str | None = Field(None, min_length=2, max_length=60)
+
+    @model_validator(mode="after")
+    def check_click(self):
+        if self.click and self.kind != "browser":
+            raise ValueError("detail.click needs detail.kind browser")
+        return self
 
 
 class DocumentsUrl(BaseModel):
@@ -101,6 +129,12 @@ class Recipe(BaseModel):
             raise ValueError(f"unknown fields {sorted(unknown)}, use only {TENDER_FIELDS}")
         if not re.match(r"https?://[^/]+", self.listing.url):
             raise ValueError("listing.url must be an absolute http(s) URL")
+        if self.listing.method == "POST" and (self.listing.kind != "json" or self.listing.body is None):
+            raise ValueError("POST listings need kind json and a JSON body")
+        if self.listing.method == "POST" and self.listing.index:
+            raise ValueError("index is not supported for POST listings")
+        if self.listing.method == "GET" and self.listing.body is not None:
+            raise ValueError("listing.body is only for POST listings")
         if "id" not in self.listing.fields:
             raise ValueError("listing.fields needs id")
         if "id" in detail_fields:
@@ -153,11 +187,51 @@ def _fill(template: str, raw: dict) -> str | None:
     return urljoin(raw["_base"], url)
 
 
+JSON_PATH = re.compile(r"(?:\.?[^.\[\]]+)?(?:\[(?:\*|\d+)\])*(?:\.[^.\[\]]+(?:\[(?:\*|\d+)\])*)*")
+
+
+def _path_ok(path: str) -> bool:
+    rest = path.removeprefix("$")
+    return bool(JSON_PATH.fullmatch("" if rest == "." else rest))
+
+
 def _json_path(value, path: str):
-    path = path.removeprefix("$").removeprefix(".")
-    for part in path.split(".") if path else []:
-        if isinstance(value, dict):
-            value = value.get(part)
+    if not _path_ok(path):
+        return None
+    rest = path.removeprefix("$")
+    return _walk(value, [part for part in re.sub(r"\[(\*|\d+)\]", r".\1", rest).split(".") if part])
+
+
+def bad_json_path(recipe: "Recipe") -> str | None:
+    listing, detail = recipe.listing, recipe.detail
+    documents_kind = "html" if recipe.documents_page else (detail or listing).kind
+    if recipe.documents_url:
+        documents_kind = recipe.documents_url.kind
+    groups = [(listing.kind, [Selector(path=listing.records), *listing.fields.values(), listing.next_page,
+                              listing.index]),
+              (detail.kind if detail else "html", list(detail.fields.values()) if detail else []),
+              (documents_kind, [recipe.documents])]
+    for kind, selectors in groups:
+        for selector in selectors if kind == "json" else []:
+            for path in (selector.path, selector.attribute) if selector else ():
+                if path and not _path_ok(path):
+                    return path
+    return None
+
+
+def _walk(value, parts: list[str]):
+    for i, part in enumerate(parts):
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        elif part == "*":
+            items = list(value.values()) if isinstance(value, dict) else value
+            if not isinstance(items, list):
+                return None
+            found = []
+            for item in items:
+                result = _walk(item, parts[i + 1:]) if parts[i + 1:] else item
+                found.extend(result if isinstance(result, list) and parts[i + 1:] else [result])
+            return [v for v in found if v is not None]
         elif isinstance(value, list) and part.isdigit():
             value = value[int(part)] if int(part) < len(value) else None
         else:
@@ -170,7 +244,11 @@ def _values(node, selector: Selector, kind: Kind) -> list[str]:
         found = _json_path(node, selector.path)
         items = found if isinstance(found, list) else [found]
         if selector.attribute:
-            items = [_json_path(item, selector.attribute) if isinstance(item, dict) else None for item in items]
+            picked = []
+            for item in items:
+                result = _json_path(item, selector.attribute) if isinstance(item, (dict, list)) else item
+                picked.extend(result if isinstance(result, list) else [result])
+            items = picked
         values = [str(i) for i in items if isinstance(i, (str, int, float)) and not isinstance(i, bool)]
     else:
         elements = [node] if selector.path == "$" else node.select(selector.path)
@@ -182,6 +260,66 @@ def _values(node, selector: Selector, kind: Kind) -> list[str]:
     return values
 
 
+def pagination_handler(tag) -> re.Match[str] | None:
+    if tag.name != "a" or "browseForward" not in tag.get("class", ()):
+        return None
+    placeholder = tag.get("href", "").strip().casefold().rstrip(";")
+    if placeholder not in PAGINATION_PLACEHOLDERS:
+        return None
+    match = PAGINATION_HANDLER.match(tag.get("onclick", ""))
+    if match and _public_pagination_path(match["path"]):
+        return match
+    return None
+
+
+def _public_pagination_path(path: str) -> bool:
+    if len(path) > 300 or not re.fullmatch(PAGINATION_PATH, path):
+        return False
+    target = urlsplit(path)
+    if any(part in (".", "..") for part in target.path.split("/")):
+        return False
+    params = parse_qsl(target.query, keep_blank_values=True)
+    return not any(SENSITIVE_KEY.search(key) for key, _ in params) and any(
+        PAGINATION_KEY.fullmatch(key) and value.isdecimal() for key, value in params
+    )
+
+
+def _next_link(page, selector: Selector, kind: Kind) -> tuple[str | None, bool]:
+    if kind != "json" and selector.attribute == "onclick":
+        unresolved = False
+        for tag in [page] if selector.path == "$" else page.select(selector.path):
+            handler = " ".join(tag.get("onclick", "").split())
+            unresolved |= bool(handler)
+            match = pagination_handler(tag)
+            if not match and re.match(r"(?:return\s+)?setTargetAndSubmit\b", handler):
+                continue
+            if selector.pattern:
+                capture = re.search(selector.pattern, handler)
+                if not capture:
+                    continue
+                path = capture.group(1) if capture.re.groups else capture.group(0)
+                if path and _public_pagination_path(path) and (
+                    path == match["path"] if match else f"'{path}'" in handler or f'"{path}"' in handler
+                ):
+                    return path, False
+            elif match:
+                return match["path"], False
+        return None, unresolved
+    if kind == "json" or selector.attribute != "href" or selector.pattern:
+        return next(iter(_values(page, selector, kind)), None), False
+    unresolved = False
+    for tag in [page] if selector.path == "$" else page.select(selector.path):
+        if match := pagination_handler(tag):
+            return match["path"], False
+        href = tag.get("href")
+        href = " ".join(href.split()) if isinstance(href, str) else ""
+        normalized = href.casefold().rstrip(";")
+        if normalized not in PAGINATION_PLACEHOLDERS and not normalized.startswith("javascript:"):
+            return href, False
+        unresolved |= bool(tag.get("onclick")) or normalized not in PAGINATION_PLACEHOLDERS
+    return None, unresolved
+
+
 def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
     out = {}
     for name, selector in fields.items():
@@ -190,14 +328,44 @@ def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
     return out
 
 
-async def _load(kind: Kind, url: str, fetcher: Fetcher):
+async def _load(kind: Kind, url: str, fetcher: Fetcher, body: dict | None = None, click: str | None = None):
+    if body is not None:
+        resp = await fetcher.post_json(url, body)
+        return resp.json(), str(resp.url)
     if kind == "browser":
-        html, _, final = await render(url, fetcher, require_stable=True)
+        pattern = re.compile(re.escape(" ".join(click.split()).casefold())) if click else None
+        html, _, final = await render(url, fetcher, require_stable=True, click=pattern)
         return BeautifulSoup(html, "html.parser"), final
     resp = await fetcher.get(url)
     if kind == "json":
         return resp.json(), str(resp.url)
     return BeautifulSoup(resp.text, "html.parser"), str(resp.url)
+
+
+async def _load_detail(detail: Detail, url: str, listing_url: str | None, fetcher: Fetcher):
+    try:
+        return await _load(detail.kind, url, fetcher, click=detail.click)
+    except httpx.HTTPStatusError as exc:
+        if (detail.kind != "html" or not detail.url or not listing_url or listing_url == url
+                or exc.response.status_code not in (404, 410)):
+            raise
+    return await _load(detail.kind, listing_url, fetcher, click=detail.click)
+
+
+def _with_body_param(body: dict, path: str, step: int) -> dict:
+    body = json.loads(json.dumps(body))
+    *parents, key = path.removeprefix("$.").split(".")
+    node = body
+    for part in parents:
+        node = node.setdefault(part, {})
+        if not isinstance(node, dict):
+            raise TypeError(f"page_param {path!r} does not point into a JSON object")
+    current = node.get(key, 1)
+    if isinstance(current, bool) or not str(current).lstrip("-").isdigit():
+        current = 1
+    value = int(current) + step
+    node[key] = str(value) if isinstance(current, str) else value
+    return body
 
 
 def _with_param(url: str, name: str, step: int) -> str:
@@ -208,10 +376,50 @@ def _with_param(url: str, name: str, step: int) -> str:
     return parts._replace(query=urlencode(query)).geturl()
 
 
+NEXT_PAGE_LABELS = {"next", "next page", "weiter", "nächste seite", "suivant", "page suivante",
+                    "volgende", "volgende pagina", "siguiente", "nästa", "następna", "seuraava"}
+
+
+def _has_next_page(page, base: str) -> bool:
+    current = urlsplit(base)
+    original = sorted(parse_qsl(current.query, keep_blank_values=True))
+    for link in page.select("a[href], link[rel][href]"):
+        if link.find_parent("template") or link.has_attr("hidden") or link.find_parent(attrs={"hidden": True}):
+            continue
+        try:
+            target = urlsplit(urljoin(base, link["href"]))
+        except ValueError:
+            continue
+        if (target.scheme, target.netloc) != (current.scheme, current.netloc):
+            continue
+        if (target.path, target.query) == (current.path, current.query):
+            continue
+        if "next" in {part.lower() for part in link.get("rel", [])}:
+            return True
+        label = link.get("aria-label") or link.get_text(" ", strip=True)
+        if " ".join(label.casefold().split()) in NEXT_PAGE_LABELS:
+            return True
+        if target.path != current.path:
+            continue
+        query = parse_qsl(target.query, keep_blank_values=True)
+        for name, value in query:
+            if name.lower() not in {"page", "p", "offset", "start"} or not value.isascii() or not value.isdigit():
+                continue
+            previous = next((v for k, v in original if k == name), "0")
+            if (previous.isascii() and previous.isdigit() and len(previous) <= 9 and len(value) <= 9
+                    and int(value) > int(previous)
+                    and sorted((k, v) for k, v in query if k != name)
+                    == [(k, v) for k, v in original if k != name]):
+                return True
+    return False
+
+
 async def apply(
-    recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None
+    recipe: Recipe, fetcher: Fetcher, *, max_pages: int | None = None, max_details: int | None = None,
+    warnings: list[str] | None = None,
 ) -> tuple[list[dict], bool]:
     listing, raws = recipe.listing, []
+    indexed_sample = listing.index is not None and max_pages is not None and max_details is not None
     budget = max_pages or recipe.max_pages * (MAX_INDEX_LISTS if listing.index else 1)
     starts = [listing.url]
     if listing.index:
@@ -220,58 +428,92 @@ async def apply(
         starts = list(dict.fromkeys(links))
         budget -= 1
     complete = 0 < len(starts) <= MAX_INDEX_LISTS
-    for start in starts[:MAX_INDEX_LISTS]:
+    starts = starts[:MAX_INDEX_LISTS]
+    for index, start in enumerate(starts):
         seen: set[str] = set()
-        url, finished = start, False
-        for page_number in range(min(recipe.max_pages, budget)):
+        url, finished, body = start, False, listing.body if listing.method == "POST" else None
+        reserved = min(len(starts) - index - 1, max(0, budget - 1)) if max_pages is not None else 0
+        for page_number in range(min(recipe.max_pages, budget - reserved)):
             budget -= 1
-            seen.add(url)
-            page, base = await _load(listing.kind, url, fetcher)
+            seen.add(url + json.dumps(body, sort_keys=True))
+            try:
+                page, base = await _load(listing.kind, url, fetcher, body)
+            except httpx.HTTPStatusError as exc:
+                if page_number == 0 or not 400 <= exc.response.status_code < 500:
+                    raise
+                log.info("listing paging stopped at page %d: HTTP %d", page_number + 1, exc.response.status_code)
+                break
             rows = _json_path(page, listing.records) if listing.kind == "json" else page.select(listing.records)
             if not isinstance(rows, list):
                 raise TypeError(f"records {listing.records!r} did not give a list")
             if not rows:
                 finished = True
                 break
+            if (warnings is not None and listing.kind != "json" and not listing.page_param
+                    and not listing.next_page and _has_next_page(page, base)):
+                warning = "Listing has a likely next-page link but no next_page or page_param is configured."
+                if warning not in warnings:
+                    warnings.append(warning)
             for row in rows:
                 raw = _extract(row, listing.fields, listing.kind) | {"_base": base}
+                if indexed_sample:
+                    raw["_categoryIndex"] = index
                 if raw.get("url"):
                     raw["url"] = urljoin(base, raw["url"])
                 if recipe.documents and not recipe.detail and not recipe.documents_url:
                     raw["_docs"] = [urljoin(base, u) for u in _values(row, recipe.documents, listing.kind)]
                 raws.append(raw)
-            if listing.page_param:
+            if listing.page_param and body is not None:
+                body = _with_body_param(listing.body, listing.page_param, page_number + 1)
+            elif listing.page_param:
                 url = _with_param(start, listing.page_param, page_number + 1)
-            elif listing.next_page and (links := _values(page, listing.next_page, listing.kind)):
-                url = urljoin(base, links[0])
+            elif listing.next_page:
+                link, unresolved = _next_link(page, listing.next_page, listing.kind)
+                if not link:
+                    finished = not unresolved
+                    break
+                url = urljoin(base, link)
             else:
                 finished = True
                 break
-            if url in seen:
+            if url + json.dumps(body, sort_keys=True) in seen:
                 finished = True
                 break
         complete = complete and finished
     attempted, blocked = 0, []
     details = raws
-    if recipe.detail and max_details is not None and "submissionDeadline" in listing.fields:
+    if recipe.detail and max_details is not None and (indexed_sample or "submissionDeadline" in listing.fields):
         now, tz = datetime.now(UTC), ZoneInfo(recipe.timezone)
         first_rows = {}
         for raw in raws:
             if tender_id := raw.get("id"):
                 first_rows.setdefault(tender_id, raw)
 
-        def has_upcoming_deadline(raw):
+        def detail_priority(raw):
             deadline = _datetime(raw.get("submissionDeadline"), recipe.dayfirst, tz)
-            return deadline is not None and deadline >= now
+            return deadline is None or deadline < now
 
         candidates = (raw for raw in first_rows.values() if raw.get("url") or recipe.detail.url)
-        details = sorted(candidates, key=has_upcoming_deadline, reverse=True)
+        if indexed_sample:
+            categories = {}
+            for raw in candidates:
+                categories.setdefault(raw["_categoryIndex"], []).append(raw)
+            for category in categories.values():
+                category.sort(key=detail_priority)
+            details = [
+                category[position]
+                for position in range(max(map(len, categories.values()), default=0))
+                for category in categories.values()
+                if position < len(category)
+            ]
+        else:
+            details = sorted(candidates, key=detail_priority)
     for raw in details[:max_details]:
         detail_url = recipe.detail and (_fill(recipe.detail.url, raw) if recipe.detail.url else raw.get("url"))
         if detail_url:
             attempted += 1
             try:
-                page, base = await _load(recipe.detail.kind, detail_url, fetcher)
+                page, base = await _load_detail(recipe.detail, detail_url, raw.get("url"), fetcher)
             except Blocked as exc:
                 blocked.append(str(exc))
                 continue
@@ -281,6 +523,8 @@ async def apply(
             if (recipe.documents or recipe.documents_by_host) and not recipe.documents_url:
                 try:
                     raw["_docs"] = await _document_links(recipe, page, base, fetcher)
+                except _AutomaticModalBlocked:
+                    raw["_documentPageError"] = True
                 except Blocked as exc:
                     if not recipe.documents_by_host:
                         raise
@@ -329,11 +573,20 @@ async def _document_links(recipe: Recipe, page, base: str, fetcher: Fetcher) -> 
             return []
         page, base = result
         kind = "html"
-    if source and source.modal == "netserver_file_tree":
-        html, _, base = await render(base, fetcher, netserver_files=True)
-        page, kind = BeautifulSoup(html, "html.parser"), "html"
     selector = source.files if source else recipe.documents
-    return [urljoin(base, u) for u in _link_values(page, selector, kind)] if selector else []
+    explicit_modal = source is not None and source.modal == "netserver_file_tree"
+    links = _link_values(page, selector, kind) if selector and not explicit_modal else []
+    if explicit_modal or (not links and kind != "json" and page.select_one(NETSERVER_FILE_CONTROL)):
+        try:
+            html, _, base = await render(base, fetcher, netserver_files=True)
+        except Blocked as exc:
+            if explicit_modal:
+                raise
+            raise _AutomaticModalBlocked(str(exc)) from exc
+        if not explicit_modal:
+            selector = Selector(path=NETSERVER_FILE_LINK, attribute="href")
+        links = _link_values(BeautifulSoup(html, "html.parser"), selector, "html")
+    return [urljoin(base, link) for link in links]
 
 
 async def _listed_documents(recipe: Recipe, raw: dict, fetcher: Fetcher) -> None:

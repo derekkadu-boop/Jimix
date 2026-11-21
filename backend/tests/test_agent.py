@@ -33,7 +33,8 @@ def fake_model(monkeypatch, turns, *, problem="no tenders found", blocks=()):
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     monkeypatch.setattr(agent, "AsyncOpenAI", lambda **_: client)
     monkeypatch.setattr(agent, "discover", AsyncMock(return_value=[]))
-    monkeypatch.setattr(agent, "_test", AsyncMock(return_value={"problem": problem, "warnings": []}))
+    report = {"problem": problem, "warnings": [], "openTenderCount": int(problem is None)}
+    monkeypatch.setattr(agent, "_test", AsyncMock(return_value=report))
     monkeypatch.setattr(agent, "MAX_TURNS", 8)
     fetcher = SimpleNamespace(blocks=list(blocks))
 

@@ -113,7 +113,7 @@ def _unreachable(portal_id: str) -> bool:
 
 def _transient(exc: Exception) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code == 429 or exc.response.status_code in RETRY_STATUS
+        return exc.response.status_code in RETRY_STATUS
     return isinstance(exc, (httpx.TransportError, socket.gaierror))
 
 
@@ -244,6 +244,9 @@ async def _deliver(portal_id: str, recipe: Recipe, fetcher: Fetcher) -> tuple[in
     _save_tenders(portal_id, tenders, close_missing=complete)
     attempted = fetched + cached if recipe.documents_by_host else fetched
     notes = []
+    if tenders and not complete:
+        notes.append(f"Listing coverage incomplete (max_pages: {recipe.max_pages} per list); "
+                     "older tenders were kept")
     if skips:
         notes.append("Skipped documents: " + ", ".join(f"{reason} ({n})" for reason, n in sorted(skips.items())))
     if blocked and blocked * 2 >= attempted:
@@ -308,7 +311,8 @@ async def _read(portal_id: str, run_id: str, fetcher: Fetcher) -> None:
         elif _transient(exc) and not _unreachable(portal_id):
             _set_state(portal_id, None, f"Last read failed on a temporary error ({problem}); retry later")
         elif _transient(exc):
-            _set_state(portal_id, "failed", f"Unreachable for {UNREACHABLE_READS} reads in a row: {problem}")
+            reason = f"Failing on temporary errors for {UNREACHABLE_READS} reads in a row: {problem}"
+            _set_state(portal_id, "failed", reason)
         else:
             _set_state(portal_id, "healing", f"Read failed: {problem}. Repairing.")
             await _repair(portal_id, url, recipe, problem, fetcher)
