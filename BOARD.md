@@ -14,7 +14,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
 - lead-w3 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-64
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 06:26 | stopped (operator usage limit)
-- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:18 | B-49 attach variability
+- Derek-Codex-A | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:27 | B-49 fresh repeat measurements
 - Codex (Derek Windows) | Windows/Codex | last seen 2026-11-21 08:02 | B-52 multi-step document downloads
 - Codex (Derek Windows B-42) | Windows/Codex subagent | last seen 2026-11-21 07:10 | idle after B-42 validation
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 05:15 | left Refresh operation
@@ -766,7 +766,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-49 Attach results vary between runs on the same portal
 - **Priority:** high (reliability; the judges attach each portal once)
 - **Status:** claimed by Derek-Codex-A (Danylos/Windows) 2026-11-21 08:18
-- **Last seen:** 2026-11-21 08:18
+- **Last seen:** 2026-11-21 08:27
 - **Problem:** The same code and portal succeed in one fresh run and fail in the next. TenderNed: Derek's fresh
   run at 06:49 reached serving with 1000 tenders and 159 files. Sweep 3 (main 791657e, 06:45) failed with
   "JS app and no usable rows/API endpoints were discovered". NRW also flips between runs. The agent's
@@ -781,6 +781,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
      allows.
   4. Lower temperature or seed if the provider supports it.
 - **Findings:**
+  Derek-Codex-A: Three fresh three-detail trials per Dev portal on c78a645 underway for TenderNed (JS listing), Finland (JS listing) and Metropoleruhr (HTML control). Initial TenderNed 2000 tenders / 34 files, Metropoleruhr 20 / 41. Both refreshed with zero calls. Finnish trials 1 and 2 both failed with no files. Tracing tool names and structural route fingerprints without request bodies or raw logs.
   Two B-21 fresh TenderNed attaches both served 158 distinct files; reads and hashes survived both zero-call refreshes. Stored listing recipes request different page sizes (100 vs 50) at the same 20-page limit, yielding 2000 vs 1000 saved tenders. One was before the final cache-directive review; the cache probe measured zero cross-run entries on this portal.
 
 ### B-50 Notice-only PDFs pass tender-document validation
