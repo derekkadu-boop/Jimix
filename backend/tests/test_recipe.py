@@ -1217,3 +1217,33 @@ def test_files_also_in_an_archive_are_listed_once():
     docs, complete, _ = asyncio.run(run())
     assert complete
     assert [d["fileName"] for d in docs] == ["notice.pdf", "terms.txt"]
+
+
+def test_tls_reads_issuer_url_and_detects_incomplete_chains():
+    import datetime
+    import ssl
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.serialization import Encoding
+    from cryptography.x509.oid import AuthorityInformationAccessOID, NameOID
+
+    from app import tls
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "portal.example")])
+    now = datetime.datetime.now(datetime.UTC)
+    aia = x509.AuthorityInformationAccess([x509.AccessDescription(
+        AuthorityInformationAccessOID.CA_ISSUERS, x509.UniformResourceIdentifier("http://ca.example/int.crt"))])
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(1).not_valid_before(now).not_valid_after(now + datetime.timedelta(days=1))
+            .add_extension(aia, critical=False).sign(key, hashes.SHA256()))
+    assert tls.issuer_url(cert) == "http://ca.example/int.crt"
+    assert tls._load(cert.public_bytes(Encoding.PEM)) == cert
+    assert tls._load(cert.public_bytes(Encoding.DER)) == cert
+    assert not tls.verified_path("portal.example", cert, [cert])
+    error = ssl.SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: "
+                                            "unable to get local issuer certificate (_ssl.c:1010)")
+    assert tls.incomplete_chain(error)
+    assert not tls.incomplete_chain(ssl.SSLCertVerificationError(1, "CERTIFICATE_VERIFY_FAILED: hostname mismatch"))
