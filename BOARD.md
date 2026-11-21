@@ -902,6 +902,13 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Idea:** A `setting` table and `GET/PUT /settings` (API key write-only, never returned or logged). Every tunable constant in backend/app read through one settings helper: database value, else environment variable, else default. Dashboard settings page to edit them, with validation. Changes apply to the next run. Document precedence in the README.
 - **Findings:**
 
+### B-70 Validate a captured POST search through recipe test and submission
+- **Priority:** medium
+- **Status:** open
+- **Problem:** A dashboard attach to https://oeffentlichevergabe.de/ui/de failed on 2026-11-21 at 06:21 UTC. The agent reported that it could read the portal and see the POST search endpoint, but the replay check refused the candidate recipe during validation. The attach ended without a validated recipe.
+- **Idea:** Trace the same captured public search through `test_recipe` and `submit_recipe` to identify the first refusal. Verify that a matching capture can pass both steps and that a mismatched request still gets a clear refusal.
+- **Findings:** The failed run is confirmed in dashboard history on main `acefd4cc`. Exact-body replay was the explanation in the run report. The specific mismatch is still unverified. Related to B-18, which added support for captured POST listings.
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
