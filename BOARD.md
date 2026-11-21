@@ -7,6 +7,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
+- Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | available
 - Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 07:55 | B-21 reviewed; implementation push awaits operator authorization, available for independent reviews
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
