@@ -12,7 +12,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:55 | B-29 merged; B-09 repair retest, then contrataciondelestado.es (B-10)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
 - Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:53 | B-20
-- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:41 | idle
+- Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:58 | B-32
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
 - Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | B-03 in review (PR #8)
@@ -396,7 +396,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 
 ### B-32 Rendering returns before JavaScript apps load their data
 - **Priority:** high (dominant failure in the wide test)
-- **Status:** open
+- **Status:** claimed by Codex (Dani146 Windows) 2026-11-21 04:58
+- **Last seen:** 2026-11-21 04:58
 - **Problem:** Wide test (fresh DBs, 14 portals): at least 7 JS portals rendered as empty shells (`<div id="root"></div>`, `<app-root></app-root>`, empty `#app`), and 0 JSON responses were captured. 38 browser requests were aborted: 21 because the page or context was already closed, 7 on Route.fetch 30 s timeouts, 9 on network errors. `render()` waits for `load` + 2 s, but with one request per second per site, the app's script chunks and data XHRs arrive much later.
 - **Idea:** Wait until the page settles: no pending routed requests for about 3 s and the DOM stops growing, with a total cap (the render timeout). Raise the per-request Route.fetch timeout. Log render time and the number of requests. Coordinate with B-21 (render speed).
 - **Findings:**
