@@ -285,6 +285,18 @@ def test_recipe_validation_samples_each_document_host(monkeypatch):
     assert warnings == ["tender 3: no file links", "could not download sampled file from buyer-two.example"]
 
 
+def test_recipe_validation_requires_document_links():
+    recipe = Recipe.model_validate(RECIPE)
+    tenders = [{"id": "1", "_documentUrls": []}, {"id": "2", "_documentUrls": []}]
+    problem, _ = asyncio.run(agent._check_documents(recipe, tenders, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    by_host = Recipe.model_validate(RECIPE | {"documents_by_host": {"buyer.example": {"files": {"path": "a"}}}})
+    checked = [{"id": "1", "_documentUrls": [], "_documentChecked": True}]
+    problem, warnings = asyncio.run(agent._check_documents(by_host, checked, None))
+    assert problem and problem.startswith("no document links in the sampled tenders")
+    assert warnings == ["tender 1: no file links"]
+
+
 def test_refresh_retries_html_but_keeps_oversize_skip(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "jimix.db")
     monkeypatch.setattr(fetch, "MAX_FILE_BYTES", 1024)
@@ -592,6 +604,36 @@ def test_index_reads_every_linked_list():
     tenders, complete = asyncio.run(run())
     assert sorted(t["id"] for t in tenders) == ["1", "2", "3"]
     assert complete
+
+
+NOTICE_ONLY = """<html><body><nav><a href="/help">Help</a></nav>
+<a href="./announcements/1/Bekanntmachung.pdf">download</a>
+<a href="/files/all.zip">Documents (ZIP)</a><a href="./documents">Vergabeunterlagen</a></body></html>"""
+
+
+@pytest.mark.parametrize(("page", "hinted"), [(NOTICE_ONLY, True), (DETAIL.format(n=1), False)])
+def test_recipe_test_hints_at_linked_documents_page(page, hinted):
+    def site(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404) if request.url.path == "/robots.txt" else httpx.Response(200, html=page)
+
+    recipe = Recipe.model_validate(RECIPE)
+    tenders = [{"id": "1", "url": "https://portal.example/p/1/overview",
+                "_documentUrls": ["https://portal.example/p/1/announcements/1/Bekanntmachung.pdf"]}]
+
+    async def run(recipe):
+        fetcher = Fetcher(transport=httpx.MockTransport(site))
+        try:
+            return await agent._document_page_hint(recipe, tenders, fetcher)
+        finally:
+            await fetcher.close()
+
+    hint = asyncio.run(run(recipe))
+    if hinted:
+        assert "'vergabeunterlagen' (https://portal.example/p/1/documents)" in hint
+    else:
+        assert hint is None
+    with_page = Recipe.model_validate(RECIPE | {"documents_page": {"path": "a.docs"}})
+    assert asyncio.run(run(with_page)) is None
 
 
 @pytest.mark.parametrize("by_host", [False, True])
