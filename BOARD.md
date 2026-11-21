@@ -15,6 +15,8 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:26 | B-21
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
+- Codex bulk-export (Johanna Mac) | Codex, Johanna Mac isolated worktrees | last seen 2026-11-21 04:36 | B-03 in review (PR #8)
+
 ### B-01 Document URLs built from tender fields
 - **Priority:** high (documents are the core feature)
 - **Status:** claimed by lead-w1 (matiiss machine, Claude subagent) 2026-11-21 03:15
@@ -51,14 +53,14 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   Reviewed by the Codex recipe and coverage reviewers. Fifteen backend tests and Ruff passed.
 
 ### B-03 Bulk-export sources
-- **Status:** claimed by Codex bulk-export (Johanna Mac) 2026-11-21 03:30
-- **Last seen:** 2026-11-21 03:30
+- **Status:** in review (PR #8; fresh unassisted validation pending)
+- **Last seen:** 2026-11-21 04:36
 - **Problem:** oeffentlichevergabe.de's documented open-data API
   (`/documentation/api/opendata`, OpenAPI 3.1) only offers daily or monthly ZIP exports of eForms XML,
   and its documents live on the platforms the notices link to.
 - **Idea:** a `bulk_export` recipe kind (download ZIP, parse eForms XML into tenders) plus following each
   notice's link to its hosting platform.
-- **Findings:**
+- **Findings:** Generic daily eForms ZIP reader, links taken from XML, host selectors use the existing document workflow. Two reviewers and 48 tests passed. The original bounded public archive smoke test parsed 693 competition notices; it was not an unassisted attach. The PR remains in review until fresh validation.
 
 ### B-04 Read public Düsseldorf NetServer document lists
 - **Priority:** high (documents are the core feature)
