@@ -11,7 +11,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - lead-w1 | Claude subagent, matiiss machine | last seen 2026-11-21 04:25 | B-01
 - lead-w2 | Claude subagent, matiiss machine | last seen 2026-11-21 04:35 | B-29 (then B-09 report)
 - lead-monitor | Claude subagent, matiiss machine | last seen 2026-11-21 04:32 | coord monitoring (every 20-30 min)
-- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:29 | B-20
+- Codex (Derek Windows) | Codex, Derek's Windows machine | last seen 2026-11-21 04:38 | B-20
 - Codex (Dani146 Windows) | Codex, Dani146's Windows machine | last seen 2026-11-21 04:26 | B-21
 - Codex (Johanna Mac) | Codex, Johanna's Mac | last seen 2026-11-21 04:04 | B-17 merged (b693cee); next unknown
 
@@ -140,6 +140,9 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
   - 2026-11-21 | NRW | Codex (Dani146 Windows) | failed | 0 | 0 | USD 0.0737 | Fresh attach from the public landing page produced no category-spanning recipe. Refresh was unavailable.
   - 2026-11-21 | NRW | Codex (Derek Windows) | serving | 20 | 162 (54 Office) | USD 0.0797 attach, USD 0 Refresh | Fresh attach from the Dev URL with B-20 category hints. Refresh retained all files. Agent dropped its wider tested index for an unpaginated recipe.
+  - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.0901 | Capped validation saw 40 open rows but sampled zero file links. Refresh was unavailable.
+  - 2026-11-21 | NRW | Codex (Derek Windows) | failed | 0 | 0 | USD 0.1264 | The agent saw category and document-link hints, then submitted selectors matching zero rows. Refresh was unavailable.
+  - 2026-11-21 | DTVP | Codex (Derek Windows) | failed | 0 | 0 | USD 0.1393 | Agent matched no tender rows from the Dev URL. It suspected authentication, which was not independently confirmed. Refresh was unavailable.
 - **Findings:**
 
 ### B-11 Cost per portal for the README
@@ -221,7 +224,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-20 Attach NRW automatically across buyer platforms
 - **Priority:** high (public document delivery on a mixed-platform portal)
 - **Status:** claimed by Codex (Derek Windows) 2026-11-21 04:19
-- **Last seen:** 2026-11-21 04:29
+- **Last seen:** 2026-11-21 04:38
 - **Problem:** A fresh API attach of https://www.evergabe.nrw.de/VMPCenter/company/welcome.do
   found the public HTML listing but stopped because it could not validate document handling
   across buyer hosts. B-04 verified Düsseldorf file delivery using a stored recipe.
@@ -245,6 +248,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   the Dev-list-only update. A reusable category index hint could expose repeated same-site links
   in the page tool alongside the existing pagination hint.
   The category-index hint and cross-category validation budget produced the first successful NRW URL-only attach in this investigation. It delivered 162 files and Refresh retained them, but the model submitted a 20-notice unpaginated fallback after an indexed candidate passed validation on 37 notices. A fresh retest is running with a coverage comparison that counts open tenders.
+  Offline reproduction confirmed that capped validation can fetch listing pages from two categories yet use all three detail requests on the first. It rejects otherwise working recipes when only the second category exposes files. Fixing detail sampling across categories before the next clean attach.
 
 ### B-19 Preserve documents when tender detail was not checked
 - **Priority:** high (saved documents and dashboard status)
