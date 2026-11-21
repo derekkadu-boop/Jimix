@@ -577,6 +577,7 @@ async def test_bulk_export_refresh_resolves_documents_and_expires_older_notices(
       xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
       <cbc:ID>notice-1</cbc:ID><cbc:VersionID>02</cbc:VersionID><cbc:IssueDate>2026-01-01</cbc:IssueDate>
       <cac:ProcurementProject><cbc:Name>Road works</cbc:Name></cac:ProcurementProject>
+      <cac:TenderingTerms><cbc:AccessToolsURI>https://portal.example/notice</cbc:AccessToolsURI></cac:TenderingTerms>
       <cac:TenderingProcess><cac:TenderSubmissionDeadlinePeriod>
         <cbc:EndDate>2099-04-01+02:00</cbc:EndDate><cbc:EndTime>10:00:00</cbc:EndTime>
       </cac:TenderSubmissionDeadlinePeriod></cac:TenderingProcess>
@@ -594,7 +595,7 @@ async def test_bulk_export_refresh_resolves_documents_and_expires_older_notices(
     async def respond(request):
         if request.url.path == "/robots.txt":
             return httpx.Response(404)
-        if request.url.path == "/api/notice-exports":
+        if request.url.path == "/export":
             requested.append(request.url.params["pubDay"])
             assert request.url.params["format"] == "eforms.zip"
             return httpx.Response(200, content=buffer.getvalue())
@@ -607,7 +608,7 @@ async def test_bulk_export_refresh_resolves_documents_and_expires_older_notices(
 
     recipe = Recipe(
         method="bulk_export",
-        listing={"kind": "eforms_zip", "url": "https://oeffentlichevergabe.de/api/notice-exports?format=eforms.zip"},
+        listing={"kind": "eforms_zip", "url": "https://portal.example/export?format=eforms.zip"},
         documents_by_host={"files.example": {"files": {"path": "a.file"}}},
     )
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "bulk.sqlite")

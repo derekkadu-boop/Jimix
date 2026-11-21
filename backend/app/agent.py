@@ -78,8 +78,8 @@ separate page linked from the tender page (e.g. "Vergabeunterlagen", "Documents"
 use documents_page. If listing tenders or downloading documents needs a login or a captcha,
 call give_up with blocked=true.
 
-For the German publication service at oeffentlichevergabe.de, its documented
-/api/notice-exports eForms daily ZIP supports the bulk_export recipe below. Set listing.url to the documented endpoint with format=eforms.zip
+A documented eForms daily ZIP with format=eforms.zip and pubDay supports the bulk_export recipe below.
+Set listing.url to the documented endpoint with format=eforms.zip
 but omit dates. The reader requests the previous day in Europe/Berlin, up to lookback_days (1–7).
 Use documents_by_host for HTML document pages referenced in the XML, otherwise the XML links
 are treated as file URLs. Prefer a current complete listing when the portal offers one.

@@ -105,12 +105,7 @@ class Recipe(BaseModel):
                 raise ValueError("bulk_export uses built-in eForms mapping and document links")
             if any(not re.fullmatch(r"[a-z0-9.-]+", host) for host in self.documents_by_host):
                 raise ValueError("documents_by_host keys must be lowercase hostnames")
-            endpoint = urlsplit(self.listing.url)
-            if endpoint.scheme != "https" or endpoint.netloc not in (
-                "oeffentlichevergabe.de", "www.oeffentlichevergabe.de"
-            ) or endpoint.path != "/api/notice-exports":
-                raise ValueError("eforms_zip supports only the documented German publication service endpoint")
-            query = dict(parse_qsl(endpoint.query))
+            query = dict(parse_qsl(urlsplit(self.listing.url).query))
             if query.get("format") != "eforms.zip" or "pubMonth" in query or "pubDay" in query:
                 raise ValueError("bulk export URL must set format=eforms.zip and omit pubDay/pubMonth")
             return self
@@ -290,7 +285,7 @@ async def _apply_bulk_export(
             published = (today - timedelta(days=age)).isoformat()
             url = parts._replace(query=urlencode([*query, ("pubDay", published)])).geturl()
             path, _ = await fetcher.download(url, Path(folder))
-            for notice in read_notices(path, listing.url, published):
+            for notice in read_notices(path, published):
                 tenders.setdefault(notice["id"], notice)
             path.unlink()
     notices = list(tenders.values())

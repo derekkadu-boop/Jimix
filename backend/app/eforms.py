@@ -1,7 +1,7 @@
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 from xml.etree import ElementTree as XML
 from zipfile import BadZipFile, ZipFile
 
@@ -46,10 +46,8 @@ def _deadline(period):
     return value if value.tzinfo else None
 
 
-def read_notices(path: Path, listing_url: str, publication_date: str) -> list[dict]:
+def read_notices(path: Path, publication_date: str) -> list[dict]:
     latest: dict[str, tuple[tuple[str, int], dict]] = {}
-    source = urlsplit(listing_url)
-    origin = f"{source.scheme}://{source.netloc}"
     try:
         with ZipFile(path) as archive:
             members = archive.infolist()
@@ -97,7 +95,11 @@ def read_notices(path: Path, listing_url: str, publication_date: str) -> list[di
                     )
                     if element.text and _public_link(element.text.strip())
                 ]
-                notice_url = f"{origin}/ui/en/search/details?noticeId={quote(notice_id, safe='')}"
+                notice_url = next(
+                    (node.text.strip() for node in root.findall(".//cbc:AccessToolsURI", NS)
+                     if node.text and _public_link(node.text.strip())),
+                    None,
+                )
                 latest[notice_id] = rank, {
                     "id": notice_id,
                     "url": notice_url,
