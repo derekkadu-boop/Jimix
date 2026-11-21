@@ -156,11 +156,22 @@ def list_tenders(portal_id: str, conn: Conn, changedSince: str | None = None):
         """,
         (portal_id, changedSince, changedSince),
     )
-    return [
-        {k: v for k, v in json.loads(row["data"]).items() if not k.startswith("_")}
-        | {"lastChangedAt": row["last_changed_at"]}
-        for row in rows
-    ]
+    tenders = []
+    for row in rows:
+        stored = json.loads(row["data"])
+        tender = {k: v for k, v in stored.items() if not k.startswith("_")}
+        tender["lastChangedAt"] = row["last_changed_at"]
+        if "_documentsComplete" in stored:
+            if not stored["_documentsComplete"]:
+                tender["documentsStatus"] = "pending"
+            elif tender.get("documents"):
+                tender["documentsStatus"] = "complete"
+            elif stored.get("_documentUrls"):
+                tender["documentsStatus"] = "unavailable"
+            else:
+                tender["documentsStatus"] = "none"
+        tenders.append(tender)
+    return tenders
 
 
 @app.get("/portals/{portal_id}/runs")
