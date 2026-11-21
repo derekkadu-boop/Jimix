@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 from .browser import render
 from .fetch import Blocked, Fetcher
 
+log = logging.getLogger("watchtower.recipe")
 TENDER_FIELDS = (
     "id",
     "url",
@@ -58,6 +60,8 @@ class Selector(BaseModel):
 class Listing(BaseModel):
     kind: Kind = "html"
     url: str
+    method: Literal["GET", "POST"] = "GET"
+    body: dict | None = None
     records: str
     fields: dict[str, Selector]
     next_page: Selector | None = None
@@ -101,6 +105,12 @@ class Recipe(BaseModel):
             raise ValueError(f"unknown fields {sorted(unknown)}, use only {TENDER_FIELDS}")
         if not re.match(r"https?://[^/]+", self.listing.url):
             raise ValueError("listing.url must be an absolute http(s) URL")
+        if self.listing.method == "POST" and (self.listing.kind != "json" or self.listing.body is None):
+            raise ValueError("POST listings need kind json and a JSON body")
+        if self.listing.method == "POST" and self.listing.index:
+            raise ValueError("index is not supported for POST listings")
+        if self.listing.method == "GET" and self.listing.body is not None:
+            raise ValueError("listing.body is only for POST listings")
         if "id" not in self.listing.fields:
             raise ValueError("listing.fields needs id")
         if "id" in detail_fields:
@@ -234,7 +244,10 @@ def _extract(node, fields: dict[str, Selector], kind: Kind) -> dict:
     return out
 
 
-async def _load(kind: Kind, url: str, fetcher: Fetcher):
+async def _load(kind: Kind, url: str, fetcher: Fetcher, body: dict | None = None):
+    if body is not None:
+        resp = await fetcher.post_json(url, body)
+        return resp.json(), str(resp.url)
     if kind == "browser":
         html, _, final = await render(url, fetcher, require_stable=True)
         return BeautifulSoup(html, "html.parser"), final
@@ -242,6 +255,22 @@ async def _load(kind: Kind, url: str, fetcher: Fetcher):
     if kind == "json":
         return resp.json(), str(resp.url)
     return BeautifulSoup(resp.text, "html.parser"), str(resp.url)
+
+
+def _with_body_param(body: dict, path: str, step: int) -> dict:
+    body = json.loads(json.dumps(body))
+    *parents, key = path.removeprefix("$.").split(".")
+    node = body
+    for part in parents:
+        node = node.setdefault(part, {})
+        if not isinstance(node, dict):
+            raise TypeError(f"page_param {path!r} does not point into a JSON object")
+    current = node.get(key, 1)
+    if isinstance(current, bool) or not str(current).lstrip("-").isdigit():
+        current = 1
+    value = int(current) + step
+    node[key] = str(value) if isinstance(current, str) else value
+    return body
 
 
 def _with_param(url: str, name: str, step: int) -> str:
@@ -266,11 +295,17 @@ async def apply(
     complete = bool(starts)
     for start in starts:
         seen: set[str] = set()
-        url, finished = start, False
+        url, finished, body = start, False, listing.body if listing.method == "POST" else None
         for page_number in range(min(recipe.max_pages, budget)):
             budget -= 1
-            seen.add(url)
-            page, base = await _load(listing.kind, url, fetcher)
+            seen.add(url + json.dumps(body, sort_keys=True))
+            try:
+                page, base = await _load(listing.kind, url, fetcher, body)
+            except httpx.HTTPStatusError as exc:
+                if page_number == 0 or not 400 <= exc.response.status_code < 500:
+                    raise
+                log.info("listing paging stopped at page %d: HTTP %d", page_number + 1, exc.response.status_code)
+                break
             rows = _json_path(page, listing.records) if listing.kind == "json" else page.select(listing.records)
             if not isinstance(rows, list):
                 raise TypeError(f"records {listing.records!r} did not give a list")
@@ -284,14 +319,16 @@ async def apply(
                 if recipe.documents and not recipe.detail and not recipe.documents_url:
                     raw["_docs"] = [urljoin(base, u) for u in _values(row, recipe.documents, listing.kind)]
                 raws.append(raw)
-            if listing.page_param:
+            if listing.page_param and body is not None:
+                body = _with_body_param(listing.body, listing.page_param, page_number + 1)
+            elif listing.page_param:
                 url = _with_param(start, listing.page_param, page_number + 1)
             elif listing.next_page and (links := _values(page, listing.next_page, listing.kind)):
                 url = urljoin(base, links[0])
             else:
                 finished = True
                 break
-            if url in seen:
+            if url + json.dumps(body, sort_keys=True) in seen:
                 finished = True
                 break
         complete = complete and finished
