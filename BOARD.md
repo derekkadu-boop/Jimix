@@ -8,7 +8,7 @@ The shared todo list. Rules: `PROTOCOL.md`. Claim one item at a time; keep items
 One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Staying alive and restarting").
 
 - Derek-Codex-Main | Danylos/Windows, primary Codex session | last seen 2026-11-21 07:59 | B-73
-- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:09 | B-71, B-74 independent review
+- Derek-Codex-B | Danylos/Windows, Codex background worker | last seen 2026-11-21 08:16 | B-71 independently reviewing; fixture and Dev checks finished
 - lead | Codex, matiiss machine | last seen 2026-11-21 07:42 | coordinating
 - lead-w1 | Codex subagent, matiiss machine | last seen 2026-11-21 07:53 | B-72
 - lead-w2 | Codex subagent, matiiss machine | last seen 2026-11-21 07:50 | B-46
@@ -158,6 +158,7 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   - https://udbud.dk/ (DK)
   - https://www.vergabe.metropoleruhr.de/ (DE, Cosinex; scouted by lead-w2 for B-09, so not unseen)
 - **Results** (one line per run: `date | portal | worker | state | tenders | files | cost | blocker`):
+  - 2026-11-21 | oeffentlichevergabe.de | Derek-Codex-B, B-71 | failed | 0 | 0 | USD 0.0599 (28 calls) | Fresh URL-only attach found a date-based bulk notice archive but no verified listing with documents. No ID error confirmed.
   - 2026-11-21 | Finland Hilma | Derek-Codex-B, B-43 + B-21 integration | failed | 0 | 0 | USD 0.1324 (22 calls) | Fresh URL-only attach found the public JSON listing. Sampled details did not yield procurement documents, so validation failed. No confirmed access block.
   - 2026-11-21 | TenderNed | Derek-Codex-B, B-21 reviewed | serving | 1000 | 158 distinct files | USD 0.0524 (13 calls) | Fresh URL-only attach and zero-call Refresh; same file count and sample SHA-256 after both. See B-49 for the count difference.
   - 2026-11-21 | udbud.dk | Derek-Codex-B, B-21 final | failed | 0 | 0 | USD 0.0733 (15 calls) | Public listing discovered; agent could not map external document links on the sampled notices. B-42 already covers this.
@@ -942,11 +943,12 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
 ### B-71 Investigate tender ID validation for POST search results
 - **Priority:** medium
 - **Status:** claimed by Derek-Codex-B (Danylos/Windows) 2026-11-21 08:09
-- **Last seen:** 2026-11-21 08:09
+- **Last seen:** 2026-11-21 08:16
 - **Problem:** An operator reported that attach discovered the public POST search endpoint `/bkmc/searches`. The agent could not validate the candidate recipe, and `submit_recipe` reported the same issue with the source of the tender ID. The run ended without an accepted recipe.
 - **Idea:** Compare the ID field in a captured search result with the candidate mapping in `listing.fields.id`. Trace that mapping through `test_recipe` and `submit_recipe`. A mapping to a stable portal ID should pass both steps. If the mapping is invalid, the error should identify which field or path needs correction.
 - **Findings:** Operator report only. The portal URL, candidate mapping and exact validator error have not been confirmed. Related to B-70 (captured POST replay). This report specifically identifies ID validation at submission.
   On acefd4c a local Chromium fixture produced a real captured JSON search and retained one attachment. Both test_recipe and submit_recipe passed with a valid tender ID path. Replacing only that path with a nonexistent one made both report "no tenders found"; neither diagnostic identified the absent ID mapping. This reproduces the diagnostic gap on a fixture, not the earlier portal failure.
+  Derek-Codex-B: both validation tools now name the failed listing ID selector on a browser-captured POST. A valid mapping downloaded the fixture attachment and was accepted. Empty results retain their normal diagnostic. Full suite 174 passed; Ruff passed. The fresh German Dev attach found only a date-based bulk notice archive and did not reproduce the original live ID error (see B-10).
 
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
