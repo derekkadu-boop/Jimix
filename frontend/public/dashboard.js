@@ -49,6 +49,9 @@
   let portals = [], selected = null, tab = 'tenders', scope = '', listAt = null, listError = false, loading = false, mutation = 0
   let capabilities = {}, capabilitiesAt = 0, removal = null
   const checking = new Set()
+  const refreshCooldown = 5_000
+  const cooldowns = new Set()
+  const pendingRuns = new Set()
   const data = { runs:new Map(), tenders:new Map() }
   const intervals = { runs:10_000, tenders:30_000 }
   const chartRecords = new Map()
@@ -304,6 +307,15 @@
     const cost = Number.isFinite(costUsd) ? ` · Estimated cost ${usd.format(costUsd)}` : ''
     return `<li class="entry" data-key="${key(run.id,portalName)}"><h3>${portalName ? `${escape(portalName)} · ` : ''}${runBadge(run)}</h3><small>Started ${escape(date(run.startedAt))}${run.finishedAt ? ` · Finished ${escape(date(run.finishedAt))}` : ''}${Number.isFinite(duration) && duration >= 0 ? ` · ${count(duration)} ms` : ''}${calls}${cost}</small>${reason ? `<p>${escape(reason)}</p>` : ''}</li>`
   }
+  function refreshBlock(id) {
+    if (checking.has(id)) return 'Requesting refresh…'
+    const history = data.runs.get(id)
+    if (pendingRuns.has(id) || history?.items?.some(run => !run.finishedAt)) return 'Run in progress'
+    if (!history?.items && !history?.error) return 'Checking run history…'
+    if (cooldowns.has(id)) return 'Refresh available shortly'
+    return ''
+  }
+
   function renderDetail() {
     const p = portals.find(item => String(item.id) === selected)
     const supportsRefresh = p && capabilities.refresh
@@ -328,8 +340,9 @@
     markup('details',`<h2>${escape(nameOf(p))} ${portalBadge(p)}</h2><small id="portal-url">${link(p.url)}</small>${registration(p) ? `<p>Approximate registration location: ${escape(registration(p))}</p>` : ''}<p>${escape(p.reason || 'No status reason reported.')}</p><div class="portal-metadata"><small>Latest attempt · ${latest ? `${escape(runKind(latest))} ${escape(outcome(latest).toLowerCase())} · ${escape(date(latest.startedAt ?? latest.finishedAt))}` : history?.items ? 'None recorded' : history?.error ? 'Unavailable' : 'Loading…'}${history?.error && latest ? ` (cached ${escape(date(history.at))})` : ''}</small><small>Last successful read · ${lastRead ? escape(date(lastRead)) : history?.items ? 'None recorded' : '—'}</small></div>${needsAttention(p) && feed?.items?.length ? `<p class="repair-banner">Showing the last available tenders · ${snapshotStamp ? `last successful extraction ${escape(date(snapshotStamp))}` : `fetched ${escape(date(feed.at))}; extraction time unavailable`}</p>` : ''}`)
     $('tenders').setAttribute('aria-pressed',String(tab === 'tenders'))
     $('runs').setAttribute('aria-pressed',String(tab === 'runs'))
-    $('check').disabled = checking.has(selected)
-    text('check',checking.has(selected) ? 'Requesting…' : 'Refresh now')
+    const blocked = refreshBlock(selected)
+    $('check').disabled = Boolean(blocked)
+    text('check',blocked || 'Refresh now')
     const entry = data[tab].get(selected)
     const stale = entry?.error || listError
     $('entries-error').hidden = !stale
@@ -387,9 +400,11 @@
         const id = String(p.id)
         const store = data[kind]
         const entry = { ...store.get(id), attempt:Date.now() }
+        const confirmsRefresh = kind === 'runs' && pendingRuns.has(id)
         store.set(id,entry)
         try { entry.items = await list(`${path(p)}/${kind}`); entry.at = Date.now(); entry.error = false }
         catch { entry.error = true }
+        if (confirmsRefresh && !entry.error) pendingRuns.delete(id)
         if (selected === id) renderDetail()
       }
     }
@@ -418,6 +433,7 @@
         portals = result.filter(p => p?.id != null).sort((a,b) => (oldOrder.get(String(a.id)) ?? Infinity)-(oldOrder.get(String(b.id)) ?? Infinity))
         const ids = new Set(portals.map(p => String(p.id)))
         for (const store of Object.values(data)) for (const id of store.keys()) if (!ids.has(id)) store.delete(id)
+        for (const id of pendingRuns.keys()) if (!ids.has(id)) pendingRuns.delete(id)
         if (!ids.has(selected)) selected = null
         listAt = Date.now()
         void discoverCapabilities()
@@ -578,18 +594,27 @@
   }
   $('check').onclick = async () => {
     const p = portals.find(item => String(item.id) === selected)
-    if (!p || !capabilities.refresh || checking.has(selected)) return
+    if (!p || !capabilities.refresh || refreshBlock(selected)) return
     const id = selected
     checking.add(id)
     renderDetail()
     try {
       await request(`${path(p)}/refresh`,{method:'POST'})
+      pendingRuns.add(id)
       mutation++
       if (selected === id) text('action-message','Refresh requested.')
       for (const store of Object.values(data)) if (store.has(id)) store.get(id).attempt = 0
       void load()
     } catch (error) { if (selected === id) text('action-message',`Could not request a refresh. ${error.message}`) }
-    finally { checking.delete(id); renderDetail() }
+    finally {
+      checking.delete(id)
+      cooldowns.add(id)
+      setTimeout(() => {
+        cooldowns.delete(id)
+        if (selected === id) renderDetail()
+      },refreshCooldown)
+      renderDetail()
+    }
   }
   $('remove').onclick = () => {
     const p = portals.find(item => String(item.id) === selected)
@@ -615,6 +640,7 @@
       mutation++
       portals = portals.filter(p => String(p.id) !== id)
       for (const store of Object.values(data)) store.delete(id)
+      pendingRuns.delete(id)
       if (selected === id) selected = null
       removal = null
       $('remove-dialog').close()
