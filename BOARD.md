@@ -615,6 +615,28 @@ One line per worker; refresh at least every 30 minutes (see PROTOCOL.md, "Stayin
   `reason`, e.g. "repair paused until ... after 2 failed repairs".
 - **Findings:**
 
+### B-46 README: deployment and the PDF's hand-in requirements
+- **Priority:** normal
+- **Status:** open
+- **Problem:** The README covers local setup and how Watchtower works, but doesn't match the PDF's "What you
+  hand in" section yet, and the Docker deployment isn't the main path.
+- **The PDF expects:**
+  - A Git repository with a Dockerfile at its root. `docker build .` must work on linux/amd64 and build
+    reasonably quickly. The image's default command starts the API and dashboard on port 8080.
+    This is already done: root `Dockerfile` + `docker/start.sh` (B-06), verified building and serving
+    in B-16.
+  - A one-page README: how the system works, which environment variables it needs (model keys named in
+    the README; values given at hand-in), and what one portal costs in model usage (numbers from B-11 /
+    B-44).
+  - A video of at most three minutes showing the system at work, including the dashboard (not a repo task,
+    but the README can link it).
+- **Do:** Put "Run with Docker" first (`docker build -t jimix . && docker run -p 8080:8080 -e OPENAI_API_KEY=... jimix`,
+  data volume `/data`), then local development. Keep the "how it works" part to about one page. Give a
+  complete, current environment-variable table (model and key, `OPENAI_BASE_URL`, cost and turn limits,
+  download limits, timeouts, `WATCHTOWER_BROWSER_WS`, `JIMIX_DB`/`JIMIX_FILES`). Add a cost-per-portal
+  section with real numbers. Remove stale instructions (old watchtower package, scheduler).
+- **Findings:**
+
 ### Later (not for the hackathon unless time allows)
 - Generated scraper code instead of declarative recipes, run in a tight sandbox (no network except through the rate-limited Fetcher, no filesystem). More flexible for odd portals; much harder to make safe against prompt injection.
 - Scheduler for periodic refresh, with backoff so broken portals don't burn model calls.
